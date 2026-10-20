@@ -81,25 +81,60 @@ const BLOCKED_IPV4: Array<[string, number]> = [
   ['224.0.0.0', 3],      // multicast and reserved (224.0.0.0 - 255.255.255.255)
 ];
 
+/**
+ * Expands an IPv6 address (any valid notation, including a trailing dotted IPv4
+ * part) to eight 16-bit groups, or returns null if it can't be parsed.
+ */
+export function expandIPv6(ip: string): number[] | null {
+  let addr = ip.toLowerCase().split('%')[0]; // drop any zone id
+  const dotted = addr.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
+  if (dotted) {
+    if (!net.isIPv4(dotted[2])) return null;
+    const n = ipv4ToInt(dotted[2]);
+    addr = `${dotted[1]}${(n >>> 16).toString(16)}:${(n & 0xffff).toString(16)}`;
+  }
+  const halves = addr.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const missing = 8 - head.length - tail.length;
+  if (halves.length === 1 ? missing !== 0 : missing < 1) return null;
+  const groups = [...head, ...Array(halves.length === 2 ? missing : 0).fill('0'), ...tail];
+  if (groups.length !== 8 || groups.some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return null;
+  return groups.map((g) => parseInt(g, 16));
+}
+
+function ipv4FromGroups(hi: number, lo: number): string {
+  return [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff].join('.');
+}
+
 /** True for loopback, private, link-local, metadata, and other non-public addresses. */
 export function isNonPublicAddress(ip: string): boolean {
   if (net.isIPv4(ip)) {
     return BLOCKED_IPV4.some(([base, bits]) => inIpv4Range(ip, base, bits));
   }
-  if (net.isIPv6(ip)) {
-    const lower = ip.toLowerCase();
-    const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) {
-      return isNonPublicAddress(mapped[1]);
-    }
-    if (lower === '::' || lower === '::1') return true;
-    const firstHextet = parseInt(lower.split(':')[0] || '0', 16);
-    if ((firstHextet & 0xfe00) === 0xfc00) return true; // fc00::/7 unique local
-    if ((firstHextet & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
-    if ((firstHextet & 0xff00) === 0xff00) return true; // ff00::/8 multicast
-    return false;
+  if (!net.isIPv6(ip)) {
+    return true; // Not an IP at all: refuse.
   }
-  return true; // Not an IP at all: refuse.
+  const g = expandIPv6(ip);
+  if (!g) return true;
+
+  // Forms that embed an IPv4 address: judge them by that address, however written.
+  const firstFiveZero = g.slice(0, 5).every((x) => x === 0);
+  if (firstFiveZero && g[5] === 0xffff) return isNonPublicAddress(ipv4FromGroups(g[6], g[7])); // ::ffff:0:0/96 mapped
+  if (firstFiveZero && g[5] === 0) return true;                                               // ::/96 (incl. ::, ::1, IPv4-compatible)
+  if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0)) {
+    return isNonPublicAddress(ipv4FromGroups(g[6], g[7]));                                     // 64:ff9b::/96 NAT64
+  }
+  if (g[0] === 0x2002) return isNonPublicAddress(ipv4FromGroups(g[1], g[2]));                 // 2002::/16 6to4
+
+  if ((g[0] & 0xfe00) === 0xfc00) return true;             // fc00::/7 unique local
+  if ((g[0] & 0xffc0) === 0xfe80) return true;             // fe80::/10 link-local
+  if ((g[0] & 0xffc0) === 0xfec0) return true;             // fec0::/10 site-local (deprecated)
+  if ((g[0] & 0xff00) === 0xff00) return true;             // ff00::/8 multicast
+  if (g[0] === 0x2001 && g[1] === 0x0db8) return true;     // 2001:db8::/32 documentation
+  if (g[0] === 0x0100 && g.slice(1, 4).every((x) => x === 0)) return true; // 100::/64 discard
+  return false;
 }
 
 /**
