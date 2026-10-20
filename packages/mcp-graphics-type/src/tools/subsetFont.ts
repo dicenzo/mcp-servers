@@ -1,4 +1,9 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { spawn } from 'child_process';
+import { createHash } from 'crypto';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { TypographyValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
 import { 
@@ -326,10 +331,6 @@ async function createSubsetWithFonttools(
     optimize?: boolean;
   }
 ): Promise<Buffer> {
-  const { spawn } = require('child_process');
-  const fs = require('fs');
-  const path = require('path');
-  const os = require('os');
   
   // Create temporary files
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'font-subset-'));
@@ -609,6 +610,5 @@ function detectFontFormat(buffer: Buffer): 'ttf' | 'otf' | 'woff' | 'woff2' {
  * Generates MD5 checksum for buffer
  */
 function generateChecksum(buffer: Buffer): string {
-  const crypto = require('crypto');
-  return crypto.createHash('md5').update(buffer).digest('hex');
+  return createHash('md5').update(buffer).digest('hex');
 }
