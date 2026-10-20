@@ -119,21 +119,21 @@ export function isNonPublicAddress(ip: string): boolean {
   const g = expandIPv6(ip);
   if (!g) return true;
 
-  // Forms that embed an IPv4 address: judge them by that address, however written.
-  const firstFiveZero = g.slice(0, 5).every((x) => x === 0);
-  if (firstFiveZero && g[5] === 0xffff) return isNonPublicAddress(ipv4FromGroups(g[6], g[7])); // ::ffff:0:0/96 mapped
-  if (firstFiveZero && g[5] === 0) return true;                                               // ::/96 (incl. ::, ::1, IPv4-compatible)
-  if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0)) {
-    return isNonPublicAddress(ipv4FromGroups(g[6], g[7]));                                     // 64:ff9b::/96 NAT64
+  // IPv4-mapped (::ffff:0:0/96), however written: judge by the embedded IPv4 address.
+  if (g.slice(0, 5).every((x) => x === 0) && g[5] === 0xffff) {
+    return isNonPublicAddress(ipv4FromGroups(g[6], g[7]));
   }
-  if (g[0] === 0x2002) return isNonPublicAddress(ipv4FromGroups(g[1], g[2]));                 // 2002::/16 6to4
 
-  if ((g[0] & 0xfe00) === 0xfc00) return true;             // fc00::/7 unique local
-  if ((g[0] & 0xffc0) === 0xfe80) return true;             // fe80::/10 link-local
-  if ((g[0] & 0xffc0) === 0xfec0) return true;             // fec0::/10 site-local (deprecated)
-  if ((g[0] & 0xff00) === 0xff00) return true;             // ff00::/8 multicast
+  // Allowlist: only global unicast (2000::/3) can be public. This rules out ::/96,
+  // loopback, unique-local, link-local, site-local, multicast, NAT64 (64:ff9b::/96 and
+  // 64:ff9b:1::/48), SIIT (::ffff:0:0:0/96), and discard (100::/64) in one check.
+  if ((g[0] & 0xe000) !== 0x2000) return true;
+
+  // Exclusions inside 2000::/3.
+  if (g[0] === 0x2001 && g[1] < 0x0200) return true;       // 2001::/23 IETF assignments, incl. Teredo 2001::/32
   if (g[0] === 0x2001 && g[1] === 0x0db8) return true;     // 2001:db8::/32 documentation
-  if (g[0] === 0x0100 && g.slice(1, 4).every((x) => x === 0)) return true; // 100::/64 discard
+  if (g[0] === 0x2002) return isNonPublicAddress(ipv4FromGroups(g[1], g[2])); // 6to4: judge embedded IPv4
+  if (g[0] === 0x3fff && g[1] < 0x1000) return true;       // 3fff::/20 documentation
   return false;
 }
 

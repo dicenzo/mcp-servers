@@ -69,12 +69,15 @@ describe('font URL guard', () => {
     // IPv4 embedded in IPv6 written in hex, plus NAT64 and 6to4 wrappers around private IPv4
     '::ffff:7f00:1', '::ffff:a9fe:a9fe', '0:0:0:0:0:ffff:7f00:0001', '::7f00:1', '::127.0.0.1',
     '64:ff9b::7f00:1', '64:ff9b::169.254.169.254', '2002:7f00:1::', '2002:c0a8:101::1',
-    'fec0::1', '2001:db8::1', 'not-an-ip'
+    'fec0::1', '2001:db8::1', 'not-an-ip',
+    // NAT64 (well-known and local-use), Teredo, SIIT, discard, documentation
+    '64:ff9b::808:808', '64:ff9b:1::1', '2001:0:4136:e378:8000:63bf:3fff:fdd2', '::ffff:0:7f00:1',
+    '100::1', '3fff::1'
   ])('treats %s as non-public', (ip) => {
     expect(isNonPublicAddress(ip)).toBe(true);
   });
 
-  test.each(['8.8.8.8', '1.1.1.1', '2606:4700:4700::1111', '::ffff:808:808', '64:ff9b::808:808', '2002:808:808::1'])('treats %s as public', (ip) => {
+  test.each(['8.8.8.8', '1.1.1.1', '2606:4700:4700::1111', '::ffff:808:808', '2002:808:808::1', '2a00:1450:4001::1'])('treats %s as public', (ip) => {
     expect(isNonPublicAddress(ip)).toBe(false);
   });
 
