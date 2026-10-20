@@ -1,0 +1,56 @@
+{
+  "name": "mcp-graphics-color",
+  "version": "1.0.0",
+  "description": "MCP Server for color science, accessibility validation, and brand color operations",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "keywords": [
+    "mcp",
+    "color",
+    "accessibility",
+    "wcag",
+    "apca",
+    "brand",
+    "palette"
+  ],
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "benchmark": "tsx tests/benchmark.ts",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.2.0",
+    "apca-w3": "^0.1.9",
+    "chroma-js": "^2.4.2",
+    "colorjs.io": "^0.4.5",
+    "culori": "^4.0.1",
+    "delta-e": "^0.0.7",
+    "dotenv": "^16.4.5",
+    "wcag-contrast": "^3.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/chroma-js": "^3.1.1",
+    "@types/culori": "^4.0.1",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^24.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "tsx": "^4.19.1",
+    "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Tony DiCenzo"
+}

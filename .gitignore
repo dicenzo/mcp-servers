@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+**/.yarn/*
+!**/.yarn/releases
+.pnp.*
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Test and coverage output
+coverage/
+test_outputs/
+test-output/
+test-results/
+junit.xml
+*.lcov
+
+# Local debugging scripts
+debug-*.mjs
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editor, OS, and local tool settings
+.DS_Store
+._*
+.idea/
+.vscode/
+.claude/
+*.log
+
+# Performance suite reports
+tools/performance-suite/reports/
+performance-report.html

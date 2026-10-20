@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120">
+  <title>Summit Ventures Corporate Logo</title>
+  <desc>Professional corporate logo with mountain symbolism</desc>
+  <path d="M 30 80 L 60 30 L 90 50 L 120 20 L 150 80 Z" fill="#2563eb" stroke="#1d4ed8" stroke-width="2" />
+  <path d="M 40 80 L 60 45 L 80 60 L 100 35 L 120 80 Z" fill="#3b82f6" stroke="none" />
+  <path d="M 50 80 L 60 55 L 70 65 L 80 50 L 90 80 Z" fill="#60a5fa" stroke="none" />
+  <text x="180" y="45" font-size="24" font-family="Arial, sans-serif" fill="#1f2937">SUMMIT</text>
+  <text x="180" y="70" font-size="16" font-family="Arial, sans-serif" fill="#6b7280">VENTURES</text>
+  <text x="180" y="95" font-size="10" font-family="Arial, sans-serif" fill="#9ca3af">Reaching New Heights</text>
+</svg>

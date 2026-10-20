@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400">
+  <title>Advanced Data Visualization</title>
+  <desc>Interactive-style chart with multiple data series</desc>
+  <rect x="80" y="60" width="480" height="280" fill="#f8f9fa" stroke="#dee2e6" stroke-width="1" />
+  <text x="300" y="30" font-size="18" font-family="Arial, sans-serif" text-anchor="middle" fill="#212529">Monthly Revenue Growth</text>
+  <path d="M 80 60 L 80 340" stroke="#6c757d" stroke-width="2" />
+  <path d="M 80 340 L 560 340" stroke="#6c757d" stroke-width="2" />
+  <rect x="120" y="192.23880597014923" width="40" height="147.76119402985077" fill="#007bff" stroke="#0056b3" stroke-width="1" />
+  <text x="140" y="360" font-size="12" font-family="Arial, sans-serif" text-anchor="middle" fill="#495057">Jan</text>
+  <text x="140" y="187.23880597014923" font-size="10" font-family="Arial, sans-serif" text-anchor="middle" fill="#495057">$45k</text>
+  <rect x="190" y="169.2537313432836" width="40" height="170.7462686567164" fill="#007bff" stroke="#0056b3" stroke-width="1" />
+  <text x="210" y="360" font-size="12" font-family="Arial, sans-serif" text-anchor="middle" fill="#495057">Feb</text>
+  <text x="210" y="164.2537313432836" font-size="10" font-family="Arial, sans-serif" text-anchor="middle" fill="#495057">$52k</text>
+  <rect x="260" y="182.38805970149255" width="40" height="157.61194029850745" fill="#007bff" stroke="#0056b3" stroke-width="1" />
+  <text x="280" y="360" font-size="12" font-family="Arial, sans-serif" text-anchor="middle" fill="#495057">Mar</text>
+  <text x="280" y="177.38805970149255" font-size="10" font-family="Arial, sans-serif" text-anchor="middle" fill="#495057">$48k</text>
+  <rect x="330" y="139.70149253731344" width="40" height="200.29850746268656" fill="#007bff" stroke="#0056b3" stroke-width="1" />
+  <text x="350" y="360" font-size="12" font-family="Arial, sans-serif" text-anchor="middle" fill="#495057">Apr</text>
+  <text x="350" y="134.70149253731344" font-size="10" font-family="Arial, sans-serif" text-anchor="middle" fill="#495057">$61k</text>
+  <rect x="400" y="149.55223880597015" width="40" height="190.44776119402985" fill="#007bff" stroke="#0056b3" stroke-width="1" />
+  <text x="420" y="360" font-size="12" font-family="Arial, sans-serif" text-anchor="middle" fill="#495057">May</text>
+  <text x="420" y="144.55223880597015" font-size="10" font-family="Arial, sans-serif" text-anchor="middle" fill="#495057">$58k</text>
+  <rect x="470" y="120" width="40" height="220" fill="#007bff" stroke="#0056b3" stroke-width="1" />
+  <text x="490" y="360" font-size="12" font-family="Arial, sans-serif" text-anchor="middle" fill="#495057">Jun</text>
+  <text x="490" y="115" font-size="10" font-family="Arial, sans-serif" text-anchor="middle" fill="#495057">$67k</text>
+  <text x="70" y="345" font-size="10" font-family="Arial, sans-serif" text-anchor="end" fill="#6c757d">$0k</text>
+  <text x="70" y="271.6666666666667" font-size="10" font-family="Arial, sans-serif" text-anchor="end" fill="#6c757d">$20k</text>
+  <text x="70" y="198.33333333333334" font-size="10" font-family="Arial, sans-serif" text-anchor="end" fill="#6c757d">$40k</text>
+  <text x="70" y="125" font-size="10" font-family="Arial, sans-serif" text-anchor="end" fill="#6c757d">$60k</text>
+</svg>
