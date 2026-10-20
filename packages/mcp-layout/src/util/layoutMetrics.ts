@@ -86,7 +86,7 @@ export class LayoutMetricsCalculator {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     
     // Get computed element positions
-    const elementPositions = this.getElementPositions(layout);
+    const elementPositions = this.getElementPositions(layout, elements);
     
     elementPositions.forEach(({ elementId, bounds }) => {
       monitor?.recordIteration();
@@ -141,7 +141,7 @@ export class LayoutMetricsCalculator {
     warnings: string[];
   } {
     const warnings: string[] = [];
-    const elementPositions = this.getElementPositions(layout);
+    const elementPositions = this.getElementPositions(layout, elements);
     
     if (elementPositions.length === 0) {
       warnings.push('No element positions available for distribution analysis');
@@ -235,7 +235,7 @@ export class LayoutMetricsCalculator {
     warnings: string[];
   } {
     const warnings: string[] = [];
-    const elementPositions = this.getElementPositions(layout);
+    const elementPositions = this.getElementPositions(layout, elements);
     
     if (elementPositions.length < 2) {
       return {
@@ -344,7 +344,7 @@ export class LayoutMetricsCalculator {
     warnings: string[];
   } {
     const warnings: string[] = [];
-    const elementPositions = this.getElementPositions(layout);
+    const elementPositions = this.getElementPositions(layout, elements);
     
     // Space utilization
     const totalElementArea = elementPositions.reduce((sum, { bounds }) => {
@@ -364,8 +364,8 @@ export class LayoutMetricsCalculator {
     let overlapCount = 0;
     for (let i = 0; i < elementPositions.length; i++) {
       for (let j = i + 1; j < elementPositions.length; j++) {
-        monitor?.recordIteration();
-        
+        // Pairwise analysis is O(n^2); it is not a layout iteration, so it is not
+        // counted against the monitor's iteration cap.
         if (this.rectanglesOverlap(elementPositions[i].bounds, elementPositions[j].bounds)) {
           overlapCount++;
         }
@@ -413,7 +413,7 @@ export class LayoutMetricsCalculator {
     warnings: string[];
   } {
     const warnings: string[] = [];
-    const elementPositions = this.getElementPositions(layout);
+    const elementPositions = this.getElementPositions(layout, elements);
     
     // Minimum touch target size (44x44px recommended)
     const RECOMMENDED_TOUCH_SIZE = 44;
@@ -473,8 +473,18 @@ export class LayoutMetricsCalculator {
   /**
    * Get element positions from layout
    */
-  private static getElementPositions(layout: Layout): Array<{ elementId: string; bounds: Rectangle }> {
+  private static getElementPositions(
+    layout: Layout,
+    elements: LayoutElement[] = []
+  ): Array<{ elementId: string; bounds: Rectangle }> {
     const positions: Array<{ elementId: string; bounds: Rectangle }> = [];
+
+    // Explicit bounds supplied by the caller are the measured positions;
+    // fall back to layout-derived positions only when none are given.
+    const explicit = elements.filter(element => element.bounds);
+    if (explicit.length > 0) {
+      return explicit.map(element => ({ elementId: element.id, bounds: element.bounds! }));
+    }
     
     if (layout.type === 'grid' && layout.computedGrid) {
       // For grid layouts, use computed positions or fall back to grid areas

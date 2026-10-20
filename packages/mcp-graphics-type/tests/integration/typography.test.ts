@@ -1,4 +1,5 @@
-import { describe, test, expect, beforeEach, jest } from '@jest/globals';
+import { describe, test, expect } from '@jest/globals';
+import { execFileSync } from 'child_process';
 import { loadFontTool } from '../../src/tools/loadFont.js';
 import { shapeTextTool } from '../../src/tools/shapeText.js';
 import { measureTextTool } from '../../src/tools/measureText.js';
@@ -6,15 +7,24 @@ import { subsetFontTool } from '../../src/tools/subsetFont.js';
 import { generateFallbackTool } from '../../src/tools/generateFallback.js';
 import { validateFontTool } from '../../src/tools/validateFont.js';
 
+// subsetFont shells out to `python3 -m fontTools.subset`; skip its tests when
+// fontTools is not installed.
+const hasFontTools = (() => {
+  try {
+    execFileSync('python3', ['-c', 'import fontTools'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+const testIfFontTools = hasFontTools ? test : test.skip;
+
+// Fixtures (global.testFontPath etc.) are generated in tests/jest.setup.ts.
 describe('Typography Integration Tests', () => {
   const testFontInput = {
     type: 'file',
-    path: '/test/fonts/test-font.ttf'
+    path: global.testFontPath
   };
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
 
   describe('Font Loading and Analysis Workflow', () => {
     test('should load font and extract metadata', async () => {
@@ -117,7 +127,8 @@ describe('Typography Integration Tests', () => {
   });
 
   describe('Font Optimization Workflow', () => {
-    test('should create font subset', async () => {
+    // Skipped unless python3 can import fontTools (see hasFontTools above).
+    testIfFontTools('should create font subset', async () => {
       const subsetInput = {
         font: testFontInput,
         options: {
@@ -183,13 +194,15 @@ describe('Typography Integration Tests', () => {
       const measureResponse = JSON.parse(measureResult.content[0].text);
       expect(measureResponse.metrics.width).toBeGreaterThan(0);
 
-      // 4. Create subset
-      const subsetResult = await subsetFontTool.invoke({
-        font: testFontInput,
-        options: { characters: testText }
-      });
-      const subsetResponse = JSON.parse(subsetResult.content[0].text);
-      expect(subsetResponse.subset.compressionRatio).toBeGreaterThan(0);
+      // 4. Create subset (only when python3 can import fontTools; see hasFontTools)
+      if (hasFontTools) {
+        const subsetResult = await subsetFontTool.invoke({
+          font: testFontInput,
+          options: { characters: testText }
+        });
+        const subsetResponse = JSON.parse(subsetResult.content[0].text);
+        expect(subsetResponse.subset.compressionRatio).toBeGreaterThan(0);
+      }
 
       // 5. Generate fallback stack
       const fallbackResult = await generateFallbackTool.invoke({
@@ -210,14 +223,10 @@ describe('Typography Integration Tests', () => {
 
   describe('Error Handling and Recovery', () => {
     test('should handle corrupted font gracefully', async () => {
-      const opentype = await import('opentype.js');
-      (opentype.parse as jest.Mock).mockImplementationOnce(() => {
-        throw new Error('Corrupted font data');
-      });
-
+      // A real .ttf file inside the allowed directory whose bytes are not a font.
       const corruptedFontInput = {
         type: 'file',
-        path: '/test/fonts/corrupted.ttf'
+        path: global.corruptedFontPath
       };
 
       const result = await loadFontTool.invoke(corruptedFontInput);
@@ -229,31 +238,29 @@ describe('Typography Integration Tests', () => {
     });
 
     test('should handle missing fonts gracefully', async () => {
-      const fs = await import('fs');
-      (fs.existsSync as jest.Mock).mockReturnValueOnce(false);
-
+      // Nonexistent file inside the allowed directory.
       const missingFontInput = {
         type: 'file',
-        path: '/nonexistent/font.ttf'
+        path: global.missingFontPath
       };
 
       const result = await loadFontTool.invoke(missingFontInput);
       expect(result.isError).toBe(true);
     });
 
-    test('should handle network failures for URL fonts', async () => {
-      const fetch = await import('node-fetch');
-      (fetch.default as jest.Mock).mockImplementationOnce(() =>
-        Promise.reject(new Error('Network error'))
-      );
-
+    // Rewritten: the original faked a network failure with jest.mock('node-fetch'),
+    // which can't intercept loadFont's ESM dynamic import. Tests must not hit the
+    // network, so this checks that non-public URLs are refused before any request.
+    test('should refuse private-network URL fonts without fetching', async () => {
       const urlFontInput = {
         type: 'url',
-        url: 'https://example.com/font.ttf'
+        url: 'https://10.0.0.1/font.ttf'
       };
 
       const result = await loadFontTool.invoke(urlFontInput);
       expect(result.isError).toBe(true);
+      const response = JSON.parse(result.content[0].text);
+      expect(response.message).toBe('Font URL must be a public https:// address');
     });
   });
 

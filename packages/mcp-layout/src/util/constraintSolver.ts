@@ -135,6 +135,12 @@ export class ConstraintSolver {
     let iteration = 0;
     let hasConverged = false;
     const previousBounds = new Map<string, Rectangle>();
+    // Snapshot of the starting arrangement; spacing constraints use it to pick a side
+    // so the choice does not flip as the solver moves elements between iterations.
+    const initialBounds = new Map<string, Rectangle>();
+    elementBounds.forEach((bounds, elementId) => {
+      initialBounds.set(elementId, { ...bounds });
+    });
 
     while (!hasConverged && iteration < ConstraintSolver.MAX_ITERATIONS) {
       monitor?.recordIteration();
@@ -152,7 +158,7 @@ export class ConstraintSolver {
         const elementConstraints = constraintGraph.get(elementId) || [];
         
         elementConstraints.forEach(({ constraint }) => {
-          this.applyConstraint(constraint, elementBounds, containerBounds);
+          this.applyConstraint(constraint, elementBounds, containerBounds, initialBounds);
         });
       });
 
@@ -228,7 +234,8 @@ export class ConstraintSolver {
   private static applyConstraint(
     constraint: LayoutConstraint,
     elementBounds: Map<string, Rectangle>,
-    containerBounds: Rectangle
+    containerBounds: Rectangle,
+    initialBounds: Map<string, Rectangle>
   ): void {
     const elementBound = elementBounds.get(constraint.element);
     if (!elementBound) {
@@ -245,7 +252,14 @@ export class ConstraintSolver {
         this.applySizeConstraint(constraint, elementBound, targetBound, containerBounds);
         break;
       case 'spacing':
-        this.applySpacingConstraint(constraint, elementBound, targetBound, containerBounds);
+        this.applySpacingConstraint(
+          constraint,
+          elementBound,
+          targetBound,
+          containerBounds,
+          initialBounds.get(constraint.element) ?? elementBound,
+          (constraint.target && initialBounds.get(constraint.target)) || targetBound
+        );
         break;
       case 'alignment':
         this.applyAlignmentConstraint(constraint, elementBound, targetBound, containerBounds);
@@ -280,7 +294,17 @@ export class ConstraintSolver {
               break;
           }
         } else {
-          elementBound.x = containerBounds.x + value;
+          const absolute = containerBounds.x + value;
+          switch (constraint.relation) {
+            case 'greater':
+              elementBound.x = Math.max(elementBound.x, absolute);
+              break;
+            case 'less':
+              elementBound.x = Math.min(elementBound.x, absolute);
+              break;
+            default:
+              elementBound.x = absolute;
+          }
         }
         break;
 
@@ -299,7 +323,17 @@ export class ConstraintSolver {
               break;
           }
         } else {
-          elementBound.y = containerBounds.y + value;
+          const absolute = containerBounds.y + value;
+          switch (constraint.relation) {
+            case 'greater':
+              elementBound.y = Math.max(elementBound.y, absolute);
+              break;
+            case 'less':
+              elementBound.y = Math.min(elementBound.y, absolute);
+              break;
+            default:
+              elementBound.y = absolute;
+          }
         }
         break;
 
@@ -309,7 +343,18 @@ export class ConstraintSolver {
           elementBound.x = targetRight + value;
         } else {
           const containerRight = containerBounds.x + containerBounds.width;
-          elementBound.x = containerRight - elementBound.width - value;
+          // value is the distance from the container's right edge
+          const atDistance = containerRight - elementBound.width - value;
+          switch (constraint.relation) {
+            case 'greater':
+              elementBound.x = Math.min(elementBound.x, atDistance);
+              break;
+            case 'less':
+              elementBound.x = Math.max(elementBound.x, atDistance);
+              break;
+            default:
+              elementBound.x = atDistance;
+          }
         }
         break;
 
@@ -319,7 +364,18 @@ export class ConstraintSolver {
           elementBound.y = targetBottom + value;
         } else {
           const containerBottom = containerBounds.y + containerBounds.height;
-          elementBound.y = containerBottom - elementBound.height - value;
+          // value is the distance from the container's bottom edge
+          const atDistance = containerBottom - elementBound.height - value;
+          switch (constraint.relation) {
+            case 'greater':
+              elementBound.y = Math.min(elementBound.y, atDistance);
+              break;
+            case 'less':
+              elementBound.y = Math.max(elementBound.y, atDistance);
+              break;
+            default:
+              elementBound.y = atDistance;
+          }
         }
         break;
     }
@@ -406,9 +462,11 @@ export class ConstraintSolver {
     constraint: LayoutConstraint,
     elementBound: Rectangle,
     targetBound: Rectangle | null,
-    containerBounds: Rectangle
+    containerBounds: Rectangle,
+    initialElement: Rectangle,
+    initialTarget: Rectangle | null
   ): void {
-    if (!targetBound) {
+    if (!targetBound || !initialTarget) {
       return; // Spacing constraints require a target
     }
 
@@ -418,7 +476,8 @@ export class ConstraintSolver {
       case 'horizontal':
       case 'x-spacing':
         // Maintain horizontal spacing between elements
-        if (elementBound.x < targetBound.x) {
+        // Side is decided from the initial arrangement; ties go after the target.
+        if (initialElement.x < initialTarget.x) {
           // Element is to the left of target
           elementBound.x = targetBound.x - elementBound.width - value;
         } else {
@@ -430,7 +489,7 @@ export class ConstraintSolver {
       case 'vertical':
       case 'y-spacing':
         // Maintain vertical spacing between elements
-        if (elementBound.y < targetBound.y) {
+        if (initialElement.y < initialTarget.y) {
           // Element is above target
           elementBound.y = targetBound.y - elementBound.height - value;
         } else {

@@ -327,11 +327,12 @@ export class TemplateEngine {
       const processedTemplate = await this.processInheritance(template);
 
       // Render components
-      const renderedComponents = await Promise.all(
+      // Repeating components render to arrays; flatten so each item is emitted.
+      const renderedComponents = (await Promise.all(
         processedTemplate.components.map(component => 
           this.renderComponent(component, mergedVariables)
         )
-      );
+      )).flat();
 
       // Generate SVG content
       const svgContent = this.generateSVG(processedTemplate, renderedComponents);
@@ -500,7 +501,7 @@ export class TemplateEngine {
 
     return {
       ...component,
-      children: renderedChildren.filter(child => child !== null),
+      children: renderedChildren.flat().filter(child => child !== null),
       style: this.processStyle(component.style, variables)
     };
   }

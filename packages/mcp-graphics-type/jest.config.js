@@ -6,7 +6,8 @@ export default {
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
-      useESM: true
+      useESM: true,
+      tsconfig: 'tsconfig.test.json'
     }]
   },
   testEnvironment: 'node',

@@ -66,8 +66,11 @@ This server reads no environment variables.
 
 ## Known issues
 
-- Last verified test run: build passes; 0 tests run (3 of 3 suites fail to start).
-- `tests/jest.setup.ts` mocks `hb-wasm`, which is not a dependency, so Jest cannot start any suite.
+- Last verified test run: build passes; 127 of 130 tests pass, 0 fail, 3 skipped.
+- Tests use a small font generated at test time with opentype.js (`tests/fixtures/buildTestFont.ts`). `tests/jest.setup.ts` writes it to a temp directory and lists that directory in `MCP_FONT_DIRS`. No font files are checked in.
+- Skipped: loading a font from a public URL (needs the network), loading a system font (depends on which fonts are installed), and creating a subset (needs `python3` with fontTools). The end-to-end test also leaves out its subset step when fontTools is missing.
+- `type.subsetFont` calls `require()`, which is not defined in this ES module package, so it fails with "require is not defined" even when fontTools is installed. No test covers it here because the subset tests are skipped.
+
 
 ## License
 

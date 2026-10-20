@@ -9,7 +9,8 @@ export const FontInputSchema = z.union([
   }),
   z.object({
     type: z.literal('buffer'),
-    data: z.instanceof(Buffer),
+    // A Buffer from in-process callers, or base64 text (what JSON tool arguments carry).
+    data: z.union([z.instanceof(Buffer), z.string()]),
     format: z.enum(['ttf', 'otf', 'woff', 'woff2']).optional()
   }),
   z.object({

@@ -66,8 +66,8 @@ This server reads no environment variables.
 
 ## Known issues
 
-- Last verified test run: build passes; 0 tests run (2 of 2 suites fail to start).
-- The Jest config has no mapping from `.js` import specifiers to `.ts` sources, so the test files cannot resolve `../../src/*.js` imports.
+- Last verified test run: build passes; 31 of 31 tests pass.
+
 
 ## License
 
