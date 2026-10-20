@@ -1,3 +1,4 @@
+import { PERFORMANCE_LIMITS } from '../../src/types/typography.js';
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 import { TypographyValidator, PerformanceValidator } from '../../src/util/validation.js';
 import { TypographyErrorCode } from '../../src/types/typography.js';
@@ -286,7 +287,7 @@ describe('PerformanceValidator', () => {
     });
 
     test('should reject operations exceeding timeout', () => {
-      const oldTime = Date.now() - 5000; // 5 seconds ago
+      const oldTime = Date.now() - (PERFORMANCE_LIMITS.FONT_LOADING_TIMEOUT + 1000);
       
       expect(() => {
         PerformanceValidator.validateTimeout('font-loading', oldTime);
@@ -296,7 +297,7 @@ describe('PerformanceValidator', () => {
     test('should use appropriate timeouts for different operations', () => {
       const recentTime = Date.now() - 100; // 100ms ago
       
-      // Should pass for font-loading (200ms timeout)
+      // Should pass for font-loading (well under its timeout)
       expect(() => {
         PerformanceValidator.validateTimeout('font-loading', recentTime);
       }).not.toThrow();

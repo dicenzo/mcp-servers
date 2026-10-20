@@ -330,9 +330,11 @@ export interface TypographyError {
 
 // Performance Constraints
 export const PERFORMANCE_LIMITS = {
-  FONT_LOADING_TIMEOUT: 200, // ms
+  // Hard timeouts, not performance targets. Loading allows for a remote fetch
+  // (REMOTE_FONT_TIMEOUT_MS is 15s); subsetting runs fontTools in a Python subprocess.
+  FONT_LOADING_TIMEOUT: 20_000, // ms
   TEXT_SHAPING_TIMEOUT: 50, // ms
-  FONT_SUBSETTING_TIMEOUT: 400, // ms
+  FONT_SUBSETTING_TIMEOUT: 30_000, // ms
   MAX_MEMORY_USAGE: 50 * 1024 * 1024, // 50MB
   MAX_FONT_FILE_SIZE: 10 * 1024 * 1024, // 10MB
   MAX_TEXT_LENGTH: 10000, // characters
