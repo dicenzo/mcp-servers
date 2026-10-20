@@ -1,0 +1,248 @@
+import { imageResize } from '../../src/tools/imageResize';
+import { imageConvert } from '../../src/tools/imageConvert';
+import { imageCrop } from '../../src/tools/imageCrop';
+import { imageFilter } from '../../src/tools/imageFilter';
+import { imageOptimize } from '../../src/tools/imageOptimize';
+import { ImageErrorCode } from '../../src/types/image';
+
+describe('Image Processing Tools', () => {
+  // Test image data (1x1 white PNG)
+  const testPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+
+  describe('imageResize', () => {
+    it('should resize image successfully', async () => {
+      const result = await imageResize({
+        image: { data: testPng },
+        dimensions: { width: 10, height: 10 }
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.dimensions.width).toBe(10);
+        expect(result.result.dimensions.height).toBe(10);
+        expect(result.metadata.operation).toBe('resize');
+      }
+    });
+
+    it('should handle different resize methods', async () => {
+      const methods = ['nearest', 'linear', 'cubic', 'lanczos', 'mitchell'] as const;
+      
+      for (const method of methods) {
+        const result = await imageResize({
+          image: { data: testPng },
+          dimensions: { width: 5, height: 5 },
+          method
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.metadata.method).toBe(method);
+        }
+      }
+    });
+
+    it('should reject invalid dimensions', async () => {
+      const result = await imageResize({
+        image: { data: testPng },
+        dimensions: { width: -1, height: 10 }
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject invalid input data', async () => {
+      const result = await imageResize({
+        image: { data: 'invalid-data' },
+        dimensions: { width: 10, height: 10 }
+      });
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('imageConvert', () => {
+    it('should convert to different formats', async () => {
+      const formats = ['png', 'jpeg', 'webp'] as const;
+      
+      for (const format of formats) {
+        const result = await imageConvert({
+          image: { data: testPng },
+          format
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.result.format).toBe(format);
+          expect(result.metadata.targetFormat).toBe(format);
+        }
+      }
+    });
+
+    it('should apply quality settings', async () => {
+      const result = await imageConvert({
+        image: { data: testPng },
+        format: 'jpeg',
+        quality: 50
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.metadata.quality).toBe(50);
+      }
+    });
+
+    it('should handle format-specific options', async () => {
+      const result = await imageConvert({
+        image: { data: testPng },
+        format: 'jpeg',
+        options: { progressive: true }
+      });
+
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('imageCrop', () => {
+    it('should crop image to specified bounds', async () => {
+      // First create a larger image to test cropping
+      const largeImageData = await createTestImage(10, 10);
+      
+      const result = await imageCrop({
+        image: { data: largeImageData },
+        bounds: { left: 2, top: 2, width: 5, height: 5 }
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.dimensions.width).toBe(5);
+        expect(result.result.dimensions.height).toBe(5);
+      }
+    });
+
+    it('should reject out-of-bounds crop', async () => {
+      const result = await imageCrop({
+        image: { data: testPng },
+        bounds: { left: 5, top: 5, width: 10, height: 10 } // Exceeds 1x1 image
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should handle gravity-based cropping', async () => {
+      const largeImageData = await createTestImage(10, 10);
+      
+      const result = await imageCrop({
+        image: { data: largeImageData },
+        bounds: { left: 0, top: 0, width: 5, height: 5 },
+        gravity: 'center'
+      });
+
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('imageFilter', () => {
+    it('should apply single filter', async () => {
+      const result = await imageFilter({
+        image: { data: testPng },
+        filters: [{ type: 'brightness', intensity: 10 }]
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.metadata.filtersApplied).toHaveLength(1);
+        expect(result.metadata.filtersApplied[0].type).toBe('brightness');
+      }
+    });
+
+    it('should apply multiple filters in sequence', async () => {
+      const filters = [
+        { type: 'brightness', intensity: 10 },
+        { type: 'contrast', intensity: 15 },
+        { type: 'saturation', intensity: 20 }
+      ] as const;
+
+      const result = await imageFilter({
+        image: { data: testPng },
+        filters
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.metadata.filtersApplied).toHaveLength(3);
+      }
+    });
+
+    it('should reject invalid filter intensity', async () => {
+      const result = await imageFilter({
+        image: { data: testPng },
+        filters: [{ type: 'brightness', intensity: 150 }] // > 100
+      });
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('imageOptimize', () => {
+    it('should optimize image with default settings', async () => {
+      const result = await imageOptimize({
+        image: { data: testPng },
+        target: {}
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.metadata.operation).toBe('optimize');
+        expect(result.metadata.strategy).toBe('balanced');
+      }
+    });
+
+    it('should apply different optimization strategies', async () => {
+      const strategies = ['size', 'quality', 'balanced'] as const;
+      
+      for (const strategy of strategies) {
+        const result = await imageOptimize({
+          image: { data: testPng },
+          target: { quality: 80 },
+          strategy
+        });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+          expect(result.metadata.strategy).toBe(strategy);
+        }
+      }
+    });
+
+    it('should optimize to target file size', async () => {
+      const result = await imageOptimize({
+        image: { data: testPng },
+        target: { maxFileSize: 500 }, // 500 bytes
+        strategy: 'size'
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.size).toBeLessThanOrEqual(500);
+      }
+    });
+  });
+
+  // Helper function to create test images of different sizes
+  async function createTestImage(width: number, height: number): Promise<string> {
+    const sharp = (await import('sharp')).default;
+    
+    const buffer = await sharp({
+      create: {
+        width,
+        height,
+        channels: 3,
+        background: { r: 255, g: 255, b: 255 }
+      }
+    })
+    .png()
+    .toBuffer();
+    
+    return buffer.toString('base64');
+  }
+});

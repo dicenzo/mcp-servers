@@ -1,0 +1,164 @@
+import { ImageUtils } from '../../src/util/imageUtils';
+import { ImageErrorCode } from '../../src/types/image';
+import sharp from 'sharp';
+
+describe('ImageUtils', () => {
+  // Test image data (1x1 white PNG)
+  const testPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+  const testDataUrl = `data:image/png;base64,${testPng}`;
+  const testInput = { data: testDataUrl, format: 'png' as const };
+
+  describe('parseImageInput', () => {
+    it('should parse base64 data URL correctly', () => {
+      const result = ImageUtils.parseImageInput(testInput);
+      expect(result.data).toBeTruthy();
+      expect(result.format).toBe('png');
+    });
+
+    it('should parse raw base64 data correctly', () => {
+      const result = ImageUtils.parseImageInput({ data: testPng, format: 'png' });
+      expect(result.data).toBeTruthy();
+      expect(result.format).toBe('png');
+    });
+
+    it('should throw error for invalid base64', () => {
+      expect(() => {
+        ImageUtils.parseImageInput({ data: 'not-base64!@#$', format: 'png' });
+      }).toThrow();
+    });
+
+    it('should handle empty data', () => {
+      expect(() => {
+        ImageUtils.parseImageInput({ data: '', format: 'png' });
+      }).toThrow();
+    });
+  });
+
+  describe('extractMetadata', () => {
+    it('should extract correct metadata', async () => {
+      const sharpInstance = sharp(Buffer.from(testPng, 'base64'));
+      const metadata = await ImageUtils.extractMetadata(sharpInstance);
+      
+      expect(metadata.width).toBe(1);
+      expect(metadata.height).toBe(1);
+      expect(metadata.format).toBe('png');
+    });
+  });
+
+  describe('createSharpFromInput', () => {
+    it('should create Sharp instance from valid input', () => {
+      expect(() => {
+        ImageUtils.createSharpFromInput(testInput);
+      }).not.toThrow();
+    });
+
+    it('should reject invalid base64', () => {
+      expect(() => {
+        ImageUtils.createSharpFromInput({ data: 'not-base64!@#$', format: 'png' });
+      }).toThrow();
+    });
+  });
+
+  describe('validateFileSize', () => {
+    it('should accept normal file sizes', () => {
+      expect(() => {
+        ImageUtils.validateFileSize(1000); // 1KB
+      }).not.toThrow();
+    });
+
+    it('should reject oversized files', () => {
+      expect(() => {
+        ImageUtils.validateFileSize(20 * 1024 * 1024); // 20MB
+      }).toThrow();
+    });
+  });
+
+  describe('resizeImage', () => {
+    it('should resize image to specified dimensions', async () => {
+      const original = sharp(Buffer.from(testPng, 'base64'));
+      const resized = await ImageUtils.resizeImage(original.clone(), { width: 10, height: 10 });
+      
+      const metadata = await resized.metadata();
+      expect(metadata.width).toBe(10);
+      expect(metadata.height).toBe(10);
+    });
+
+    it('should handle different resize methods', async () => {
+      const original = sharp(Buffer.from(testPng, 'base64'));
+      
+      for (const method of ['nearest', 'linear', 'cubic', 'lanczos', 'mitchell'] as const) {
+        const resized = await ImageUtils.resizeImage(
+          original.clone(), 
+          { width: 5, height: 5 }, 
+          method
+        );
+        
+        const metadata = await resized.metadata();
+        expect(metadata.width).toBe(5);
+        expect(metadata.height).toBe(5);
+      }
+    });
+  });
+
+  describe('cropImage', () => {
+    it('should crop image to specified bounds', async () => {
+      // Create a larger test image first
+      const largeImage = sharp({
+        create: {
+          width: 10,
+          height: 10,
+          channels: 3,
+          background: { r: 255, g: 255, b: 255 }
+        }
+      }).png();
+      
+      const cropped = await ImageUtils.cropImage(largeImage, {
+        x: 2,
+        y: 2,
+        width: 5,
+        height: 5
+      });
+      
+      const metadata = await cropped.metadata();
+      expect(metadata.width).toBe(5);
+      expect(metadata.height).toBe(5);
+    });
+  });
+
+  describe('sharpToBase64', () => {
+    it('should convert to base64 with correct format', async () => {
+      const sharpInstance = sharp(Buffer.from(testPng, 'base64'));
+      const result = await ImageUtils.sharpToBase64(sharpInstance, 'png');
+      
+      expect(result).toBeTruthy();
+      expect(typeof result).toBe('string');
+    });
+
+    it('should handle different output formats', async () => {
+      const sharpInstance = sharp(Buffer.from(testPng, 'base64'));
+      
+      for (const format of ['png', 'jpeg', 'webp']) {
+        const result = await ImageUtils.sharpToBase64(sharpInstance, format);
+        expect(result).toBeTruthy();
+        expect(typeof result).toBe('string');
+      }
+    });
+  });
+
+  describe('createProcessingMetadata', () => {
+    it('should create correct metadata', () => {
+      const metadata = ImageUtils.createProcessingMetadata(
+        'resize',
+        150.5,
+        1000, // inputSize
+        800,  // outputSize
+        { quality: 85 }
+      );
+      
+      expect(metadata.operation).toBe('resize');
+      expect(metadata.processingTime).toBe(150.5);
+      expect((metadata as any).quality).toBe(85); // Additional metadata gets spread in
+      expect(metadata.processedAt).toBeTruthy();
+    });
+  });
+});
