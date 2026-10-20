@@ -4,6 +4,15 @@ import * as path from 'path';
 import * as opentype from 'opentype.js';
 import { TypographyValidator, PerformanceValidator } from '../util/validation.js';
 import { PerformanceMonitor, FontCache } from '../util/performance.js';
+import {
+  allowedFontRoots,
+  resolveAllowedFontPath,
+  validateFontUrl,
+  publicOnlyHttpsAgent,
+  FONT_DIRS_ENV,
+  MAX_REMOTE_FONT_BYTES,
+  REMOTE_FONT_TIMEOUT_MS
+} from '../util/fontSources.js';
 import { 
   LoadFontInputSchema, 
   FontInput, 
@@ -32,7 +41,7 @@ export const loadFontTool: ExecutableTool = {
       },
       path: {
         type: 'string',
-        description: 'File path (for file type)'
+        description: 'Path to a .ttf/.otf/.woff/.woff2 file in a system font directory or a directory listed in MCP_FONT_DIRS (for file type)'
       },
       data: {
         type: 'string',
@@ -40,7 +49,7 @@ export const loadFontTool: ExecutableTool = {
       },
       url: {
         type: 'string',
-        description: 'URL to font file (for url type)'
+        description: 'Public https:// URL to a font file, no redirects (for url type)'
       },
       name: {
         type: 'string',
@@ -161,18 +170,20 @@ export const loadFontTool: ExecutableTool = {
 export async function loadFontBuffer(input: FontInput): Promise<Buffer> {
   switch (input.type) {
     case 'file': {
-      if (!fs.existsSync(input.path)) {
+      const fontPath = resolveAllowedFontPath(input.path, allowedFontRoots(getSystemFontPaths()));
+      if (!fontPath) {
+        // Deliberately doesn't echo the path: callers may be probing the filesystem.
         throw new Error(JSON.stringify({
           code: TypographyErrorCode.FONT_LOAD_FAILED,
-          message: `Font file not found: ${input.path}`,
+          message: 'Font file not found or not in an allowed font directory',
           suggestions: [
-            'Verify the file path is correct',
-            'Check file permissions',
-            'Ensure the file exists'
+            'Use a .ttf, .otf, .woff, or .woff2 file',
+            `Place the font in a system font directory or a directory listed in ${FONT_DIRS_ENV}`,
+            'Or pass the font as base64 with type "buffer"'
           ]
         }));
       }
-      return fs.readFileSync(input.path);
+      return fs.readFileSync(fontPath);
     }
 
     case 'buffer': {
@@ -198,8 +209,37 @@ export async function loadFontBuffer(input: FontInput): Promise<Buffer> {
     }
 
     case 'url': {
+      const url = validateFontUrl(input.url);
+      if (!url) {
+        throw new Error(JSON.stringify({
+          code: TypographyErrorCode.FONT_LOAD_FAILED,
+          message: 'Font URL must be a public https:// address',
+          suggestions: [
+            'Use an https:// URL on a public host',
+            'Local, private-network, and credentialed URLs are not allowed'
+          ]
+        }));
+      }
+
       const fetch = (await import('node-fetch')).default;
-      const response = await fetch(input.url);
+      let response;
+      try {
+        response = await fetch(url.toString(), {
+          agent: publicOnlyHttpsAgent(),
+          redirect: 'error',
+          signal: AbortSignal.timeout(REMOTE_FONT_TIMEOUT_MS),
+          size: MAX_REMOTE_FONT_BYTES
+        });
+      } catch (error) {
+        throw new Error(JSON.stringify({
+          code: TypographyErrorCode.FONT_LOAD_FAILED,
+          message: `Failed to fetch font from URL: ${error instanceof Error ? error.message : 'request failed'}`,
+          suggestions: [
+            'Verify the URL is reachable and does not redirect',
+            `Fonts over ${MAX_REMOTE_FONT_BYTES / (1024 * 1024)}MB or slower than ${REMOTE_FONT_TIMEOUT_MS / 1000}s are rejected`
+          ]
+        }));
+      }
       
       if (!response.ok) {
         throw new Error(JSON.stringify({
