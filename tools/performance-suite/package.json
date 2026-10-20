@@ -1,0 +1,48 @@
+{
+  "name": "mcp-graphics-performance-suite",
+  "version": "1.0.0",
+  "description": "Comprehensive performance testing suite for all MCP Graphics servers",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "mcp",
+    "graphics",
+    "performance",
+    "benchmark",
+    "testing",
+    "load-testing"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run test",
+    "test": "npm run build && node dist/index.js",
+    "test:functional": "npm run build && node dist/functional.js",
+    "test:performance": "npm run build && node dist/performance.js",
+    "test:load": "npm run build && node dist/load-test.js",
+    "test:memory": "npm run build && node --expose-gc dist/memory-test.js",
+    "test:all": "npm run test:functional && npm run test:performance && npm run test:load",
+    "monitor": "npm run build && node dist/monitor.js",
+    "report": "npm run build && node dist/report-generator.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.2.0",
+    "@svgdotjs/svg.js": "^3.2.4",
+    "chroma-js": "^2.4.2",
+    "node-fetch": "^3.3.2",
+    "opentype.js": "^1.3.4",
+    "perf_hooks": "*",
+    "sharp": "^0.33.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.0.0",
+    "jest": "^30.1.3",
+    "ts-jest": "^29.4.1",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Tony DiCenzo"
+}
