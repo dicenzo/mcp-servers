@@ -65,12 +65,16 @@ describe('font file path guard', () => {
 describe('font URL guard', () => {
   test.each([
     '127.0.0.1', '10.1.2.3', '172.16.0.1', '192.168.1.1', '169.254.169.254',
-    '100.64.0.1', '0.0.0.0', '224.0.0.1', '::1', '::', 'fc00::1', 'fe80::1', '::ffff:127.0.0.1'
+    '100.64.0.1', '0.0.0.0', '224.0.0.1', '::1', '::', 'fc00::1', 'fe80::1', '::ffff:127.0.0.1',
+    // IPv4 embedded in IPv6 written in hex, plus NAT64 and 6to4 wrappers around private IPv4
+    '::ffff:7f00:1', '::ffff:a9fe:a9fe', '0:0:0:0:0:ffff:7f00:0001', '::7f00:1', '::127.0.0.1',
+    '64:ff9b::7f00:1', '64:ff9b::169.254.169.254', '2002:7f00:1::', '2002:c0a8:101::1',
+    'fec0::1', '2001:db8::1', 'not-an-ip'
   ])('treats %s as non-public', (ip) => {
     expect(isNonPublicAddress(ip)).toBe(true);
   });
 
-  test.each(['8.8.8.8', '1.1.1.1', '2606:4700:4700::1111'])('treats %s as public', (ip) => {
+  test.each(['8.8.8.8', '1.1.1.1', '2606:4700:4700::1111', '::ffff:808:808', '64:ff9b::808:808', '2002:808:808::1'])('treats %s as public', (ip) => {
     expect(isNonPublicAddress(ip)).toBe(false);
   });
 
@@ -85,6 +89,8 @@ describe('font URL guard', () => {
     'https://127.0.0.1/font.ttf',
     'https://169.254.169.254/latest/meta-data/',
     'https://[::1]/font.ttf',
+    'https://[::ffff:7f00:1]/font.ttf',
+    'https://[::ffff:a9fe:a9fe]/latest/meta-data/',
     'https://user:pass@fonts.example.com/font.ttf',
     'not a url'
   ])('rejects %s', (url) => {
