@@ -291,6 +291,19 @@ export class TemplateExporter {
     const page = await browser.newPage();
     
     try {
+      // Template HTML can carry caller-supplied content, so render it as a static
+      // document: no scripts, and no network or file requests (inline data: URIs only).
+      await page.setJavaScriptEnabled(false);
+      await page.setRequestInterception(true);
+      page.on('request', (request) => {
+        const url = request.url();
+        if (url === 'about:blank' || url.startsWith('data:')) {
+          request.continue();
+        } else {
+          request.abort('blockedbyclient');
+        }
+      });
+
       // Create complete HTML document
       const fullHTML = `
         <!DOCTYPE html>
@@ -436,15 +449,16 @@ export class TemplateExporter {
    */
   private static async getBrowser(): Promise<Browser> {
     if (!this.browserInstance) {
+      // Chromium's sandbox stays on by default. Set MCP_TEMPLATES_NO_SANDBOX=1 only in
+      // environments that can't run it (some containers), ideally ones without network access.
+      const noSandbox = process.env.MCP_TEMPLATES_NO_SANDBOX === '1';
       this.browserInstance = await puppeteer.launch({
         headless: true,
         args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
+          ...(noSandbox ? ['--no-sandbox', '--disable-setuid-sandbox', '--no-zygote'] : []),
           '--disable-dev-shm-usage',
           '--disable-accelerated-2d-canvas',
           '--no-first-run',
-          '--no-zygote',
           '--disable-gpu'
         ]
       });
