@@ -149,31 +149,26 @@ describe('LayoutMetricsCalculator', () => {
       expect(['excellent', 'good', 'fair']).toContain(report.category);
     });
 
+    // Rewritten: the original version expected performance/content recommendations
+    // from a "slow" monitor faked with a no-op setTimeout. generateQualityReport only
+    // derives recommendations from metric warnings (and a >100ms calculation time),
+    // so this asserts that mapping for a sparse layout instead.
     it('should provide recommendations for improvements', () => {
       const layout = createMockGridLayout();
-      const problematicElements: LayoutElement[] = [
+      const sparseElements: LayoutElement[] = [
         {
-          id: 'slow-element',
+          id: 'lonely-element',
           type: 'div',
           bounds: { x: 0, y: 0, width: 100, height: 50 },
-          content: { 
-            largeData: 'x'.repeat(2000) // Large content
-          }
+          content: { largeData: 'x'.repeat(2000) }
         }
       ];
 
-      // Mock slow performance
-      const slowMonitor = new PerformanceMonitor();
-      slowMonitor.start('slow-test');
-      // Simulate slow calculation
-      setTimeout(() => {}, 150);
+      const report = LayoutMetricsCalculator.generateQualityReport(layout, sparseElements, monitor);
 
-      const report = LayoutMetricsCalculator.generateQualityReport(layout, problematicElements, slowMonitor);
-
+      expect(report.metrics.warnings?.some(w => w.includes('density'))).toBe(true);
       expect(report.recommendations.length).toBeGreaterThan(0);
-      expect(report.recommendations.some(rec => 
-        rec.includes('performance') || rec.includes('optimization') || rec.includes('content')
-      )).toBe(true);
+      expect(report.recommendations.some(rec => rec.includes('density'))).toBe(true);
     });
   });
 

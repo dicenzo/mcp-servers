@@ -60,7 +60,7 @@ declare module 'opentype.js' {
       glyphs: Glyph[];
     };
     charToGlyph(char: string): Glyph;
-    hasChar?(codepoint: number): boolean;
+    hasChar?(char: string): boolean;
     toArrayBuffer(): ArrayBuffer;
   }
   

@@ -1,4 +1,5 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as opentype from 'opentype.js';
@@ -165,9 +166,23 @@ export const loadFontTool: ExecutableTool = {
 };
 
 /**
- * Loads font data from various input sources
+ * Loads font data from various input sources.
+ *
+ * Callers pass `buffer.buffer` to opentype.parse, so the returned Buffer must own
+ * its ArrayBuffer exactly: small Buffers (readFileSync, base64 decoding) are often
+ * slices of Node's shared pool, and parsing the whole pool reads unrelated bytes.
  */
 export async function loadFontBuffer(input: FontInput): Promise<Buffer> {
+  const data = await readFontSource(input);
+  if (data.byteOffset === 0 && data.byteLength === data.buffer.byteLength) {
+    return data;
+  }
+  const owned = Buffer.alloc(data.byteLength);
+  data.copy(owned);
+  return owned;
+}
+
+async function readFontSource(input: FontInput): Promise<Buffer> {
   switch (input.type) {
     case 'file': {
       const fontPath = resolveAllowedFontPath(input.path, allowedFontRoots(getSystemFontPaths()));
@@ -513,6 +528,5 @@ function extractOpenTypeFeatures(font: any): string[] {
  * Generates checksum for font buffer
  */
 function generateChecksum(buffer: Buffer): string {
-  const crypto = require('crypto');
-  return crypto.createHash('md5').update(buffer).digest('hex');
+  return createHash('md5').update(buffer).digest('hex');
 }

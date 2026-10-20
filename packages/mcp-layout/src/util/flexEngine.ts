@@ -388,6 +388,8 @@ export class FlexEngine {
             maxSize: item.maxSize
           });
         });
+        // Every remaining item is finalized; clear so the fallback below does not re-add them.
+        remainingItems.length = 0;
         break;
       }
 
@@ -503,6 +505,8 @@ export class FlexEngine {
             maxSize: item.maxSize
           });
         });
+        // Every remaining item is finalized; clear so the fallback below does not re-add them.
+        remainingItems.length = 0;
         break;
       }
 

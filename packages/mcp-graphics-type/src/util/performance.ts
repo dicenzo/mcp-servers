@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { TypographyErrorCode, PERFORMANCE_LIMITS } from '../types/typography.js';
 
 /**
@@ -19,12 +20,13 @@ export class PerformanceMonitor {
     const startMemory = process.memoryUsage();
     
     this.activeOperations.set(operationId, startTime);
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
     try {
       // Set up timeout based on operation type
       const timeout = this.getTimeoutForOperation(operationType);
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
+        timeoutHandle = setTimeout(() => {
           reject(new Error(JSON.stringify({
             code: TypographyErrorCode.PERFORMANCE_TIMEOUT,
             message: `Operation timeout after ${timeout}ms`,
@@ -79,6 +81,9 @@ export class PerformanceMonitor {
       this.activeOperations.delete(operationId);
       
       throw error;
+    } finally {
+      // Don't leave the timeout pending after the operation settles.
+      clearTimeout(timeoutHandle);
     }
   }
 
@@ -236,7 +241,7 @@ export class FontCache {
       return `file:${fontInput.path}`;
     } else if (fontInput.type === 'buffer') {
       // Use a hash of the buffer for caching
-      const hash = require('crypto').createHash('md5').update(fontInput.data).digest('hex');
+      const hash = createHash('md5').update(fontInput.data).digest('hex');
       return `buffer:${hash}`;
     } else if (fontInput.type === 'url') {
       return `url:${fontInput.url}`;

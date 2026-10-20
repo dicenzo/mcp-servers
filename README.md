@@ -100,9 +100,9 @@ These are the results of the last verified run (Node 22, Yarn 4.9.2, macOS). Eve
 | mcp-graphics-color | passes | 186 of 210 pass; 24 fail (assertion mismatches; `tests/index.test.ts` does not compile) |
 | mcp-graphics-image | passes | 27 of 27 pass (five older test files are disabled) |
 | mcp-graphics-svg | passes | 181 of 185 pass; 3 fail, 1 skipped; 3 suites do not compile |
-| mcp-graphics-type | passes | 0 run; Jest setup mocks `hb-wasm`, which is not installed |
-| mcp-layout | passes | 0 run; `tests/setup.ts` has an invalid `import '@types/jest'` |
-| mcp-templates | passes | 0 run; Jest cannot resolve `.js` import specifiers to `.ts` sources |
+| mcp-graphics-type | passes | 127 of 130 pass; 3 skipped (network, installed system fonts, fontTools) |
+| mcp-layout | passes | 71 of 74 pass; 3 skipped (CSS output and accessibility analysis are stubbed in the tools) |
+| mcp-templates | passes | 31 of 31 pass |
 | mcp-business-strategy | passes | 11 of 19 pass; 7 of 8 suites cannot resolve `.js` imports; `data.enrich` tests expect fields the tool no longer returns |
 | tools/integration-tests | passes | 23 of 51 pass; failures are mostly assertions on tool responses |
 | tools/performance-suite | passes | runs to completion, but it times mock functions, so its results do not reflect the servers |

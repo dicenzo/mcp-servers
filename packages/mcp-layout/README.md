@@ -62,8 +62,10 @@ This server reads no environment variables.
 
 ## Known issues
 
-- Last verified test run: build passes; 0 tests run (5 of 5 suites fail to start).
-- `tests/setup.ts` contains `import '@types/jest'`, which TypeScript rejects (TS6137), so Jest cannot start any suite.
+- Last verified test run: build passes; 71 of 74 tests pass, 0 fail, 3 skipped.
+- `layout.createFlex` and `layout.addConstraints` return the placeholder `"CSS generation temporarily disabled"` instead of CSS, and `layout.measure` returns a fixed `accessibilityAnalysis` stub (its touch-target check is never called). The 3 skipped tests cover those outputs.
+- The constraint solver has no priority-based conflict resolution. Two `equal` constraints with different values on the same property are rejected, whatever their priorities.
+
 
 ## License
 

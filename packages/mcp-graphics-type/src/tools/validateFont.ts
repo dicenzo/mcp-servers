@@ -365,8 +365,11 @@ function validateFontStructure(font: any): {
     });
   }
   
-  // Check character mapping
-  if (font.tables.cmap && font.tables.cmap.subtables.length === 0) {
+  // Check character mapping. opentype.js exposes the parsed mapping as
+  // cmap.glyphIndexMap; it does not provide a cmap.subtables array.
+  const cmap: any = font.tables.cmap;
+  const cmapEntryCount = cmap?.subtables?.length ?? Object.keys(cmap?.glyphIndexMap ?? {}).length;
+  if (cmap && cmapEntryCount === 0) {
     errors.push({
       code: 'NO_CHARACTER_MAPPING',
       message: 'Font has no character to glyph mapping',
@@ -650,7 +653,7 @@ function analyzeUnicodeSupport(font: any): {
   // Analyze character coverage (simplified)
   if (font.tables.cmap) {
     // Check basic Latin coverage
-    const hasBasicLatin = font.hasChar && font.hasChar(0x0041); // 'A'
+    const hasBasicLatin = font.hasChar && font.hasChar('A'); // opentype.js takes a character, not a code point
     if (hasBasicLatin) {
       supportedBlocks.push('Basic Latin');
     } else {

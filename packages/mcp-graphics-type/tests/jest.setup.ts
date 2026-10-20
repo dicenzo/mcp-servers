@@ -1,106 +1,54 @@
-// Jest setup file for typography tests
+// Jest setup file for typography tests.
+//
+// The package runs Jest in ESM mode, where jest.mock() does not intercept ESM
+// imports, so tests use real fixtures instead of module mocks: a small font is
+// generated with opentype.js into a temp directory, and that directory is listed
+// in MCP_FONT_DIRS so loadFont's allowed-directory guard accepts it.
 
-// Set up test environment
 import { jest, beforeEach, afterEach, afterAll } from '@jest/globals';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { buildTestFont, toBuffer } from './fixtures/buildTestFont.js';
+import { FONT_DIRS_ENV } from '../src/util/fontSources.js';
 
-// Mock node-fetch for URL-based font loading tests
-jest.mock('node-fetch', () => ({
-  default: jest.fn(() =>
-    Promise.resolve({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      arrayBuffer: () => Promise.resolve(new ArrayBuffer(1024)),
-    })
-  ),
-}));
-
-// Mock file system operations for testing
-jest.mock('fs', () => ({
-  existsSync: jest.fn(() => true),
-  readFileSync: jest.fn(() => Buffer.alloc(1024)),
-  writeFileSync: jest.fn(),
-  mkdtempSync: jest.fn(() => '/tmp/test-dir'),
-  rmdirSync: jest.fn(),
-  unlinkSync: jest.fn(),
-  readdirSync: jest.fn(() => ['test-font.ttf']),
-}));
-
-// Mock opentype.js
-jest.mock('opentype.js', () => ({
-  parse: jest.fn(() => ({
-    names: {
-      fontFamily: { en: 'Test Font' },
-      fontSubfamily: { en: 'Regular' },
-      fullName: { en: 'Test Font Regular' },
-      postScriptName: { en: 'TestFont-Regular' },
-      version: { en: '1.0' },
-      license: { en: 'Test License' }
-    },
-    unitsPerEm: 1000,
-    ascender: 800,
-    descender: -200,
-    lineGap: 0,
-    numGlyphs: 1000,
-    tables: {
-      head: { 
-        xMin: 0, yMin: -200, xMax: 800, yMax: 800,
-        macStyle: 0
-      },
-      os2: { 
-        sCapHeight: 700, 
-        sxHeight: 500,
-        usWeightClass: 400,
-        usWidthClass: 5,
-        fsSelection: 64
-      },
-      post: { 
-        isFixedPitch: false 
-      },
-      cmap: { 
-        subtables: [{}] 
-      },
-      gsub: {
-        scripts: { latn: {} },
-        features: { kern: {}, liga: {} }
-      },
-      gpos: {
-        scripts: { latn: {} },
-        features: { kern: {} }
-      }
-    },
-    glyphs: {
-      glyphs: [
-        { index: 0, name: '.notdef' }
-      ]
-    },
-    charToGlyph: jest.fn(() => ({
-      index: 65,
-      name: 'A',
-      advanceWidth: 600,
-      leftSideBearing: 50,
-      rightSideBearing: 50,
-      xMin: 50,
-      xMax: 550,
-      yMin: 0,
-      yMax: 700,
-      getBoundingBox: () => ({
-        x1: 50, y1: 0, x2: 550, y2: 700
-      })
-    })),
-    hasChar: jest.fn(() => true)
-  }))
-}));
-
-
-// Set up global test constants
 declare global {
-  var testFontBuffer: Buffer;
+  /** Real temp directory holding the generated fixtures (listed in MCP_FONT_DIRS). */
+  var testFontDir: string;
+  /** Generated "Test Font" saved with a .ttf extension (CFF outlines, "OTTO" header). */
   var testFontPath: string;
+  /** Same generated font saved with a .otf extension. */
+  var testOtfPath: string;
+  /** Same font with its sfnt version rewritten to TrueType (0x00010000). */
+  var testTrueTypeSignaturePath: string;
+  /** A .ttf file inside the allowed directory that is not a valid font. */
+  var corruptedFontPath: string;
+  /** A .ttf path inside the allowed directory that does not exist. */
+  var missingFontPath: string;
+  /** Raw bytes of the generated font. */
+  var testFontBuffer: Buffer;
 }
 
-global.testFontBuffer = Buffer.alloc(1024, 0);
-global.testFontPath = '/test/fonts/test-font.ttf';
+const fontDir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'mcp-type-fonts-'));
+const fontBuffer = toBuffer(buildTestFont());
+
+const trueTypeSignature = Buffer.from(fontBuffer);
+trueTypeSignature.writeUInt32BE(0x00010000, 0);
+
+fs.writeFileSync(path.join(fontDir, 'test-font.ttf'), fontBuffer);
+fs.writeFileSync(path.join(fontDir, 'test-font.otf'), fontBuffer);
+fs.writeFileSync(path.join(fontDir, 'truetype-signature.ttf'), trueTypeSignature);
+fs.writeFileSync(path.join(fontDir, 'corrupted.ttf'), Buffer.alloc(1024, 0));
+
+process.env[FONT_DIRS_ENV] = fontDir;
+
+global.testFontDir = fontDir;
+global.testFontPath = path.join(fontDir, 'test-font.ttf');
+global.testOtfPath = path.join(fontDir, 'test-font.otf');
+global.testTrueTypeSignaturePath = path.join(fontDir, 'truetype-signature.ttf');
+global.corruptedFontPath = path.join(fontDir, 'corrupted.ttf');
+global.missingFontPath = path.join(fontDir, 'does-not-exist.ttf');
+global.testFontBuffer = fontBuffer;
 
 // Set NODE_ENV for tests
 process.env.NODE_ENV = 'test';
@@ -124,7 +72,7 @@ afterEach(() => {
   console.warn = originalConsoleWarn;
 });
 
-// Clean up after tests
 afterAll(() => {
   jest.restoreAllMocks();
+  fs.rmSync(fontDir, { recursive: true, force: true });
 });
