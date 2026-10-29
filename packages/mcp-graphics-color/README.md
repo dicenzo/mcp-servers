@@ -62,9 +62,9 @@ This server reads no environment variables.
 
 ## Known issues
 
-- Last verified test run: build passes; 186 of 210 tests pass, 24 fail (4 of 8 suites fail).
-- `tests/index.test.ts` does not compile under ts-jest (type errors in the server mocks), so that suite does not run.
-- `colorBrandMatch`, `colorLintBrand`, and `colorValidateAccessibility` tests have assertion mismatches with the current implementation (for example, a test expects confidence `high` where the tool returns `exact`).
+- Last verified test run: build passes; all 236 tests pass (9 of 9 suites).
+- A few tests assert wall-clock limits (for example, a batch of conversions under 50ms) and can fail on a slow or heavily loaded machine.
+- Delta E is CIE76 (Euclidean distance in Lab), reported as `deltaE-euclidean`. It overstates differences between saturated colors compared with CIEDE2000, so `color.brandMatch` confidence bands and `maxDeltaE` thresholds are in CIE76 units.
 
 ## License
 

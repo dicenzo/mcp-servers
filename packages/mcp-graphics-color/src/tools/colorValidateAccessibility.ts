@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { z } from 'zod';
+import { z, ZodError } from 'zod';
 import { ColorUtils } from '../util/colorUtils.js';
 import {
   ColorInputSchema,
@@ -95,18 +95,19 @@ export async function colorValidateAccessibility(input: unknown): Promise<ColorV
     const validated = ColorValidateAccessibilityInputSchema.parse(input);
     const { colors, contexts, includeAPCA = false, includeRecommendations = true } = validated;
     
-    // Parse colors
-    const parsedColors: Color[] = [];
-    for (const colorInput of colors) {
+    // Parse colors. Contexts refer to colors by their index in the input
+    // array, so an invalid color leaves an empty slot rather than shifting
+    // the colors after it.
+    const parsedColors: (Color | undefined)[] = colors.map(colorInput => {
       try {
-        const parsedColor = ColorUtils.parseColorInput(colorInput);
-        parsedColors.push(parsedColor);
+        return ColorUtils.parseColorInput(colorInput);
       } catch (error) {
         console.warn('Skipping invalid color:', colorInput, error);
+        return undefined;
       }
-    }
+    });
     
-    if (parsedColors.length < 2) {
+    if (parsedColors.filter(color => color !== undefined).length < 2) {
       throw new Error('At least 2 valid colors are required for accessibility validation');
     }
     
@@ -120,14 +121,13 @@ export async function colorValidateAccessibility(input: unknown): Promise<ColorV
     for (const context of contexts) {
       const { name, foreground, background, textSize, level } = context;
       
-      // Validate color indices
-      if (foreground >= parsedColors.length || background >= parsedColors.length) {
-        console.warn(`Skipping context ${name}: invalid color indices`);
-        continue;
-      }
-      
+      // Skip contexts whose indices are out of range or name an invalid color
       const fgColor = parsedColors[foreground];
       const bgColor = parsedColors[background];
+      if (!fgColor || !bgColor) {
+        console.warn(`Skipping context ${name}: color index out of range or color invalid`);
+        continue;
+      }
       
       // Calculate WCAG contrast
       const ratio = ColorUtils.calculateContrastRatio(fgColor, bgColor);
@@ -211,6 +211,28 @@ export async function colorValidateAccessibility(input: unknown): Promise<ColorV
     };
     
   } catch (error) {
+    // Handle schema validation errors. Checked first: a ZodError's message is
+    // itself JSON (the issue list), so the structured-error branch below would
+    // otherwise return that array as the error, with no code or message.
+    if (error instanceof ZodError) {
+      return {
+        success: false,
+        error: {
+          code: ColorErrorCode.ACCESSIBILITY_CHECK_FAILED,
+          message: ColorUtils.describeValidationError(error),
+          details: {
+            input,
+            validationErrors: error.issues,
+            processingTime: Math.round((performance.now() - startTime) * 100) / 100
+          },
+          suggestions: [
+            'Provide a colors array and a contexts array',
+            'Verify text size and level parameters are correct'
+          ]
+        }
+      };
+    }
+
     // Handle structured errors from ColorUtils
     if (error instanceof Error) {
       try {

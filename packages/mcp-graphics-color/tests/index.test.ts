@@ -1,6 +1,6 @@
 import { describe, test, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { McpError, ErrorCode, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 // Mock the MCP SDK components
 jest.mock('@modelcontextprotocol/sdk/server/index.js');
@@ -69,8 +69,14 @@ import { colorBrandMatch } from '../src/tools/colorBrandMatch.js';
 import { colorLintBrand } from '../src/tools/colorLintBrand.js';
 import { colorValidateAccessibility } from '../src/tools/colorValidateAccessibility.js';
 
-// Import the server class for direct testing
-import { MCPColorServer } from '../src/index.js';
+// Import the server from server.ts: src/index.ts is only the executable entry
+// point (it starts a stdio server when run directly) and uses import.meta,
+// which ts-jest's CommonJS output cannot compile.
+import { MCPColorServer, main } from '../src/server.js';
+
+// jest.fn() from @jest/globals is typed as taking `never` arguments unless given a
+// function type; these mocks stand in for SDK and tool functions of varying shapes.
+type AnyFunction = (...args: any[]) => any;
 
 describe('MCP Color Server', () => {
   let mockServer: jest.Mocked<Server>;
@@ -88,8 +94,8 @@ describe('MCP Color Server', () => {
     // Create a mock server instance
     mockServer = {
       setRequestHandler: jest.fn(),
-      connect: jest.fn().mockResolvedValue(undefined),
-      close: jest.fn().mockResolvedValue(undefined),
+      connect: jest.fn<AnyFunction>().mockResolvedValue(undefined),
+      close: jest.fn<AnyFunction>().mockResolvedValue(undefined),
       onerror: null
     } as any;
     
@@ -148,13 +154,13 @@ describe('MCP Color Server', () => {
       
       // Get the ListTools handler
       const listToolsCall = mockServer.setRequestHandler.mock.calls.find(
-        call => call[0] && typeof call[0] === 'object' && 'method' in call[0]
+        call => call[0] === ListToolsRequestSchema
       );
       
       expect(listToolsCall).toBeDefined();
       
       if (listToolsCall) {
-        const listToolsHandler = listToolsCall[1];
+        const listToolsHandler = listToolsCall[1] as AnyFunction;
         const result = await listToolsHandler({} as any);
         
         expect(result).toBeDefined();
@@ -191,7 +197,7 @@ describe('MCP Color Server', () => {
         success: true, 
         result: { hex: '#ff0000' }
       };
-      (colorConvert as jest.Mock).mockResolvedValue(mockResult);
+      (colorConvert as jest.Mock<AnyFunction>).mockResolvedValue(mockResult);
 
       const result = await callToolHandler({
         params: { name: 'color.convert', arguments: { color: '#ff0000' } }
@@ -206,7 +212,7 @@ describe('MCP Color Server', () => {
         success: true, 
         result: { ratio: 21 }
       };
-      (colorContrast as jest.Mock).mockResolvedValue(mockResult);
+      (colorContrast as jest.Mock<AnyFunction>).mockResolvedValue(mockResult);
 
       const result = await callToolHandler({
         params: { name: 'color.contrast', arguments: { foreground: '#000000', background: '#ffffff' } }
@@ -221,7 +227,7 @@ describe('MCP Color Server', () => {
         success: true, 
         result: { colors: ['#ff0000', '#00ff00'] }
       };
-      (colorGeneratePalette as jest.Mock).mockResolvedValue(mockResult);
+      (colorGeneratePalette as jest.Mock<AnyFunction>).mockResolvedValue(mockResult);
 
       const result = await callToolHandler({
         params: { name: 'color.generatePalette', arguments: { baseColor: '#ff0000' } }
@@ -236,7 +242,7 @@ describe('MCP Color Server', () => {
         success: true, 
         result: { bestMatch: { hex: '#ff0000' } }
       };
-      (colorBrandMatch as jest.Mock).mockResolvedValue(mockResult);
+      (colorBrandMatch as jest.Mock<AnyFunction>).mockResolvedValue(mockResult);
 
       const result = await callToolHandler({
         params: { name: 'color.brandMatch', arguments: { targetColor: '#ff0000', brandPalette: ['#ff0000'] } }
@@ -251,7 +257,7 @@ describe('MCP Color Server', () => {
         success: true, 
         result: { passed: true, score: 100 }
       };
-      (colorLintBrand as jest.Mock).mockResolvedValue(mockResult);
+      (colorLintBrand as jest.Mock<AnyFunction>).mockResolvedValue(mockResult);
 
       const result = await callToolHandler({
         params: { name: 'color.lintBrand', arguments: { palette: ['#ff0000'], rules: {} } }
@@ -266,7 +272,7 @@ describe('MCP Color Server', () => {
         success: true, 
         result: { overallPassed: true }
       };
-      (colorValidateAccessibility as jest.Mock).mockResolvedValue(mockResult);
+      (colorValidateAccessibility as jest.Mock<AnyFunction>).mockResolvedValue(mockResult);
 
       const result = await callToolHandler({
         params: { name: 'color.validateAccessibility', arguments: { colors: ['#000000', '#ffffff'], contexts: [] } }
@@ -291,7 +297,7 @@ describe('MCP Color Server', () => {
           details: { input: 'invalid' }
         }
       };
-      (colorConvert as jest.Mock).mockResolvedValue(mockError);
+      (colorConvert as jest.Mock<AnyFunction>).mockResolvedValue(mockError);
 
       await expect(callToolHandler({
         params: { name: 'color.convert', arguments: { color: 'invalid' } }
@@ -300,7 +306,7 @@ describe('MCP Color Server', () => {
 
     test('logs successful tool usage', async () => {
       const mockResult = { success: true, result: {} };
-      (colorConvert as jest.Mock).mockResolvedValue(mockResult);
+      (colorConvert as jest.Mock<AnyFunction>).mockResolvedValue(mockResult);
 
       await callToolHandler({
         params: { name: 'color.convert', arguments: {} }
@@ -313,7 +319,7 @@ describe('MCP Color Server', () => {
 
     test('warns about performance violations', async () => {
       const mockResult = { success: true, result: {} };
-      (colorConvert as jest.Mock).mockImplementation(async () => {
+      (colorConvert as jest.Mock<AnyFunction>).mockImplementation(async () => {
         // Simulate slow operation
         await new Promise(resolve => setTimeout(resolve, 15)); // Should exceed 10ms target
         return mockResult;
@@ -329,7 +335,7 @@ describe('MCP Color Server', () => {
     });
 
     test('handles exceptions during tool execution', async () => {
-      (colorConvert as jest.Mock).mockRejectedValue(new Error('Unexpected error'));
+      (colorConvert as jest.Mock<AnyFunction>).mockRejectedValue(new Error('Unexpected error'));
 
       await expect(callToolHandler({
         params: { name: 'color.convert', arguments: {} }
@@ -354,8 +360,7 @@ describe('MCP Color Server', () => {
         'color.validateAccessibility': 50
       };
 
-      // Import the module to access constants (indirect test)
-      await import('../src/index.js');
+      new MCPColorServer();
       
       // We can't directly access the constants, but we can verify they exist
       // by testing the performance monitoring behavior
@@ -365,22 +370,21 @@ describe('MCP Color Server', () => {
 
   describe('Error handling', () => {
     test('handles server errors', async () => {
-      await import('../src/index.js');
+      new MCPColorServer();
       
       // Simulate server error
       const errorHandler = mockServer.onerror;
-      if (errorHandler) {
-        const testError = new Error('Server error');
-        errorHandler(testError);
-        
-        expect(consoleErrorSpy).toHaveBeenCalledWith('[SERVER ERROR]', testError);
-      }
+      expect(errorHandler).toEqual(expect.any(Function));
+      const testError = new Error('Server error');
+      errorHandler!(testError);
+      
+      expect(consoleErrorSpy).toHaveBeenCalledWith('[SERVER ERROR]', testError);
     });
 
     test('handles process signals', async () => {
       const mockProcess = {
-        on: jest.fn(),
-        exit: jest.fn()
+        on: jest.fn<AnyFunction>(),
+        exit: jest.fn<AnyFunction>()
       };
       
       // Mock process.on calls
@@ -388,7 +392,7 @@ describe('MCP Color Server', () => {
       process.on = mockProcess.on as any;
       
       try {
-        await import('../src/index.js');
+        new MCPColorServer();
         
         // Should register SIGINT and SIGTERM handlers
         expect(mockProcess.on).toHaveBeenCalledWith('SIGINT', expect.any(Function));
@@ -403,38 +407,41 @@ describe('MCP Color Server', () => {
   describe('Server lifecycle', () => {
     test('logs uptime on shutdown', async () => {
       const mockProcess = {
-        on: jest.fn(),
-        exit: jest.fn()
+        on: jest.fn<AnyFunction>(),
+        exit: jest.fn<AnyFunction>()
       };
       
       const originalProcessOn = process.on;
       process.on = mockProcess.on as any;
+      // The shutdown handler calls process.exit; keep it from ending the test run
+      const exitSpy = jest.spyOn(process, 'exit').mockImplementation(mockProcess.exit as any);
       
       try {
-        await import('../src/index.js');
+        new MCPColorServer();
         
         // Get the SIGINT handler
         const sigintHandler = mockProcess.on.mock.calls.find(
           call => call[0] === 'SIGINT'
         )?.[1];
         
-        if (sigintHandler) {
-          // Simulate SIGINT
-          await sigintHandler();
-          
-          expect(consoleErrorSpy).toHaveBeenCalledWith(
-            expect.stringMatching(/\[SHUTDOWN\] Server ran for \d+ms/)
-          );
-          expect(mockServer.close).toHaveBeenCalled();
-        }
+        expect(sigintHandler).toEqual(expect.any(Function));
+        // Simulate SIGINT
+        await sigintHandler();
+        
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          expect.stringMatching(/\[SHUTDOWN\] Server ran for \d+ms/)
+        );
+        expect(mockServer.close).toHaveBeenCalled();
+        expect(mockProcess.exit).toHaveBeenCalledWith(0);
       } finally {
         process.on = originalProcessOn;
+        exitSpy.mockRestore();
       }
     });
 
     test('connects to transport and logs ready message', async () => {
       // This will trigger the server startup
-      await import('../src/index.js');
+      await main();
       
       expect(mockServer.connect).toHaveBeenCalled();
       expect(consoleErrorSpy).toHaveBeenCalledWith('[STARTUP] Server ready and listening for requests');
@@ -445,7 +452,7 @@ describe('MCP Color Server', () => {
     test('creates stdio transport', async () => {
       const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
       
-      await import('../src/index.js');
+      await main();
       
       expect(StdioServerTransport).toHaveBeenCalled();
     });
@@ -463,8 +470,8 @@ describe('MCP Color Server', () => {
       });
       
       try {
-        // Import should trigger main() and handle the error
-        await expect(import('../src/index.js')).rejects.toThrow('Process exit called');
+        // main() should report the error and exit with status 1
+        await expect(main()).rejects.toThrow('Process exit called');
         
         expect(consoleErrorSpy).toHaveBeenCalledWith(
           '[FATAL ERROR] Failed to start server:',

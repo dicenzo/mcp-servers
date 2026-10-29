@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { ZodError } from 'zod';
 import { ColorUtils } from '../util/colorUtils.js';
 import {
   ColorBrandMatchInputSchema,
@@ -125,6 +126,28 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
     };
     
   } catch (error) {
+    // Handle schema validation errors. Checked first: a ZodError's message is
+    // itself JSON (the issue list), so the structured-error branch below would
+    // otherwise return that array as the error, with no code or message.
+    if (error instanceof ZodError) {
+      return {
+        success: false,
+        error: {
+          code: ColorErrorCode.BRAND_MATCH_FAILED,
+          message: ColorUtils.describeValidationError(error),
+          details: {
+            input,
+            validationErrors: error.issues,
+            processingTime: Math.round((performance.now() - startTime) * 100) / 100
+          },
+          suggestions: [
+            'Provide targetColor and a brandPalette of 1-50 colors',
+            'Ensure maxDeltaE is between 0 and 100'
+          ]
+        }
+      };
+    }
+
     // Handle structured errors from ColorUtils
     if (error instanceof Error) {
       try {
