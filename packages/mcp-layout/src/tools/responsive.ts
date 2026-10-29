@@ -1,7 +1,7 @@
 import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { 
-  LayoutElementSchema,
-  BreakpointSchema,
+  LayoutElementListSchema,
+  BreakpointListSchema,
   LayoutSchema,
   LayoutElement,
   Breakpoint,
@@ -111,7 +111,7 @@ export const responsiveTool: ExecutableTool = {
         maxViewport?: number;
       };
 
-      const elements = input.elements.map(el => LayoutElementSchema.parse(el));
+      const elements = LayoutElementListSchema.parse(input.elements);
       const baseLayout = LayoutSchema.parse(input.baseLayout);
 
       let breakpoints: Breakpoint[];
@@ -122,7 +122,7 @@ export const responsiveTool: ExecutableTool = {
           input.maxViewport || 1920
         );
       } else if (input.breakpoints) {
-        breakpoints = input.breakpoints.map(bp => BreakpointSchema.parse(bp));
+        breakpoints = BreakpointListSchema.parse(input.breakpoints);
       } else {
         // Use default breakpoints
         breakpoints = [

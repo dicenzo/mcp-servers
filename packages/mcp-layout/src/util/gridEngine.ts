@@ -2,6 +2,7 @@ import {
   GridConfig,
   GridElement,
   GridLayout,
+  MAX_GRID_TRACKS,
   Rectangle,
 } from '../types/layout.js';
 import { PerformanceMonitor } from './performance.js';
@@ -95,6 +96,9 @@ export class GridEngine {
     
     // Split template into individual track definitions
     const trackDefs = this.parseTrackDefinitions(template);
+    if (trackDefs.length > MAX_GRID_TRACKS) {
+      throw new Error(`Grid template defines ${trackDefs.length} tracks (at most ${MAX_GRID_TRACKS} allowed)`);
+    }
     
     // Calculate track sizes
     let currentPosition = 0;
@@ -151,12 +155,26 @@ export class GridEngine {
   }
 
   /**
-   * Expand CSS repeat() functions
+   * Expand CSS repeat() functions.
+   * Rejects repeat counts, and total expanded track counts, above MAX_GRID_TRACKS
+   * before allocating anything, so a short template cannot exhaust memory.
    */
   private static expandRepeat(template: string): string {
+    let expandedTracks = 0;
+
     return template.replace(/repeat\((\d+),\s*([^)]+)\)/g, (match, count, pattern) => {
       const repeatCount = parseInt(count, 10);
-      return Array(repeatCount).fill(pattern.trim()).join(' ');
+      if (repeatCount > MAX_GRID_TRACKS) {
+        throw new Error(`Grid repeat() count ${count} exceeds the maximum of ${MAX_GRID_TRACKS}`);
+      }
+
+      const trimmedPattern = pattern.trim();
+      expandedTracks += repeatCount * trimmedPattern.split(/\s+/).length;
+      if (expandedTracks > MAX_GRID_TRACKS) {
+        throw new Error(`Grid repeat() expands to more than ${MAX_GRID_TRACKS} tracks`);
+      }
+
+      return Array(repeatCount).fill(trimmedPattern).join(' ');
     });
   }
 
@@ -252,7 +270,7 @@ export class GridEngine {
       return { value: 0, unit: 'auto' };
     }
 
-    const match = value.match(/^(\d*\.?\d+)(px|fr|%|em|rem|vh|vw|ch|ex)?$/);
+    const match = value.match(/^(\d+(?:\.\d+)?|\.\d+)(px|fr|%|em|rem|vh|vw|ch|ex)?$/);
     if (match) {
       const numValue = parseFloat(match[1]);
       const unit = match[2] || 'px';

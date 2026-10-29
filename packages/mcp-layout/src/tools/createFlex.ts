@@ -1,7 +1,7 @@
 import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { 
   FlexConfigSchema,
-  FlexElementSchema,
+  FlexElementListSchema,
   RectangleSchema,
   FlexConfig,
   FlexElement,
@@ -14,6 +14,8 @@ import { LayoutValidator } from '../util/validation.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
+  // Helper methods live on the tool object; SDK >= 1.18 no longer types Tool as passthrough
+  [helper: string]: unknown;
 }
 
 /**
@@ -176,7 +178,7 @@ export const createFlexTool: ExecutableTool = {
 
       // Validate with Zod schemas
       const config = FlexConfigSchema.parse(input.config);
-      const elements = input.elements.map(el => FlexElementSchema.parse(el));
+      const elements = FlexElementListSchema.parse(input.elements);
       const bounds = RectangleSchema.parse(input.bounds);
 
       // Additional validation

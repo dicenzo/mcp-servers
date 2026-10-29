@@ -356,7 +356,7 @@ export class LayoutValidator {
   private static isValidCSSLength(value: string): boolean {
     if (!value || value.trim() === '') return false;
     
-    const lengthPattern = /^(\d*\.?\d+)(px|em|rem|%|vh|vw|fr|ch|ex)$|^0$|^auto$/;
+    const lengthPattern = /^(\d+(?:\.\d+)?|\.\d+)(px|em|rem|%|vh|vw|fr|ch|ex)$|^0$|^auto$/;
     return lengthPattern.test(value.trim());
   }
 
