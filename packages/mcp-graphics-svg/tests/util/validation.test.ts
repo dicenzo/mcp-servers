@@ -164,7 +164,8 @@ describe('Validation Utilities', () => {
       it('should validate correct dimensions', () => {
         expect(() => SVGValidator.validateDimensions(100, 200)).not.toThrow();
         expect(() => SVGValidator.validateDimensions(1, 1)).not.toThrow();
-        expect(() => SVGValidator.validateDimensions(9999, 9999)).not.toThrow();
+        // Near the per-side limit (10000px) while staying under the 50MP area limit
+        expect(() => SVGValidator.validateDimensions(9999, 5000)).not.toThrow();
       });
 
       it('should throw error for zero or negative dimensions', () => {

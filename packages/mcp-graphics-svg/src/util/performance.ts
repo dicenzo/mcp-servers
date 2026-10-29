@@ -2,7 +2,8 @@
  * Performance monitoring and optimization utilities for SVG operations
  */
 export class PerformanceMonitor {
-  private static metrics: Map<string, OperationMetrics> = new Map();
+  private static metrics: Map<number, OperationMetrics> = new Map();
+  private static nextMetricId = 0;
 
   /**
    * Tracks performance metrics for an operation
@@ -54,13 +55,14 @@ export class PerformanceMonitor {
    * Records metrics for later analysis
    */
   private static recordMetrics(metrics: OperationMetrics): void {
-    const key = `${metrics.operationName}_${Date.now()}`;
-    this.metrics.set(key, metrics);
+    // A monotonic id rather than a timestamp: several operations can finish
+    // within the same millisecond and must not overwrite each other.
+    this.metrics.set(this.nextMetricId++, metrics);
 
     // Keep only last 100 metrics to prevent memory growth
     if (this.metrics.size > 100) {
       const firstKey = this.metrics.keys().next().value;
-      if (firstKey) {
+      if (firstKey !== undefined) {
         this.metrics.delete(firstKey);
       }
     }
@@ -183,18 +185,24 @@ export class MemoryOptimizer {
     memoryLimitMB: number = 100
   ): Promise<T> {
     const startUsage = this.getMemoryUsage();
-    
-    // Set up memory monitoring interval
-    const memoryCheck = setInterval(() => {
-      const currentUsage = this.getMemoryUsage();
-      if (currentUsage.heapUsed.mb > memoryLimitMB) {
-        clearInterval(memoryCheck);
-        throw new Error(`Memory limit exceeded: ${currentUsage.heapUsed.mb}MB > ${memoryLimitMB}MB`);
-      }
-    }, 100); // Check every 100ms
+    let memoryCheck: ReturnType<typeof setInterval> | undefined;
+
+    // Throwing inside the interval callback would escape as an uncaught
+    // exception instead of rejecting this call, so the check rejects a promise
+    // that races the operation. The operation itself cannot be cancelled; it
+    // keeps running, but its result is discarded once the limit is exceeded.
+    const limitExceeded = new Promise<never>((_, reject) => {
+      memoryCheck = setInterval(() => {
+        const currentUsage = this.getMemoryUsage();
+        if (currentUsage.heapUsed.mb > memoryLimitMB) {
+          clearInterval(memoryCheck);
+          reject(new Error(`Memory limit exceeded: ${currentUsage.heapUsed.mb}MB > ${memoryLimitMB}MB`));
+        }
+      }, 100); // Check every 100ms
+    });
 
     try {
-      const result = await operation();
+      const result = await Promise.race([operation(), limitExceeded]);
       clearInterval(memoryCheck);
       
       const endUsage = this.getMemoryUsage();
