@@ -1,4 +1,5 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { TextToolResult } from '../types/typography.js';
 import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -22,7 +23,7 @@ import {
 } from '../types/typography.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<TextToolResult>;
 }
 
 /**
@@ -309,14 +310,17 @@ async function readFontSource(input: FontInput): Promise<Buffer> {
       return fontBuffer;
     }
 
-    default:
+    default: {
+      // Unreachable for validated input; reports the raw type if a caller bypasses validation.
+      const unsupported: { type: string } = input;
       throw new Error(JSON.stringify({
         code: TypographyErrorCode.INVALID_INPUT,
-        message: `Unsupported font input type: ${(input as any).type}`,
+        message: `Unsupported font input type: ${unsupported.type}`,
         suggestions: [
           'Use supported input types: file, buffer, url, system'
         ]
       }));
+    }
   }
 }
 
@@ -378,7 +382,7 @@ async function extractFontMetadata(fontBuffer: Buffer, _input: FontInput): Promi
       unitsPerEm: font.unitsPerEm,
       ascender: font.ascender,
       descender: font.descender,
-      lineGap: (font as any).lineGap || 0,
+      lineGap: font.lineGap || 0,
       capHeight: font.tables?.os2?.sCapHeight,
       xHeight: font.tables?.os2?.sxHeight,
       bbox: {
@@ -439,7 +443,7 @@ function detectFontFormat(buffer: Buffer): 'ttf' | 'otf' | 'woff' | 'woff2' {
 /**
  * Extracts supported scripts from font
  */
-function extractSupportedScripts(font: any): string[] {
+function extractSupportedScripts(font: opentype.Font): string[] {
   const scripts = new Set<string>();
   
   // Check GSUB table for script tags
@@ -467,12 +471,12 @@ function extractSupportedScripts(font: any): string[] {
 /**
  * Extracts supported languages from font
  */
-function extractSupportedLanguages(font: any): string[] {
+function extractSupportedLanguages(font: opentype.Font): string[] {
   const languages = new Set<string>();
   
   // Extract from GSUB table
   if (font.tables?.gsub?.scripts) {
-    for (const script of Object.values(font.tables.gsub.scripts) as any[]) {
+    for (const script of Object.values(font.tables.gsub.scripts)) {
       if (script.langSys) {
         for (const langTag of Object.keys(script.langSys)) {
           languages.add(langTag);
@@ -483,7 +487,7 @@ function extractSupportedLanguages(font: any): string[] {
   
   // Extract from GPOS table
   if (font.tables?.gpos?.scripts) {
-    for (const script of Object.values(font.tables.gpos.scripts) as any[]) {
+    for (const script of Object.values(font.tables.gpos.scripts)) {
       if (script.langSys) {
         for (const langTag of Object.keys(script.langSys)) {
           languages.add(langTag);
@@ -503,7 +507,7 @@ function extractSupportedLanguages(font: any): string[] {
 /**
  * Extracts OpenType features from font
  */
-function extractOpenTypeFeatures(font: any): string[] {
+function extractOpenTypeFeatures(font: opentype.Font): string[] {
   const features = new Set<string>();
   
   // Extract from GSUB table

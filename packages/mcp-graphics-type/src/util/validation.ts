@@ -16,7 +16,7 @@ export class TypographyValidator {
         const details = error.errors.map(err => ({
           path: err.path.join('.'),
           message: err.message,
-          received: err.code === 'invalid_type' ? (err as any).received : undefined
+          received: err.code === 'invalid_type' ? err.received : undefined
         }));
         
         const errorMessage = JSON.stringify({

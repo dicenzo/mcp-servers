@@ -1,4 +1,5 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { TextToolResult } from '../types/typography.js';
 import { TypographyValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
 import { 
@@ -12,7 +13,7 @@ import {
 import { loadFontBuffer } from './loadFont.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<TextToolResult>;
 }
 
 /**

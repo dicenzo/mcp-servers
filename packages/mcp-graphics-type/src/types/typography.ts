@@ -328,6 +328,16 @@ export interface TypographyError {
   suggestions?: string[];
 }
 
+/**
+ * Result shape every tool's invoke() returns: JSON serialized into a single text block.
+ * Declared as a type alias (not an interface) so it stays assignable to the SDK's
+ * CallToolResult, while letting callers read content[i].text as a string.
+ */
+export type TextToolResult = {
+  content: Array<{ type: 'text'; text: string }>;
+  isError?: boolean;
+};
+
 // Performance Constraints
 export const PERFORMANCE_LIMITS = {
   // Hard timeouts, not performance targets. Loading allows for a remote fetch
