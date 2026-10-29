@@ -3,9 +3,6 @@ import {
   LayoutMetrics,
   Rectangle,
   LayoutElement,
-  ResponsiveLayout,
-  GridLayout,
-  FlexLayout
 } from '../types/layout.js';
 import { PerformanceMonitor } from './performance.js';
 
@@ -336,7 +333,7 @@ export class LayoutMetricsCalculator {
   private static calculateEfficiencyMetrics(
     layout: Layout,
     elements: LayoutElement[],
-    monitor?: PerformanceMonitor
+    _monitor?: PerformanceMonitor
   ): {
     spaceUtilization: number;
     layoutComplexity: number;
