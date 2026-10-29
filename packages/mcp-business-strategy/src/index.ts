@@ -10,7 +10,7 @@ import { unitEconTool } from './tools/unitEcon.js';
 import { scenarioTool } from './tools/scenario.js';
 import { templatesTool } from './tools/templates.js';
 import { templatesResourceProvider } from './resources/templates.resource.js';
-import { ExecutableTool } from './tools/types.js';
+import { ExecutableTool, ToolTextResult } from './tools/types.js';
 
 const server = new Server(
   {
@@ -74,12 +74,13 @@ server.setRequestHandler(
         setTimeout(() => reject(new Error(`Tool '${name}' timed out after ${timeoutMs}ms`)), timeoutMs);
       });
       
-      const result = await Promise.race([toolPromise, timeoutPromise]) as CallToolResult;
-      
+      const result = await Promise.race([toolPromise, timeoutPromise]) as ToolTextResult;
+
       const duration = Date.now() - startTime;
       console.error(`[MCP] Tool '${name}' completed in ${duration}ms`);
-      
-      return result;
+
+      // Tools yield a single text item; MCP expects it inside a content array
+      return { content: [result] };
       
     } catch (error) {
       const duration = Date.now() - startTime;

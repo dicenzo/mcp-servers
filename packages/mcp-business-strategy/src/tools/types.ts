@@ -1,7 +1,7 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 /** The single result every tool returns from its invoke generator. */
-export interface ToolTextResult {
+export type ToolTextResult = {
   type: 'text';
   text: string;
 }
