@@ -539,8 +539,8 @@ function extractSupportedScripts(font: Font): string[] {
   const scripts = new Set<string>();
   
   if (font.tables?.gsub?.scripts) {
-    for (const scriptTag of Object.keys(font.tables.gsub.scripts)) {
-      scripts.add(scriptTag);
+    for (const record of font.tables.gsub.scripts) {
+      scripts.add(record.tag);
     }
   }
   
@@ -551,8 +551,8 @@ function extractFeatures(font: Font): string[] {
   const features = new Set<string>();
   
   if (font.tables?.gsub?.features) {
-    for (const feature of Object.keys(font.tables.gsub.features)) {
-      features.add(feature);
+    for (const record of font.tables.gsub.features) {
+      features.add(record.tag);
     }
   }
   

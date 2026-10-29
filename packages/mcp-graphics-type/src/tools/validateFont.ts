@@ -620,14 +620,14 @@ function extractFeatures(font: Font): string[] {
   const features = new Set<string>();
   
   if (font.tables?.gsub?.features) {
-    for (const feature of Object.keys(font.tables.gsub.features)) {
-      features.add(feature);
+    for (const record of font.tables.gsub.features) {
+      features.add(record.tag);
     }
   }
   
   if (font.tables?.gpos?.features) {
-    for (const feature of Object.keys(font.tables.gpos.features)) {
-      features.add(feature);
+    for (const record of font.tables.gpos.features) {
+      features.add(record.tag);
     }
   }
   
@@ -635,7 +635,7 @@ function extractFeatures(font: Font): string[] {
 }
 
 function hasKerningInGPOS(gposTable: LayoutTable): boolean {
-  return Boolean(gposTable.features?.kern);
+  return Boolean(gposTable.features?.some(record => record.tag === 'kern'));
 }
 
 function isWebOptimized(font: Font): boolean {
