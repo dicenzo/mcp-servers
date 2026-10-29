@@ -568,7 +568,8 @@ function generateRecommendations(
     recommendations.push('Consider font subsetting to reduce file size for web use');
   }
   
-  if (performance.fileSize > 100 * 1024 && !font.tables.woff) {
+  const format = detectFontFormat(fontBuffer);
+  if (performance.fileSize > 100 * 1024 && format !== 'woff' && format !== 'woff2') {
     recommendations.push('Consider using WOFF/WOFF2 compression for web deployment');
   }
   
