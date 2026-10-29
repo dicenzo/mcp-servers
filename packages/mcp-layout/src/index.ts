@@ -65,22 +65,22 @@ class LayoutServer {
       try {
         switch (name) {
         case 'layout.createGrid':
-          return await (createGridTool as any).invoke(args);
+          return await createGridTool.invoke(args);
             
         case 'layout.createFlex':
-          return await (createFlexTool as any).invoke(args);
+          return await createFlexTool.invoke(args);
             
         case 'layout.addConstraints':
-          return await (addConstraintsTool as any).invoke(args);
+          return await addConstraintsTool.invoke(args);
             
         case 'layout.autoLayout':
-          return await (autoLayoutTool as any).invoke(args);
+          return await autoLayoutTool.invoke(args);
             
         case 'layout.responsive':
-          return await (responsiveTool as any).invoke(args);
+          return await responsiveTool.invoke(args);
             
         case 'layout.measure':
-          return await (measureTool as any).invoke(args);
+          return await measureTool.invoke(args);
             
         default:
           throw new Error(`Unknown tool: ${name}`);
