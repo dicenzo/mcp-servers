@@ -2,17 +2,18 @@ import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import mermaid from 'mermaid';
 import { JSDOM } from 'jsdom';
+import { SVG_LIMITS } from '../types/svg.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<any>;
 }
 
 const MermaidToSvgSchema = z.object({
-  mermaid_code: z.string().describe('Mermaid diagram code'),
+  mermaid_code: z.string().max(SVG_LIMITS.MAX_TEXT_LENGTH).describe('Mermaid diagram code'),
   theme: z.enum(['default', 'forest', 'dark', 'neutral', 'base']).default('default').describe('Mermaid theme'),
   width: z.number().optional().describe('Optional width constraint'),
   height: z.number().optional().describe('Optional height constraint'),
-  background: z.string().default('transparent').describe('Background color'),
+  background: z.string().max(SVG_LIMITS.MAX_SHORT_STRING_LENGTH).default('transparent').describe('Background color'),
   config: z.object({
     flowchart: z.object({
       useMaxWidth: z.boolean().default(true),

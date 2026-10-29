@@ -1,21 +1,22 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { SVG, registerWindow, type Container } from '@svgdotjs/svg.js';
+import { SVG_LIMITS } from '../types/svg.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<any>;
 }
 
 const WireframeToSvgSchema = z.object({
-  wireframe_text: z.string().describe('ASCII wireframe text to convert'),
+  wireframe_text: z.string().max(SVG_LIMITS.MAX_TEXT_LENGTH).describe('ASCII wireframe text to convert'),
   width: z.number().default(800).describe('Output SVG width'),
   height: z.number().default(600).describe('Output SVG height'),
   style: z.enum(['minimal', 'detailed', 'interactive']).default('minimal').describe('Wireframe style'),
   colors: z.object({
-    border: z.string().default('#333333'),
-    background: z.string().default('#ffffff'),
-    text: z.string().default('#000000'),
-    accent: z.string().default('#0066cc')
+    border: z.string().max(SVG_LIMITS.MAX_SHORT_STRING_LENGTH).default('#333333'),
+    background: z.string().max(SVG_LIMITS.MAX_SHORT_STRING_LENGTH).default('#ffffff'),
+    text: z.string().max(SVG_LIMITS.MAX_SHORT_STRING_LENGTH).default('#000000'),
+    accent: z.string().max(SVG_LIMITS.MAX_SHORT_STRING_LENGTH).default('#0066cc')
   }).optional().describe('Color scheme for wireframe')
 });
 

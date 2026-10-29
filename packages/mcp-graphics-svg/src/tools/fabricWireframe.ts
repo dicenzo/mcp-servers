@@ -1,12 +1,13 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { SVG_LIMITS } from '../types/svg.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<any>;
 }
 
 const FabricWireframeSchema = z.object({
-  wireframe_text: z.string().describe('ASCII wireframe text to convert'),
+  wireframe_text: z.string().max(SVG_LIMITS.MAX_TEXT_LENGTH).describe('ASCII wireframe text to convert'),
   width: z.number().default(800).describe('Canvas width'),
   height: z.number().default(600).describe('Canvas height'),
   interactive_elements: z.array(z.object({
@@ -15,16 +16,16 @@ const FabricWireframeSchema = z.object({
     y: z.number(),
     width: z.number(),
     height: z.number(),
-    label: z.string(),
+    label: z.string().max(SVG_LIMITS.MAX_SHORT_STRING_LENGTH),
     properties: z.record(z.any()).optional()
-  })).optional().describe('Interactive elements to add'),
+  })).max(SVG_LIMITS.MAX_ELEMENTS).optional().describe('Interactive elements to add'),
   export_format: z.enum(['svg', 'json', 'html']).default('svg').describe('Export format'),
   theme: z.object({
-    background: z.string().default('#ffffff'),
-    border: z.string().default('#333333'),
-    text: z.string().default('#000000'),
-    accent: z.string().default('#0066cc'),
-    hover: z.string().default('#f0f0f0')
+    background: z.string().max(SVG_LIMITS.MAX_SHORT_STRING_LENGTH).default('#ffffff'),
+    border: z.string().max(SVG_LIMITS.MAX_SHORT_STRING_LENGTH).default('#333333'),
+    text: z.string().max(SVG_LIMITS.MAX_SHORT_STRING_LENGTH).default('#000000'),
+    accent: z.string().max(SVG_LIMITS.MAX_SHORT_STRING_LENGTH).default('#0066cc'),
+    hover: z.string().max(SVG_LIMITS.MAX_SHORT_STRING_LENGTH).default('#f0f0f0')
   }).optional().describe('Theme colors')
 });
 

@@ -1,19 +1,34 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { SVG_LIMITS } from '../types/svg.js';
+import { SVGValidator, escapeXML } from '../util/validation.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<any>;
 }
 
+/** A color accepted by SVGValidator.validateColor (hex, rgb[a], hsl[a] or a named color) */
+const colorString = z
+  .string()
+  .max(SVG_LIMITS.MAX_SHORT_STRING_LENGTH)
+  .refine(color => {
+    try {
+      SVGValidator.validateColor(color);
+      return true;
+    } catch {
+      return false;
+    }
+  }, { message: 'Invalid color format' });
+
 const SvgbobToSvgSchema = z.object({
-  ascii_art: z.string().describe('ASCII art to convert to SVG'),
+  ascii_art: z.string().max(SVG_LIMITS.MAX_TEXT_LENGTH).describe('ASCII art to convert to SVG'),
   scale: z.number().default(1).describe('Scale factor for the output'),
   stroke_width: z.number().default(2).describe('Stroke width for lines'),
-  background: z.string().default('transparent').describe('Background color'),
-  stroke_color: z.string().default('#000000').describe('Stroke color'),
-  font_family: z.string().default('monospace').describe('Font family for text'),
+  background: colorString.default('transparent').describe('Background color'),
+  stroke_color: colorString.default('#000000').describe('Stroke color'),
+  font_family: z.string().max(SVG_LIMITS.MAX_SHORT_STRING_LENGTH).default('monospace').describe('Font family for text'),
   font_size: z.number().default(14).describe('Font size for text'),
-  fill_color: z.string().default('none').describe('Fill color for shapes')
+  fill_color: colorString.default('none').describe('Fill color for shapes')
 });
 
 export const svgbobToSvgTool: ExecutableTool = {
@@ -24,6 +39,7 @@ export const svgbobToSvgTool: ExecutableTool = {
     properties: {
       ascii_art: {
         type: 'string',
+        maxLength: SVG_LIMITS.MAX_TEXT_LENGTH,
         description: 'ASCII art to convert to SVG'
       },
       scale: {
@@ -308,7 +324,7 @@ class ASCIIToSVGConverter {
     const cy = y + this.cellHeight / 2 + this.options.font_size / 3;
 
     this.svgElements.push(
-      `<text x="${cx}" y="${cy}" font-family="${this.options.font_family}" font-size="${this.options.font_size * this.options.scale}" text-anchor="middle" fill="${this.options.stroke_color}">${char}</text>`
+      `<text x="${cx}" y="${cy}" font-family="${escapeXML(this.options.font_family)}" font-size="${this.options.font_size * this.options.scale}" text-anchor="middle" fill="${this.options.stroke_color}">${escapeXML(char)}</text>`
     );
   }
 
@@ -319,7 +335,9 @@ class ASCIIToSVGConverter {
   }
 }
 
-export async function executeSvgbobToSvg(args: z.infer<typeof SvgbobToSvgSchema>): Promise<string> {
+export async function executeSvgbobToSvg(input: z.input<typeof SvgbobToSvgSchema>): Promise<string> {
+  // Validate here as well so direct callers get the same color checks and caps as `invoke`
+  const args = SvgbobToSvgSchema.parse(input);
   // Use custom converter (svgbob_wasm not available)
   const converter = new ASCIIToSVGConverter(args);
   return converter.convert(args.ascii_art);

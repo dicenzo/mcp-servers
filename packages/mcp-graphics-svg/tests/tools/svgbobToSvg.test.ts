@@ -1,3 +1,4 @@
+import { SVG_LIMITS } from '../../src/types/svg';
 import { svgbobToSvgTool, executeSvgbobToSvg } from '../../src/tools/svgbobToSvg';
 
 describe('svgbobToSvg Tool', () => {
@@ -363,5 +364,47 @@ describe('svgbobToSvg Tool', () => {
       const result = await executeSvgbobToSvg(args);
       expect(result).toContain('text');
     });
+  });
+});
+describe('svgbob.to.svg security hardening', () => {
+  const render = async (args: Record<string, unknown>) => {
+    const result = await svgbobToSvgTool.invoke({ ascii_art: '+-+\n|x|\n+-+', ...args });
+    return result.content[0].text as string;
+  };
+
+  it('rejects a stroke_color that is not a valid color', async () => {
+    await expect(render({ stroke_color: '#000" onload="alert(1)' })).rejects.toThrow();
+  });
+
+  it('rejects a background that is not a valid color', async () => {
+    await expect(render({ background: 'red"/><script>alert(1)</script><rect fill="' })).rejects.toThrow();
+  });
+
+  it('rejects a fill_color that is not a valid color', async () => {
+    await expect(render({ fill_color: 'none" onclick="alert(1)' })).rejects.toThrow();
+  });
+
+  it('escapes font_family so it cannot break out of the attribute', async () => {
+    const svg = await render({ font_family: 'Arial"/><script>alert(1)</script><text x="' });
+    expect(svg).not.toContain('<script>');
+    expect(svg).toContain('font-family="Arial&quot;/&gt;&lt;script&gt;');
+  });
+
+  it('escapes markup characters in the ASCII art', async () => {
+    const svg = await render({ ascii_art: '<&>"\'' });
+    expect(svg).toContain('&lt;');
+    expect(svg).toContain('&amp;');
+    expect(svg).toContain('&gt;');
+    expect(svg).not.toMatch(/>[<&]<\/text>/);
+  });
+
+  it('accepts all supported color formats', async () => {
+    const svg = await render({ stroke_color: 'rgb(1, 2, 3)', background: '#fff', fill_color: 'none' });
+    expect(svg).toContain('stroke="rgb(1, 2, 3)"');
+    expect(svg).toContain('fill="#fff"');
+  });
+
+  it('rejects ASCII art larger than the text cap', async () => {
+    await expect(render({ ascii_art: 'x'.repeat(SVG_LIMITS.MAX_TEXT_LENGTH + 1) })).rejects.toThrow();
   });
 });

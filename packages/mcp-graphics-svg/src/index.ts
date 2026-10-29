@@ -94,13 +94,15 @@ class SVGGraphicsServer {
     };
 
     process.on('SIGINT', async () => {
-      console.log('[MCP SVG Graphics] Shutting down server...');
+      // stdout carries the MCP protocol; log to stderr
+      console.error('[MCP SVG Graphics] Shutting down server...');
       await this.server.close();
       process.exit(0);
     });
 
     process.on('SIGTERM', async () => {
-      console.log('[MCP SVG Graphics] Shutting down server...');
+      // stdout carries the MCP protocol; log to stderr
+      console.error('[MCP SVG Graphics] Shutting down server...');
       await this.server.close();
       process.exit(0);
     });

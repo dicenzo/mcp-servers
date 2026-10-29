@@ -1,3 +1,4 @@
+import { SVG_LIMITS } from '../../src/types/svg.js';
 import { describe, test, expect } from '@jest/globals';
 import { svgCreateTool } from '../../src/tools/svgCreate.js';
 
@@ -408,5 +409,109 @@ describe('svg.create Tool', () => {
       // Should place circle at origin
       expect(response.svg).toMatch(/cx="0"|center\([^,]*0/);
     });
+  });
+});
+describe('svg.create security hardening', () => {
+  const create = async (input: unknown) => {
+    const result = await svgCreateTool.invoke(input);
+    return { result, response: JSON.parse(result.content[0].text) };
+  };
+
+  test('validates group children so attribute values cannot inject markup', async () => {
+    const { result, response } = await create({
+      width: 100,
+      height: 100,
+      elements: [{
+        type: 'group',
+        elements: [{
+          type: 'rect',
+          width: '1"/><script>alert(1)</script><rect x="',
+          height: 1
+        }]
+      }]
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(response)).not.toContain('<script>alert(1)</script><rect');
+  });
+
+  test('rejects unknown element types inside groups', async () => {
+    const { result } = await create({
+      width: 100,
+      height: 100,
+      elements: [{ type: 'group', elements: [{ type: 'script', content: 'alert(1)' }] }]
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  test('applies element defaults and validation to nested group children', async () => {
+    const { result, response } = await create({
+      width: 100,
+      height: 100,
+      elements: [{
+        type: 'group',
+        id: 'outer',
+        elements: [{
+          type: 'group',
+          id: 'inner',
+          elements: [{ type: 'rect', width: 10, height: 20, fill: 'red' }]
+        }]
+      }]
+    });
+    expect(result.isError).toBeUndefined();
+    expect(response.svg).toContain('id="outer"');
+    expect(response.svg).toContain('id="inner"');
+    expect(response.svg).toContain('<rect x="0" y="0" width="10" height="20"');
+  });
+
+  test('validates colors on nested group children', async () => {
+    const { result } = await create({
+      width: 100,
+      height: 100,
+      elements: [{ type: 'group', elements: [{ type: 'circle', r: 5, fill: 'red" onload="alert(1)' }] }]
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  test('rejects groups nested deeper than the depth cap', async () => {
+    let element: Record<string, unknown> = { type: 'rect', width: 1, height: 1 };
+    for (let i = 0; i < SVG_LIMITS.MAX_GROUP_DEPTH + 1; i++) {
+      element = { type: 'group', elements: [element] };
+    }
+    const { result } = await create({ width: 100, height: 100, elements: [element] });
+    expect(result.isError).toBe(true);
+  });
+
+  test('rejects more elements than the element cap, counting group children', async () => {
+    const children = Array.from({ length: SVG_LIMITS.MAX_ELEMENTS }, () => ({ type: 'rect', width: 1, height: 1 }));
+    const { result } = await create({
+      width: 100,
+      height: 100,
+      elements: [{ type: 'group', elements: children }, { type: 'group', elements: children }]
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  test('rejects path data larger than the path cap', async () => {
+    const { result } = await create({
+      width: 100,
+      height: 100,
+      elements: [{ type: 'path', d: 'M 0 0' + ' L 1 1'.repeat(SVG_LIMITS.MAX_PATH_LENGTH / 5) }]
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  test('rejects text content larger than the text cap', async () => {
+    const { result } = await create({
+      width: 100,
+      height: 100,
+      elements: [{ type: 'text', content: 'x'.repeat(SVG_LIMITS.MAX_TEXT_LENGTH + 1) }]
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  test('rejects polygons with more points than the point cap', async () => {
+    const points = Array.from({ length: SVG_LIMITS.MAX_POINTS + 1 }, (_, i) => ({ x: i, y: i }));
+    const { result } = await create({ width: 100, height: 100, elements: [{ type: 'polygon', points }] });
+    expect(result.isError).toBe(true);
   });
 });

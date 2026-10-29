@@ -7,9 +7,10 @@ import {
   SVGCreateInputSchema, 
   SVGCreateInput, 
   SVGElement,
-  SVGErrorCode 
+  SVGErrorCode,
+  SVG_LIMITS
 } from '../types/svg.js';
-import { SVGValidator, PerformanceValidator } from '../util/validation.js';
+import { SVGValidator, PerformanceValidator, escapeXML } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
 
 /**
@@ -46,6 +47,7 @@ export const svgCreateTool: ExecutableTool = {
       },
       elements: {
         type: 'array',
+        maxItems: SVG_LIMITS.MAX_ELEMENTS,
         items: {
           oneOf: [
             {
@@ -81,7 +83,7 @@ export const svgCreateTool: ExecutableTool = {
               type: 'object',
               properties: {
                 type: { const: 'path' },
-                d: { type: 'string' },
+                d: { type: 'string', maxLength: SVG_LIMITS.MAX_PATH_LENGTH },
                 fill: { type: 'string' },
                 stroke: { type: 'string' },
                 strokeWidth: { type: 'number' }
@@ -94,7 +96,7 @@ export const svgCreateTool: ExecutableTool = {
                 type: { const: 'text' },
                 x: { type: 'number', default: 0 },
                 y: { type: 'number', default: 0 },
-                content: { type: 'string' },
+                content: { type: 'string', maxLength: SVG_LIMITS.MAX_TEXT_LENGTH },
                 fontSize: { type: 'number', minimum: 1 },
                 fontFamily: { type: 'string' },
                 fill: { type: 'string' }
@@ -132,8 +134,9 @@ export const svgCreateTool: ExecutableTool = {
         // Validate dimensions for performance
         SVGValidator.validateDimensions(input.width, input.height);
         
-        // Validate complexity
-        PerformanceValidator.validateComplexity(input.elements.length, 'creation');
+        // Validate nesting depth and complexity, counting group children
+        validateGroupDepth(input.elements, 1);
+        PerformanceValidator.validateComplexity(countElements(input.elements), 'creation');
 
         // Create SVG document
         const svgString = createSVGDocument(input);
@@ -215,11 +218,12 @@ function createSVGDocument(input: SVGCreateInput): string {
   let svgContent = '';
   
   // Build SVG opening tag with dimensions
-  const svgAttribs = [`width="${input.width}"`, `height="${input.height}"`];
+  const svgAttribs = [`width="${num(input.width)}"`, `height="${num(input.height)}"`];
   
   // Add viewBox if provided
   if (input.viewBox) {
-    svgAttribs.push(`viewBox="${input.viewBox.x} ${input.viewBox.y} ${input.viewBox.width} ${input.viewBox.height}"`);
+    const { x, y, width, height } = input.viewBox;
+    svgAttribs.push(`viewBox="${num(x)} ${num(y)} ${num(width)} ${num(height)}"`);
   }
   
   svgContent += `<svg xmlns="http://www.w3.org/2000/svg" ${svgAttribs.join(' ')}>\n`;
@@ -263,10 +267,10 @@ function addElementToSVG(element: SVGElement, indent: number = 0): string {
     commonAttribs.push(`stroke="${escapeXML(element.stroke)}"`);
   }
   if (element.strokeWidth !== undefined) {
-    commonAttribs.push(`stroke-width="${element.strokeWidth}"`);
+    commonAttribs.push(`stroke-width="${num(element.strokeWidth)}"`);
   }
   if (element.opacity !== undefined) {
-    commonAttribs.push(`opacity="${element.opacity}"`);
+    commonAttribs.push(`opacity="${num(element.opacity)}"`);
   }
   
   const commonAttribsStr = commonAttribs.length > 0 ? ' ' + commonAttribs.join(' ') : '';
@@ -274,22 +278,22 @@ function addElementToSVG(element: SVGElement, indent: number = 0): string {
   switch (element.type) {
     case 'rect': {
       const attribs = [
-        `x="${element.x || 0}"`,
-        `y="${element.y || 0}"`,
-        `width="${element.width}"`,
-        `height="${element.height}"`
+        `x="${num(element.x || 0)}"`,
+        `y="${num(element.y || 0)}"`,
+        `width="${num(element.width)}"`,
+        `height="${num(element.height)}"`
       ];
-      if (element.rx !== undefined) attribs.push(`rx="${element.rx}"`);
-      if (element.ry !== undefined) attribs.push(`ry="${element.ry}"`);
+      if (element.rx !== undefined) attribs.push(`rx="${num(element.rx)}"`);
+      if (element.ry !== undefined) attribs.push(`ry="${num(element.ry)}"`);
       
       return `${indentStr}<rect ${attribs.join(' ')}${commonAttribsStr} />\n`;
     }
       
     case 'circle': {
       const attribs = [
-        `cx="${element.cx || 0}"`,
-        `cy="${element.cy || 0}"`,
-        `r="${element.r}"`
+        `cx="${num(element.cx || 0)}"`,
+        `cy="${num(element.cy || 0)}"`,
+        `r="${num(element.r)}"`
       ];
       
       return `${indentStr}<circle ${attribs.join(' ')}${commonAttribsStr} />\n`;
@@ -297,10 +301,10 @@ function addElementToSVG(element: SVGElement, indent: number = 0): string {
       
     case 'ellipse': {
       const attribs = [
-        `cx="${element.cx || 0}"`,
-        `cy="${element.cy || 0}"`,
-        `rx="${element.rx}"`,
-        `ry="${element.ry}"`
+        `cx="${num(element.cx || 0)}"`,
+        `cy="${num(element.cy || 0)}"`,
+        `rx="${num(element.rx)}"`,
+        `ry="${num(element.ry)}"`
       ];
       
       return `${indentStr}<ellipse ${attribs.join(' ')}${commonAttribsStr} />\n`;
@@ -308,22 +312,22 @@ function addElementToSVG(element: SVGElement, indent: number = 0): string {
       
     case 'line': {
       const attribs = [
-        `x1="${element.x1 || 0}"`,
-        `y1="${element.y1 || 0}"`,
-        `x2="${element.x2 || 0}"`,
-        `y2="${element.y2 || 0}"`
+        `x1="${num(element.x1 || 0)}"`,
+        `y1="${num(element.y1 || 0)}"`,
+        `x2="${num(element.x2 || 0)}"`,
+        `y2="${num(element.y2 || 0)}"`
       ];
       
       return `${indentStr}<line ${attribs.join(' ')}${commonAttribsStr} />\n`;
     }
       
     case 'polygon': {
-      const points = element.points.map((p: { x: number; y: number }) => `${p.x},${p.y}`).join(' ');
+      const points = element.points.map((p: { x: number; y: number }) => `${num(p.x)},${num(p.y)}`).join(' ');
       return `${indentStr}<polygon points="${points}"${commonAttribsStr} />\n`;
     }
       
     case 'polyline': {
-      const points = element.points.map((p: { x: number; y: number }) => `${p.x},${p.y}`).join(' ');
+      const points = element.points.map((p: { x: number; y: number }) => `${num(p.x)},${num(p.y)}`).join(' ');
       return `${indentStr}<polyline points="${points}"${commonAttribsStr} />\n`;
     }
       
@@ -334,12 +338,12 @@ function addElementToSVG(element: SVGElement, indent: number = 0): string {
       
     case 'text': {
       const attribs = [
-        `x="${element.x || 0}"`,
-        `y="${element.y || 0}"`
+        `x="${num(element.x || 0)}"`,
+        `y="${num(element.y || 0)}"`
       ];
-      if (element.fontSize) attribs.push(`font-size="${element.fontSize}"`);
+      if (element.fontSize) attribs.push(`font-size="${num(element.fontSize)}"`);
       if (element.fontFamily) attribs.push(`font-family="${escapeXML(element.fontFamily)}"`);
-      if (element.textAnchor) attribs.push(`text-anchor="${element.textAnchor}"`);
+      if (element.textAnchor) attribs.push(`text-anchor="${escapeXML(element.textAnchor)}"`);
       
       return `${indentStr}<text ${attribs.join(' ')}${commonAttribsStr}>${escapeXML(element.content)}</text>\n`;
     }
@@ -361,13 +365,45 @@ function addElementToSVG(element: SVGElement, indent: number = 0): string {
 }
 
 /**
- * Escapes XML special characters
+ * Coerces a validated numeric value for interpolation into markup. Values reach
+ * this point through the schema, but coercing here means a value of any other
+ * type can never be written into an attribute verbatim.
  */
-function escapeXML(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+function num(value: unknown): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    throw new Error(`Invalid numeric attribute value: ${String(value).slice(0, 50)}`);
+  }
+  return String(n);
+}
+
+/**
+ * Counts elements recursively, including the children of groups
+ */
+function countElements(elements: SVGElement[]): number {
+  let count = 0;
+  for (const element of elements) {
+    count += 1;
+    if (element.type === 'group') {
+      count += countElements(element.elements);
+    }
+  }
+  return count;
+}
+
+/**
+ * Rejects groups nested deeper than SVG_LIMITS.MAX_GROUP_DEPTH
+ */
+function validateGroupDepth(elements: SVGElement[], depth: number): void {
+  for (const element of elements) {
+    if (element.type !== 'group') continue;
+    if (depth > SVG_LIMITS.MAX_GROUP_DEPTH) {
+      throw new Error(JSON.stringify({
+        code: SVGErrorCode.INVALID_INPUT,
+        message: `Groups are nested deeper than the maximum of ${SVG_LIMITS.MAX_GROUP_DEPTH} levels`,
+        suggestions: ['Flatten nested groups']
+      }));
+    }
+    validateGroupDepth(element.elements, depth + 1);
+  }
 }

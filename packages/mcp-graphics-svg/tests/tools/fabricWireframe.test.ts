@@ -1,3 +1,4 @@
+import { SVG_LIMITS } from '../../src/types/svg';
 import { fabricWireframeTool, executeFabricWireframe } from '../../src/tools/fabricWireframe';
 import { z } from 'zod';
 
@@ -199,5 +200,17 @@ describe('fabricWireframe Tool', () => {
       const result = await executeFabricWireframe(args);
       expect(result).toContain('<svg');
     });
+  });
+});
+describe('fabric.wireframe input caps', () => {
+  it('rejects wireframe text larger than the text cap', async () => {
+    await expect(fabricWireframeTool.invoke({ wireframe_text: 'x'.repeat(SVG_LIMITS.MAX_TEXT_LENGTH + 1) })).rejects.toThrow();
+  });
+
+  it('rejects more interactive elements than the element cap', async () => {
+    const interactive_elements = Array.from({ length: SVG_LIMITS.MAX_ELEMENTS + 1 }, () => ({
+      type: 'button', x: 0, y: 0, width: 1, height: 1, label: 'b'
+    }));
+    await expect(fabricWireframeTool.invoke({ wireframe_text: 'x', interactive_elements })).rejects.toThrow();
   });
 });
