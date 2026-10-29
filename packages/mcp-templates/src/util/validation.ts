@@ -1,6 +1,13 @@
 import {
   Template,
   TemplateComponent,
+  TextComponent,
+  ImageComponent,
+  ShapeComponent,
+  GroupComponent,
+  SvgComponent,
+  HtmlComponent,
+  ValidationRule,
   VariableDefinition,
   VariableMap,
   ValidationReport,
@@ -180,34 +187,34 @@ export class TemplateValidator {
     // Type-specific validation
     switch (component.type) {
       case ComponentType.TEXT:
-        this.validateTextComponent(component as any, errors, warnings);
+        this.validateTextComponent(component, errors, warnings);
         break;
       case ComponentType.IMAGE:
-        this.validateImageComponent(component as any, errors, warnings);
+        this.validateImageComponent(component, errors, warnings);
         break;
       case ComponentType.SHAPE:
-        this.validateShapeComponent(component as any, errors, warnings);
+        this.validateShapeComponent(component, errors, warnings);
         break;
       case ComponentType.GROUP:
-        this.validateGroupComponent(component as any, errors, warnings);
+        this.validateGroupComponent(component, errors, warnings);
         break;
       case ComponentType.SVG:
-        this.validateSvgComponent(component as any, errors, warnings);
+        this.validateSvgComponent(component, errors, warnings);
         break;
       case ComponentType.HTML:
-        this.validateHtmlComponent(component as any, errors, warnings);
+        this.validateHtmlComponent(component, errors, warnings);
         break;
       default:
         errors.push({
           code: TemplateErrorCode.INVALID_TEMPLATE,
-          message: `Unknown component type: ${(component as any).type}`,
-          componentId: (component as any).id,
+          message: `Unknown component type: ${(component as { type: string }).type}`,
+          componentId: (component as { id?: string }).id,
           suggestions: ['Use a valid component type: text, image, shape, group, svg, html']
         });
     }
   }
 
-  private static validateTextComponent(component: any, errors: TemplateError[], warnings: TemplateError[]): void {
+  private static validateTextComponent(component: TextComponent, errors: TemplateError[], warnings: TemplateError[]): void {
     if (!component.content) {
       warnings.push({
         code: TemplateErrorCode.VALIDATION_ERROR,
@@ -227,7 +234,7 @@ export class TemplateValidator {
     }
   }
 
-  private static validateImageComponent(component: any, errors: TemplateError[], warnings: TemplateError[]): void {
+  private static validateImageComponent(component: ImageComponent, errors: TemplateError[], warnings: TemplateError[]): void {
     if (!component.source) {
       errors.push({
         code: TemplateErrorCode.INVALID_TEMPLATE,
@@ -248,7 +255,7 @@ export class TemplateValidator {
     }
   }
 
-  private static validateShapeComponent(component: any, errors: TemplateError[], _warnings: TemplateError[]): void {
+  private static validateShapeComponent(component: ShapeComponent, errors: TemplateError[], _warnings: TemplateError[]): void {
     const validShapes = ['rect', 'circle', 'ellipse', 'polygon', 'path'];
     if (!validShapes.includes(component.shape)) {
       errors.push({
@@ -269,7 +276,7 @@ export class TemplateValidator {
     }
   }
 
-  private static validateGroupComponent(component: any, errors: TemplateError[], warnings: TemplateError[]): void {
+  private static validateGroupComponent(component: GroupComponent, errors: TemplateError[], warnings: TemplateError[]): void {
     if (!component.children || !Array.isArray(component.children)) {
       errors.push({
         code: TemplateErrorCode.INVALID_TEMPLATE,
@@ -285,7 +292,7 @@ export class TemplateValidator {
     }
   }
 
-  private static validateSvgComponent(component: any, errors: TemplateError[], _warnings: TemplateError[]): void {
+  private static validateSvgComponent(component: SvgComponent, errors: TemplateError[], _warnings: TemplateError[]): void {
     if (!component.svgContent) {
       errors.push({
         code: TemplateErrorCode.INVALID_TEMPLATE,
@@ -296,7 +303,7 @@ export class TemplateValidator {
     }
   }
 
-  private static validateHtmlComponent(component: any, errors: TemplateError[], _warnings: TemplateError[]): void {
+  private static validateHtmlComponent(component: HtmlComponent, errors: TemplateError[], _warnings: TemplateError[]): void {
     if (!component.htmlContent) {
       errors.push({
         code: TemplateErrorCode.INVALID_TEMPLATE,
@@ -399,7 +406,7 @@ export class TemplateValidator {
     return errors;
   }
 
-  private static validateVariableTypeValue(name: string, value: any, type: VariableType): TemplateError[] {
+  private static validateVariableTypeValue(name: string, value: unknown, type: VariableType): TemplateError[] {
     const errors: TemplateError[] = [];
     
     switch (type) {
@@ -468,7 +475,7 @@ export class TemplateValidator {
     return errors;
   }
 
-  private static validateCustomRules(_name: string, _value: any, _rules: any[]): TemplateError[] {
+  private static validateCustomRules(_name: string, _value: unknown, _rules: ValidationRule[]): TemplateError[] {
     // Implementation similar to template engine validation
     return [];
   }
@@ -511,31 +518,31 @@ export class TemplateValidator {
     
     switch (component.type) {
       case ComponentType.TEXT: {
-        const textComp = component as any;
+        const textComp = component;
         if (textComp.content) checkString(textComp.content, 'text content');
         break;
       }
 
       case ComponentType.IMAGE: {
-        const imageComp = component as any;
+        const imageComp = component;
         if (imageComp.source) checkString(imageComp.source, 'image source');
         break;
       }
 
       case ComponentType.SVG: {
-        const svgComp = component as any;
+        const svgComp = component;
         if (svgComp.svgContent) checkString(svgComp.svgContent, 'SVG content');
         break;
       }
 
       case ComponentType.HTML: {
-        const htmlComp = component as any;
+        const htmlComp = component;
         if (htmlComp.htmlContent) checkString(htmlComp.htmlContent, 'HTML content');
         break;
       }
 
       case ComponentType.GROUP: {
-        const groupComp = component as any;
+        const groupComp = component;
         if (groupComp.children) {
           for (const child of groupComp.children) {
             this.checkComponentVariableReferences(child, variableNames, errors);
@@ -656,7 +663,7 @@ export class PerformanceValidator {
     
     for (const component of components) {
       if (component.type === ComponentType.GROUP) {
-        const groupComp = component as any;
+        const groupComp = component;
         if (groupComp.children) {
           count += this.countComponents(groupComp.children);
         }
@@ -708,7 +715,7 @@ export class PerformanceValidator {
         score += 25;
         break;
       case ComponentType.GROUP: {
-        const groupComp = component as any;
+        const groupComp = component;
         score += 5;
         if (groupComp.children) {
           for (const child of groupComp.children) {

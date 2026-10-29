@@ -1,9 +1,13 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   Template,
   VariableDefinition,
   ComponentLibraryItem,
-  TemplateErrorCode
+  TemplateErrorCode,
+  TemplateMetadata,
+  Layout,
+  Position,
+  Style
 } from '../types/template.js';
 import { searchComponents } from './templateLibraryAdd.js';
 import { TemplateValidator } from '../util/validation.js';
@@ -11,13 +15,60 @@ import { PerformanceMonitor } from '../util/performance.js';
 import { generateId, getCurrentTimestamp, deepClone } from '../util/helpers.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<CallToolResult>;
+}
+
+type LayoutConfig = Layout['config'];
+
+/** A library component ID, or an ID with position/style overrides */
+type ComponentSpec = string | {
+  id: string;
+  position?: Partial<Position>;
+  style?: Style;
+  [key: string]: unknown;
+};
+
+interface ComposeLayoutSpec {
+  type?: Layout['type'];
+  config?: LayoutConfig;
+  width: number;
+  height: number;
+  background?: string;
+}
+
+interface ComposeArgs {
+  components: ComponentSpec[];
+  layout: ComposeLayoutSpec;
+  variables?: VariableDefinition[];
+  metadata: Omit<TemplateMetadata, 'createdAt' | 'updatedAt' | 'version'> & { version?: string };
+  options?: {
+    resolveDependencies?: boolean;
+    autoLayout?: boolean;
+    mergeVariables?: boolean;
+    validateComposition?: boolean;
+  };
+}
+
+type LayoutFn = (
+  components: ComponentLibraryItem[],
+  config: LayoutConfig,
+  templateWidth: number,
+  templateHeight: number
+) => ComponentLibraryItem[];
+
+interface ComposeTool extends ExecutableTool {
+  resolveComponents(componentSpecs: ComponentSpec[], resolveDependencies: boolean): Promise<ComponentLibraryItem[]>;
+  applyAutoLayout(components: ComponentLibraryItem[], layoutSpec: ComposeLayoutSpec): Promise<ComponentLibraryItem[]>;
+  applyGridLayout: LayoutFn;
+  applyFlexLayout: LayoutFn;
+  applyConstraintLayout: LayoutFn;
+  mergeComponentVariables(baseVariables: VariableDefinition[], components: ComponentLibraryItem[]): VariableDefinition[];
 }
 
 /**
  * Template Library Compose Tool - Creates templates from library components
  */
-export const templateLibraryComposeTool: ExecutableTool = {
+export const templateLibraryComposeTool: ComposeTool = {
   name: 'template.library.compose',
   description: 'Create template from library components with specified layout',
   inputSchema: {
@@ -229,10 +280,10 @@ export const templateLibraryComposeTool: ExecutableTool = {
         variables = [],
         metadata,
         options = {}
-      } = args as any;
+      } = args as ComposeArgs;
 
       // Resolve components from library
-      const resolvedComponents = await (templateLibraryComposeTool as any).resolveComponents(
+      const resolvedComponents = await templateLibraryComposeTool.resolveComponents(
         componentSpecs,
         options.resolveDependencies !== false
       );
@@ -262,12 +313,12 @@ export const templateLibraryComposeTool: ExecutableTool = {
 
       // Apply layout system
       const layoutedComponents = options.autoLayout ? 
-        await (templateLibraryComposeTool as any).applyAutoLayout(resolvedComponents, layoutSpec) :
+        await templateLibraryComposeTool.applyAutoLayout(resolvedComponents, layoutSpec) :
         resolvedComponents;
 
       // Merge variables from components if requested
       const mergedVariables = options.mergeVariables !== false ?
-        (templateLibraryComposeTool as any).mergeComponentVariables(variables, layoutedComponents) :
+        templateLibraryComposeTool.mergeComponentVariables(variables, layoutedComponents) :
         variables;
 
       // Create template
@@ -390,14 +441,14 @@ export const templateLibraryComposeTool: ExecutableTool = {
    * Resolve components from library by IDs
    */
   async resolveComponents(
-    componentSpecs: (string | { id: string; [key: string]: any })[],
+    componentSpecs: ComponentSpec[],
     resolveDependencies: boolean
   ): Promise<ComponentLibraryItem[]> {
     const resolved: ComponentLibraryItem[] = [];
     const processed = new Set<string>();
     
-    const resolveComponent = async (spec: string | object): Promise<void> => {
-      const id = typeof spec === 'string' ? spec : (spec as any).id;
+    const resolveComponent = async (spec: ComponentSpec): Promise<void> => {
+      const id = typeof spec === 'string' ? spec : spec.id;
       
       if (processed.has(id)) return;
       processed.add(id);
@@ -413,7 +464,7 @@ export const templateLibraryComposeTool: ExecutableTool = {
       // Apply overrides if provided
       if (typeof spec === 'object' && spec) {
         component = deepClone(component);
-        const overrideSpec = spec as any;
+        const overrideSpec = spec;
         
         if (overrideSpec.position) {
           component.component.position = { ...component.component.position, ...overrideSpec.position };
@@ -447,18 +498,18 @@ export const templateLibraryComposeTool: ExecutableTool = {
    */
   async applyAutoLayout(
     components: ComponentLibraryItem[],
-    layoutSpec: any
+    layoutSpec: ComposeLayoutSpec
   ): Promise<ComponentLibraryItem[]> {
     const layoutType = layoutSpec.type || 'absolute';
     const config = layoutSpec.config || {};
     
     switch (layoutType) {
       case 'grid':
-        return (templateLibraryComposeTool as any).applyGridLayout(components, config, layoutSpec.width, layoutSpec.height);
+        return templateLibraryComposeTool.applyGridLayout(components, config, layoutSpec.width, layoutSpec.height);
       case 'flex':
-        return (templateLibraryComposeTool as any).applyFlexLayout(components, config, layoutSpec.width, layoutSpec.height);
+        return templateLibraryComposeTool.applyFlexLayout(components, config, layoutSpec.width, layoutSpec.height);
       case 'constraint':
-        return (templateLibraryComposeTool as any).applyConstraintLayout(components, config, layoutSpec.width, layoutSpec.height);
+        return templateLibraryComposeTool.applyConstraintLayout(components, config, layoutSpec.width, layoutSpec.height);
       default:
         return components; // Return as-is for absolute positioning
     }
@@ -469,7 +520,7 @@ export const templateLibraryComposeTool: ExecutableTool = {
    */
   applyGridLayout(
     components: ComponentLibraryItem[],
-    config: any,
+    config: LayoutConfig,
     templateWidth: number,
     templateHeight: number
   ): ComponentLibraryItem[] {
@@ -504,7 +555,7 @@ export const templateLibraryComposeTool: ExecutableTool = {
    */
   applyFlexLayout(
     components: ComponentLibraryItem[],
-    config: any,
+    config: LayoutConfig,
     templateWidth: number,
     templateHeight: number
   ): ComponentLibraryItem[] {
@@ -549,7 +600,7 @@ export const templateLibraryComposeTool: ExecutableTool = {
    */
   applyConstraintLayout(
     components: ComponentLibraryItem[],
-    _config: any,
+    _config: LayoutConfig,
     _templateWidth: number,
     _templateHeight: number
   ): ComponentLibraryItem[] {

@@ -2,6 +2,12 @@ import Handlebars from 'handlebars';
 import {
   Template,
   TemplateComponent,
+  TextComponent,
+  ImageComponent,
+  ShapeComponent,
+  GroupComponent,
+  SvgComponent,
+  HtmlComponent,
   VariableMap,
   VariableDefinition,
   VariableType,
@@ -17,7 +23,7 @@ import {
  */
 export class TemplateEngine {
   private handlebars: typeof Handlebars;
-  private templateCache: Map<string, any> = new Map();
+  private templateCache: Map<string, Template> = new Map();
   private libraryComponents: Map<string, TemplateComponent> = new Map();
 
   constructor() {
@@ -31,7 +37,7 @@ export class TemplateEngine {
    */
   private registerHelpers(): void {
     // Conditional helper
-    this.handlebars.registerHelper('if', function(this: any, conditional, options) {
+    this.handlebars.registerHelper('if', function(this: unknown, conditional, options) {
       if (conditional) {
         return options.fn(this);
       } else {
@@ -138,7 +144,7 @@ export class TemplateEngine {
    */
   private validateVariableType(
     name: string, 
-    value: any, 
+    value: unknown, 
     expectedType: VariableType
   ): TemplateError[] {
     const errors: TemplateError[] = [];
@@ -175,7 +181,7 @@ export class TemplateEngine {
         break;
 
       case VariableType.COLOR:
-        if (!this.isValidColor(value)) {
+        if (typeof value !== 'string' || !this.isValidColor(value)) {
           errors.push({
             code: TemplateErrorCode.INVALID_VARIABLE,
             message: `Variable '${name}' must be a valid color (hex, rgb, hsl, or named color)`,
@@ -234,7 +240,7 @@ export class TemplateEngine {
    */
   private validateRules(
     name: string, 
-    value: any, 
+    value: unknown, 
     rules: ValidationRule[]
   ): TemplateError[] {
     const errors: TemplateError[] = [];
@@ -242,13 +248,13 @@ export class TemplateEngine {
     for (const rule of rules) {
       switch (rule.type) {
         case 'min':
-          if (typeof value === 'number' && value < rule.value) {
+          if (typeof value === 'number' && value < Number(rule.value)) {
             errors.push({
               code: TemplateErrorCode.INVALID_VARIABLE,
               message: rule.message || `Variable '${name}' must be at least ${rule.value}`,
               variableName: name
             });
-          } else if (typeof value === 'string' && value.length < rule.value) {
+          } else if (typeof value === 'string' && value.length < Number(rule.value)) {
             errors.push({
               code: TemplateErrorCode.INVALID_VARIABLE,
               message: rule.message || `Variable '${name}' must be at least ${rule.value} characters long`,
@@ -258,13 +264,13 @@ export class TemplateEngine {
           break;
 
         case 'max':
-          if (typeof value === 'number' && value > rule.value) {
+          if (typeof value === 'number' && value > Number(rule.value)) {
             errors.push({
               code: TemplateErrorCode.INVALID_VARIABLE,
               message: rule.message || `Variable '${name}' must be at most ${rule.value}`,
               variableName: name
             });
-          } else if (typeof value === 'string' && value.length > rule.value) {
+          } else if (typeof value === 'string' && value.length > Number(rule.value)) {
             errors.push({
               code: TemplateErrorCode.INVALID_VARIABLE,
               message: rule.message || `Variable '${name}' must be at most ${rule.value} characters long`,
@@ -275,7 +281,7 @@ export class TemplateEngine {
 
         case 'pattern':
           if (typeof value === 'string') {
-            const regex = new RegExp(rule.value);
+            const regex = new RegExp(String(rule.value ?? ''));
             if (!regex.test(value)) {
               errors.push({
                 code: TemplateErrorCode.INVALID_VARIABLE,
@@ -400,7 +406,7 @@ export class TemplateEngine {
   private async renderComponent(
     component: TemplateComponent, 
     variables: VariableMap
-  ): Promise<any> {
+  ): Promise<TemplateComponent | TemplateComponent[] | null> {
     try {
       // Check conditional rendering
       if (component.conditional) {
@@ -418,25 +424,25 @@ export class TemplateEngine {
       // Process component based on type
       switch (component.type) {
         case ComponentType.TEXT:
-          return this.renderTextComponent(component as any, variables);
+          return this.renderTextComponent(component, variables);
         
         case ComponentType.IMAGE:
-          return this.renderImageComponent(component as any, variables);
+          return this.renderImageComponent(component, variables);
           
         case ComponentType.SHAPE:
-          return this.renderShapeComponent(component as any, variables);
+          return this.renderShapeComponent(component, variables);
           
         case ComponentType.GROUP:
-          return this.renderGroupComponent(component as any, variables);
+          return this.renderGroupComponent(component, variables);
           
         case ComponentType.SVG:
-          return this.renderSvgComponent(component as any, variables);
+          return this.renderSvgComponent(component, variables);
           
         case ComponentType.HTML:
-          return this.renderHtmlComponent(component as any, variables);
+          return this.renderHtmlComponent(component, variables);
           
         default:
-          throw new Error(`Unsupported component type: ${(component as any).type}`);
+          throw new Error(`Unsupported component type: ${(component as { type: string }).type}`);
       }
     } catch (error) {
       throw new Error(`Component rendering failed for ${component.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -446,7 +452,7 @@ export class TemplateEngine {
   /**
    * Render text component with variable substitution
    */
-  private renderTextComponent(component: any, variables: VariableMap): any {
+  private renderTextComponent(component: TextComponent, variables: VariableMap): TextComponent {
     const template = this.handlebars.compile(component.content);
     const renderedContent = template(variables);
 
@@ -460,13 +466,13 @@ export class TemplateEngine {
   /**
    * Render image component
    */
-  private renderImageComponent(component: any, variables: VariableMap): any {
+  private renderImageComponent(component: ImageComponent, variables: VariableMap): ImageComponent {
     let imageSource = component.source;
     
     // If source is a variable reference, resolve it
     if (imageSource.startsWith('{{') && imageSource.endsWith('}}')) {
       const varName = imageSource.slice(2, -2).trim();
-      imageSource = variables[varName] || component.source;
+      imageSource = String(variables[varName] || component.source);
     }
 
     return {
@@ -479,7 +485,7 @@ export class TemplateEngine {
   /**
    * Render shape component
    */
-  private renderShapeComponent(component: any, variables: VariableMap): any {
+  private renderShapeComponent(component: ShapeComponent, variables: VariableMap): ShapeComponent {
     return {
       ...component,
       shapeData: this.processObjectWithVariables(component.shapeData, variables),
@@ -490,7 +496,7 @@ export class TemplateEngine {
   /**
    * Render group component recursively
    */
-  private async renderGroupComponent(component: any, variables: VariableMap): Promise<any> {
+  private async renderGroupComponent(component: GroupComponent, variables: VariableMap): Promise<GroupComponent> {
     const renderedChildren = await Promise.all(
       component.children.map((child: TemplateComponent) => 
         this.renderComponent(child, variables)
@@ -499,7 +505,7 @@ export class TemplateEngine {
 
     return {
       ...component,
-      children: renderedChildren.flat().filter(child => child !== null),
+      children: renderedChildren.flat().filter((child): child is TemplateComponent => child !== null),
       style: this.processStyle(component.style, variables)
     };
   }
@@ -507,7 +513,7 @@ export class TemplateEngine {
   /**
    * Render SVG component with variable substitution
    */
-  private renderSvgComponent(component: any, variables: VariableMap): any {
+  private renderSvgComponent(component: SvgComponent, variables: VariableMap): SvgComponent {
     const template = this.handlebars.compile(component.svgContent);
     const renderedSvg = template(variables);
 
@@ -521,7 +527,7 @@ export class TemplateEngine {
   /**
    * Render HTML component with variable substitution
    */
-  private renderHtmlComponent(component: any, variables: VariableMap): any {
+  private renderHtmlComponent(component: HtmlComponent, variables: VariableMap): HtmlComponent {
     const template = this.handlebars.compile(component.htmlContent);
     const renderedHtml = template(variables);
 
@@ -538,9 +544,9 @@ export class TemplateEngine {
   private async renderRepeatingComponent(
     component: TemplateComponent, 
     variables: VariableMap
-  ): Promise<any[]> {
+  ): Promise<TemplateComponent[]> {
     // Parse repeat expression (e.g., "item in items")
-    const repeatMatch = component.repeat!.match(/(\w+)\s+in\s+(\w+)/);
+    const repeatMatch = component.repeat?.match(/(\w+)\s+in\s+(\w+)/);
     if (!repeatMatch) {
       throw new Error(`Invalid repeat expression: ${component.repeat}`);
     }
@@ -553,7 +559,7 @@ export class TemplateEngine {
       throw new Error(`Repeat variable '${arrayVar}' must be an array`);
     }
 
-    const renderedItems = [];
+    const renderedItems: TemplateComponent[] = [];
     for (let i = 0; i < items.length; i++) {
       const itemVariables = {
         ...variables,
@@ -567,7 +573,7 @@ export class TemplateEngine {
       const itemComponent = { ...component, repeat: undefined };
       const rendered = await this.renderComponent(itemComponent, itemVariables);
       if (rendered) {
-        renderedItems.push(rendered);
+        renderedItems.push(...(Array.isArray(rendered) ? rendered : [rendered]));
       }
     }
 
@@ -592,7 +598,7 @@ export class TemplateEngine {
   /**
    * Process style object with variable substitution
    */
-  private processStyle(style: any, variables: VariableMap): any {
+  private processStyle<T>(style: T, variables: VariableMap): T {
     if (!style) return style;
 
     return this.processObjectWithVariables(style, variables);
@@ -601,27 +607,27 @@ export class TemplateEngine {
   /**
    * Process any object with variable substitution
    */
-  private processObjectWithVariables(obj: any, variables: VariableMap): any {
+  private processObjectWithVariables<T>(obj: T, variables: VariableMap): T {
     if (typeof obj === 'string') {
       // Process string with Handlebars
       try {
         const template = this.handlebars.compile(obj);
-        return template(variables);
+        return template(variables) as T;
       } catch {
         return obj; // Return original if template processing fails
       }
     }
     
     if (Array.isArray(obj)) {
-      return obj.map(item => this.processObjectWithVariables(item, variables));
+      return obj.map(item => this.processObjectWithVariables(item, variables)) as T;
     }
     
     if (typeof obj === 'object' && obj !== null) {
-      const processed: any = {};
+      const processed: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(obj)) {
         processed[key] = this.processObjectWithVariables(value, variables);
       }
-      return processed;
+      return processed as T;
     }
     
     return obj;
@@ -630,7 +636,7 @@ export class TemplateEngine {
   /**
    * Generate SVG content from rendered components
    */
-  private generateSVG(template: Template, components: any[]): string {
+  private generateSVG(template: Template, components: (TemplateComponent | null)[]): string {
     const { width, height, background } = template.layout;
     
     let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">\n`;
@@ -654,7 +660,7 @@ export class TemplateEngine {
   /**
    * Generate HTML content from rendered components
    */
-  private generateHTML(template: Template, components: any[]): string {
+  private generateHTML(template: Template, components: (TemplateComponent | null)[]): string {
     const { width, height, background } = template.layout;
     
     let html = `<div style="width: ${width}px; height: ${height}px; position: relative;`;
@@ -677,7 +683,7 @@ export class TemplateEngine {
   /**
    * Convert component to SVG markup
    */
-  private componentToSVG(component: any): string {
+  private componentToSVG(component: TemplateComponent): string {
     const { position, style = {} } = component;
     
     switch (component.type) {
@@ -725,7 +731,7 @@ export class TemplateEngine {
   /**
    * Convert component to HTML markup
    */
-  private componentToHTML(component: any): string {
+  private componentToHTML(component: TemplateComponent): string {
     const { position, style = {} } = component;
     const positionStyle = `position: absolute; left: ${position.x}px; top: ${position.y}px; width: ${position.width}px; height: ${position.height}px;`;
     

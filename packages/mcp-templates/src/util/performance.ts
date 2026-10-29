@@ -7,7 +7,7 @@ interface PerformanceMetric {
   startTime: number;
   endTime?: number;
   duration?: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export class PerformanceMonitor {
@@ -32,7 +32,7 @@ export class PerformanceMonitor {
     return PerformanceMonitor.instance;
   }
 
-  startOperation(operationId: string, name: string, metadata?: Record<string, any>): void {
+  startOperation(operationId: string, name: string, metadata?: Record<string, unknown>): void {
     const metric: PerformanceMetric = {
       name,
       startTime: performance.now(),
@@ -158,10 +158,10 @@ export class PerformanceMonitor {
  * Decorator for timing method execution
  */
 export function timed(operationName: string) {
-  return function(target: any, propertyName: string, descriptor: PropertyDescriptor) {
+  return function(_target: unknown, propertyName: string, descriptor: PropertyDescriptor) {
     const method = descriptor.value;
     
-    descriptor.value = async function(...args: any[]) {
+    descriptor.value = async function(this: unknown, ...args: unknown[]) {
       const monitor = PerformanceMonitor.getInstance();
       const operationId = `${operationName}_${Date.now()}_${Math.random()}`;
       
@@ -188,7 +188,7 @@ export function timed(operationName: string) {
 export async function timeOperation<T>(
   name: string,
   operation: () => Promise<T>,
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 ): Promise<T> {
   const monitor = PerformanceMonitor.getInstance();
   const operationId = `${name}_${Date.now()}_${Math.random()}`;

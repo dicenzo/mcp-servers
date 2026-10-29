@@ -225,7 +225,7 @@ class MCPTemplatesServer {
    */
   getStats(): {
     uptime: number;
-    performance: Record<string, any>;
+    performance: Record<string, unknown>;
     server: typeof SERVER_INFO;
   } {
     return {

@@ -348,7 +348,7 @@ export class TemplateExporter {
         
         const pageSize = pageSizes[options.pageSize];
         if (pageSize) {
-          pdfOptions.format = options.pageSize as any;
+          pdfOptions.format = options.pageSize;
           delete pdfOptions.width;
           delete pdfOptions.height;
         }
