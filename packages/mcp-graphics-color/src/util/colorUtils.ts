@@ -6,6 +6,14 @@ import {
   ColorErrorCode
 } from '../types/color.js';
 import * as culori from 'culori';
+import type { Color as CuloriColor, Mode as CuloriMode } from 'culori';
+
+/**
+ * Channel values a culori color object may carry, keyed by channel name.
+ * Every culori color type is assignable to this, so channels can be read
+ * without first narrowing on `mode`.
+ */
+type CuloriChannels = Partial<Record<'r' | 'g' | 'b' | 'h' | 's' | 'l' | 'c' | 'a' | 'alpha', number>>;
 
 /**
  * Advanced color utility functions for conversions and operations
@@ -69,14 +77,14 @@ export class ColorUtils {
 
     // Try to parse with culori
     try {
-      const culoriColor = (culori as any).parse(trimmed);
+      const culoriColor = culori.parse(trimmed);
       if (!culoriColor) throw new Error('Invalid color format');
       
       // Determine the color space based on the parsed color
       let space: ColorSpace = 'srgb';
       let values: number[] = [0, 0, 0];
       
-      if (culoriColor.mode === 'rgb' || culoriColor.mode === 'srgb') {
+      if (culoriColor.mode === 'rgb') {
         space = 'srgb';
         values = [culoriColor.r || 0, culoriColor.g || 0, culoriColor.b || 0];
       } else if (culoriColor.mode === 'hsl') {
@@ -97,7 +105,7 @@ export class ColorUtils {
       } else {
         // Default to srgb for other modes
         space = 'srgb';
-        const rgbColor = culori.converter('rgb')(culoriColor) as any;
+        const rgbColor = culori.converter('rgb')(culoriColor);
         if (!rgbColor) {
           throw new Error('Failed to convert color to RGB');
         }
@@ -131,7 +139,7 @@ export class ColorUtils {
     }
 
     // Create culori color object
-    let culoriColor: any;
+    let culoriColor: CuloriColor;
     
     switch (space) {
       case 'srgb':
@@ -161,8 +169,8 @@ export class ColorUtils {
       space,
       values: [...values],
       alpha,
-      hex: (culori as any).formatHex(culoriColor),
-      css: (culori as any).formatCss(culoriColor)
+      hex: culori.formatHex(culoriColor),
+      css: culori.formatCss(culoriColor)
     };
   }
 
@@ -175,10 +183,11 @@ export class ColorUtils {
       const sourceColor = this.colorToCulori(color);
       
       // Handle special cases
-      let convertedColor: any;
+      let convertedColor: CuloriColor | undefined;
       if ((color.space === 'srgb' && targetSpace === 'rgb') || (color.space === 'rgb' && targetSpace === 'srgb')) {
         // These are equivalent color spaces, just copy values
-        convertedColor = { ...sourceColor, mode: targetSpace === 'rgb' ? 'rgb' : 'rgb' };
+        // Object.assign (rather than spread) lets TypeScript see the result as an Rgb color
+        convertedColor = Object.assign({}, sourceColor, { mode: 'rgb' as const });
       } else if (color.space === targetSpace) {
         // Same space, return as-is
         convertedColor = sourceColor;
@@ -191,13 +200,14 @@ export class ColorUtils {
         const culoriTargetSpace = targetSpace === 'srgb' ? 'rgb' : targetSpace;
         
         // Convert to target space using culori converter
-        const targetConverter = culori.converter(culoriTargetSpace as any);
+        const targetConverter = culori.converter(culoriTargetSpace as CuloriMode);
         convertedColor = targetConverter(sourceColor);
       }
       
       if (!convertedColor) {
         throw new Error(`Conversion to ${targetSpace} failed`);
       }
+      const channels: CuloriChannels = convertedColor;
 
       // Extract values based on target space
       let values: number[];
@@ -205,48 +215,49 @@ export class ColorUtils {
       switch (targetSpace) {
         case 'srgb':
         case 'rgb':
-          values = [convertedColor.r, convertedColor.g, convertedColor.b].map(v => this.roundToPrecision(v, precision));
+          // rgb-mode culori colors always carry r/g/b; NaN matches rounding a missing channel
+          values = [channels.r, channels.g, channels.b].map(v => this.roundToPrecision(v ?? NaN, precision));
           break;
         case 'hsl':
           values = [
-            convertedColor.h || 0, 
-            convertedColor.s || 0, 
-            convertedColor.l || 0
+            channels.h || 0, 
+            channels.s || 0, 
+            channels.l || 0
           ].map(v => this.roundToPrecision(v, precision));
           break;
         case 'oklch':
           values = [
-            convertedColor.l || 0,
-            convertedColor.c || 0,
-            convertedColor.h || 0
+            channels.l || 0,
+            channels.c || 0,
+            channels.h || 0
           ].map(v => this.roundToPrecision(v, precision));
           break;
         case 'oklab':
           values = [
-            convertedColor.l || 0,
-            convertedColor.a || 0,
-            convertedColor.b || 0
+            channels.l || 0,
+            channels.a || 0,
+            channels.b || 0
           ].map(v => this.roundToPrecision(v, precision));
           break;
         case 'lab':
           values = [
-            convertedColor.l || 0,
-            convertedColor.a || 0,
-            convertedColor.b || 0
+            channels.l || 0,
+            channels.a || 0,
+            channels.b || 0
           ].map(v => this.roundToPrecision(v, precision));
           break;
         case 'lch':
           values = [
-            convertedColor.l || 0,
-            convertedColor.c || 0,
-            convertedColor.h || 0
+            channels.l || 0,
+            channels.c || 0,
+            channels.h || 0
           ].map(v => this.roundToPrecision(v, precision));
           break;
         case 'hex':
           return {
             space: 'hex',
             values: [0], // Placeholder
-            alpha: convertedColor.alpha,
+            alpha: channels.alpha,
             hex: culori.formatHex(convertedColor),
             css: culori.formatHex(convertedColor)
           };
@@ -257,7 +268,7 @@ export class ColorUtils {
       return {
         space: targetSpace,
         values,
-        alpha: convertedColor.alpha,
+        alpha: channels.alpha,
         hex: culori.formatHex(convertedColor),
         css: culori.formatCss(convertedColor)
       };
@@ -286,7 +297,11 @@ export class ColorUtils {
     try {
       const fgCulori = this.colorToCulori(foreground);
       const bgCulori = this.colorToCulori(background);
-      
+
+      if (!fgCulori || !bgCulori) {
+        throw new Error('Failed to convert colors for contrast calculation');
+      }
+
       const ratio = culori.wcagContrast(fgCulori, bgCulori);
       return Math.round(ratio * 100) / 100; // Round to 2 decimal places
     } catch (error) {
@@ -403,7 +418,7 @@ export class ColorUtils {
   /**
    * Convert internal Color format to culori color object
    */
-  private static colorToCulori(color: Color): any {
+  private static colorToCulori(color: Color): CuloriColor | undefined {
     const { space, values, alpha } = color;
     
     switch (space) {
@@ -423,7 +438,7 @@ export class ColorUtils {
         return { mode: 'lch', l: values[0], c: values[1], h: values[2], alpha };
       case 'hex':
         if (color.hex) {
-          return (culori as any).parse(color.hex);
+          return culori.parse(color.hex);
         }
         throw new Error('Hex color missing hex value');
       default:
