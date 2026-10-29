@@ -32,6 +32,7 @@ debug-*.mjs
 .claude/
 .remember/
 *.log
+.local/
 
 # Performance suite reports
 tools/performance-suite/reports/
