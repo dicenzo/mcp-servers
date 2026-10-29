@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { TypographyErrorCode, PERFORMANCE_LIMITS } from '../types/typography.js';
+import { TypographyErrorCode, PERFORMANCE_LIMITS, FontInput, FontMetadata } from '../types/typography.js';
 
 /**
  * Performance monitoring and optimization utilities
@@ -155,10 +155,12 @@ export class PerformanceMonitor {
     const operationsByType = new Map<string, PerformanceMetrics[]>();
 
     for (const op of recentOperations) {
-      if (!operationsByType.has(op.operationType)) {
-        operationsByType.set(op.operationType, []);
+      let operationsOfType = operationsByType.get(op.operationType);
+      if (!operationsOfType) {
+        operationsOfType = [];
+        operationsByType.set(op.operationType, operationsOfType);
       }
-      operationsByType.get(op.operationType)!.push(op);
+      operationsOfType.push(op);
     }
 
     const stats: PerformanceStats = {
@@ -236,7 +238,7 @@ export class FontCache {
   /**
    * Generates a cache key for font input
    */
-  static generateCacheKey(fontInput: any): string {
+  static generateCacheKey(fontInput: FontInput): string {
     if (fontInput.type === 'file') {
       return `file:${fontInput.path}`;
     } else if (fontInput.type === 'buffer') {
@@ -275,7 +277,7 @@ export class FontCache {
   /**
    * Stores font in cache
    */
-  static set(cacheKey: string, fontData: any, metadata: any): void {
+  static set(cacheKey: string, fontData: Buffer, metadata: FontMetadata): void {
     // Implement LRU eviction if cache is full
     if (this.cache.size >= this.maxCacheSize) {
       this.evictLeastRecentlyUsed();
@@ -315,7 +317,7 @@ export class FontCache {
   /**
    * Estimates size of cached font data
    */
-  private static estimateSize(fontData: any): number {
+  private static estimateSize(fontData: unknown): number {
     if (Buffer.isBuffer(fontData)) {
       return fontData.length;
     }
@@ -396,8 +398,8 @@ export interface PerformanceStats {
 }
 
 export interface CachedFont {
-  fontData: any;
-  metadata: any;
+  fontData: Buffer;
+  metadata: FontMetadata;
   timestamp: number;
   lastAccessed: number;
   accessCount: number;

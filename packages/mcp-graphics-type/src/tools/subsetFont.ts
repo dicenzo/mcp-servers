@@ -1,4 +1,6 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { TextToolResult } from '../types/typography.js';
+import type { Glyph } from 'opentype.js';
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import * as fs from 'fs';
@@ -15,7 +17,7 @@ import {
 import { loadFontBuffer } from './loadFont.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<TextToolResult>;
 }
 
 /**
@@ -345,8 +347,8 @@ async function createSubsetWithFonttools(
     const args = ['-m', 'fontTools.subset', inputPath];
     
     // Add character specification
-    const unicodes = Array.from(options.characters).map(c => c.codePointAt(0)).filter(Boolean);
-    const unicodeSpecs = unicodes.map(u => u!.toString(16));
+    const unicodes = Array.from(options.characters).map(c => c.codePointAt(0)).filter((u): u is number => Boolean(u));
+    const unicodeSpecs = unicodes.map(u => u.toString(16));
 
     // Unicode ranges go in the same --unicodes list (pyftsubset accepts "start-end" hex ranges)
     if (options.unicodeRanges) {
@@ -446,7 +448,7 @@ async function createBasicSubset(
   
   // Get characters to include
   const characters = Array.from(new Set(options.characters.split('')));
-  const glyphsToInclude = new Set<any>();
+  const glyphsToInclude = new Set<Glyph>();
   
   // Add glyphs for specified characters
   for (const char of characters) {
@@ -532,18 +534,18 @@ async function getGlyphCounts(originalBuffer: Buffer, subsetBuffer: Buffer): Pro
  * Analyzes Unicode ranges covered by characters
  */
 function analyzeUnicodeRanges(characters: string[]): Array<{ start: number; end: number; name?: string }> {
-  const codepoints = characters.map(c => c.codePointAt(0)).filter(Boolean).sort((a, b) => a! - b!);
+  const codepoints = characters.map(c => c.codePointAt(0)).filter((cp): cp is number => Boolean(cp)).sort((a, b) => a - b);
   
   if (codepoints.length === 0) {
     return [];
   }
   
   const ranges: Array<{ start: number; end: number; name?: string }> = [];
-  let currentStart = codepoints[0]!;
-  let currentEnd = codepoints[0]!;
+  let currentStart = codepoints[0];
+  let currentEnd = codepoints[0];
   
   for (let i = 1; i < codepoints.length; i++) {
-    const cp = codepoints[i]!;
+    const cp = codepoints[i];
     
     if (cp <= currentEnd + 1) {
       // Extend current range

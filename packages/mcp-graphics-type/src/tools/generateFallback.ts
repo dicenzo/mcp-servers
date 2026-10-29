@@ -1,16 +1,42 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { TextToolResult } from '../types/typography.js';
+import type { Font } from 'opentype.js';
 import { TypographyValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
 import { 
   GenerateFallbackInputSchema, 
   GenerateFallbackInput, 
+  FontInput,
   SystemFontStack,
   TypographyErrorCode 
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
 
+type GenericFamily = SystemFontStack['genericFamily'];
+type TargetPlatform = SystemFontStack['platform'];
+
+interface FontCharacteristics {
+  isSerif: boolean;
+  isMonospace: boolean;
+  weight: number;
+  width: number;
+  style: string;
+  scripts: string[];
+  features: string[];
+  xHeight: number;
+  capHeight: number;
+  ascender: number;
+  descender: number;
+}
+
+interface FallbackOptions {
+  textContent?: string;
+  preferredGenericFamily?: GenericFamily;
+  includeWebFonts?: boolean;
+}
+
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<TextToolResult>;
 }
 
 /**
@@ -182,13 +208,9 @@ export const generateFallbackTool: ExecutableTool = {
  */
 async function generateSystemFontStack(
   fontBuffer: Buffer,
-  primaryFontInput: any,
-  targetPlatforms: string[],
-  options: {
-    textContent?: string;
-    preferredGenericFamily?: string;
-    includeWebFonts?: boolean;
-  }
+  primaryFontInput: FontInput,
+  targetPlatforms: TargetPlatform[],
+  options: FallbackOptions
 ): Promise<SystemFontStack> {
   try {
     // Analyze primary font characteristics
@@ -228,7 +250,7 @@ async function generateSystemFontStack(
     const fontStack: SystemFontStack = {
       primaryFont: primaryFontName,
       fallbackStack: unifiedStack,
-      genericFamily: genericFamily as any,
+      genericFamily,
       cssDeclaration,
       platform: determinePrimaryPlatform(targetPlatforms),
       confidence,
@@ -253,19 +275,7 @@ async function generateSystemFontStack(
 /**
  * Analyzes font characteristics for fallback selection
  */
-async function analyzeFontCharacteristics(fontBuffer: Buffer): Promise<{
-  isSerif: boolean;
-  isMonospace: boolean;
-  weight: number;
-  width: number;
-  style: string;
-  scripts: string[];
-  features: string[];
-  xHeight: number;
-  capHeight: number;
-  ascender: number;
-  descender: number;
-}> {
+async function analyzeFontCharacteristics(fontBuffer: Buffer): Promise<FontCharacteristics> {
   const opentype = await import('opentype.js');
   const font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
   
@@ -293,7 +303,7 @@ async function analyzeFontCharacteristics(fontBuffer: Buffer): Promise<{
 /**
  * Gets primary font name from font data or input
  */
-async function getPrimaryFontName(fontBuffer: Buffer, primaryFontInput: any): Promise<string> {
+async function getPrimaryFontName(fontBuffer: Buffer, primaryFontInput: FontInput): Promise<string> {
   if (primaryFontInput.type === 'system') {
     return primaryFontInput.name;
   }
@@ -311,8 +321,8 @@ async function getPrimaryFontName(fontBuffer: Buffer, primaryFontInput: any): Pr
  * Generates platform-specific fallback fonts
  */
 function generatePlatformSpecificFallbacks(
-  characteristics: any,
-  platform: string,
+  characteristics: FontCharacteristics,
+  platform: TargetPlatform,
   options: { includeWebFonts?: boolean }
 ): string[] {
   const fallbacks: string[] = [];
@@ -344,7 +354,7 @@ function generatePlatformSpecificFallbacks(
 /**
  * Gets web-safe fallback fonts
  */
-function getWebFallbacks(characteristics: any, includeWebFonts?: boolean): string[] {
+function getWebFallbacks(characteristics: FontCharacteristics, includeWebFonts?: boolean): string[] {
   const fallbacks: string[] = [];
   
   if (includeWebFonts) {
@@ -373,7 +383,7 @@ function getWebFallbacks(characteristics: any, includeWebFonts?: boolean): strin
 /**
  * Gets Windows-specific fallback fonts
  */
-function getWindowsFallbacks(characteristics: any): string[] {
+function getWindowsFallbacks(characteristics: FontCharacteristics): string[] {
   if (characteristics.isSerif) {
     return ['Georgia', 'Times New Roman', 'Cambria', 'serif'];
   } else if (characteristics.isMonospace) {
@@ -386,7 +396,7 @@ function getWindowsFallbacks(characteristics: any): string[] {
 /**
  * Gets macOS-specific fallback fonts
  */
-function getMacOSFallbacks(characteristics: any): string[] {
+function getMacOSFallbacks(characteristics: FontCharacteristics): string[] {
   if (characteristics.isSerif) {
     return ['Georgia', 'Times New Roman', 'Times', 'serif'];
   } else if (characteristics.isMonospace) {
@@ -399,7 +409,7 @@ function getMacOSFallbacks(characteristics: any): string[] {
 /**
  * Gets Linux-specific fallback fonts
  */
-function getLinuxFallbacks(characteristics: any): string[] {
+function getLinuxFallbacks(characteristics: FontCharacteristics): string[] {
   if (characteristics.isSerif) {
     return ['Liberation Serif', 'Times New Roman', 'serif'];
   } else if (characteristics.isMonospace) {
@@ -412,7 +422,7 @@ function getLinuxFallbacks(characteristics: any): string[] {
 /**
  * Gets iOS-specific fallback fonts
  */
-function getIOSFallbacks(characteristics: any): string[] {
+function getIOSFallbacks(characteristics: FontCharacteristics): string[] {
   if (characteristics.isSerif) {
     return ['Georgia', 'Times New Roman', 'serif'];
   } else if (characteristics.isMonospace) {
@@ -425,7 +435,7 @@ function getIOSFallbacks(characteristics: any): string[] {
 /**
  * Gets Android-specific fallback fonts
  */
-function getAndroidFallbacks(characteristics: any): string[] {
+function getAndroidFallbacks(characteristics: FontCharacteristics): string[] {
   if (characteristics.isSerif) {
     return ['Noto Serif', 'serif'];
   } else if (characteristics.isMonospace) {
@@ -440,8 +450,8 @@ function getAndroidFallbacks(characteristics: any): string[] {
  */
 function createUnifiedFallbackStack(
   platformCandidates: Map<string, string[]>,
-  _characteristics: any,
-  _options: any
+  _characteristics: FontCharacteristics,
+  _options: FallbackOptions
 ): string[] {
   const fontCounts = new Map<string, number>();
   const allCandidates = new Set<string>();
@@ -510,14 +520,14 @@ async function testFontAvailability(fontStack: string[]): Promise<Array<{
 /**
  * Helper functions for font detection and analysis
  */
-function detectSerif(font: any): boolean {
+function detectSerif(font: Font): boolean {
   // Simple heuristic: check if font name contains serif indicators
   const fontName = (font.names.fontFamily?.en || '').toLowerCase();
   const serifKeywords = ['serif', 'times', 'georgia', 'cambria', 'garamond'];
   return serifKeywords.some(keyword => fontName.includes(keyword));
 }
 
-function detectStyle(font: any): string {
+function detectStyle(font: Font): string {
   const macStyle = font.tables?.head?.macStyle || 0;
   
   if (macStyle & 0x02) return 'italic';
@@ -525,7 +535,7 @@ function detectStyle(font: any): string {
   return 'normal';
 }
 
-function extractSupportedScripts(font: any): string[] {
+function extractSupportedScripts(font: Font): string[] {
   const scripts = new Set<string>();
   
   if (font.tables?.gsub?.scripts) {
@@ -537,7 +547,7 @@ function extractSupportedScripts(font: any): string[] {
   return Array.from(scripts);
 }
 
-function extractFeatures(font: any): string[] {
+function extractFeatures(font: Font): string[] {
   const features = new Set<string>();
   
   if (font.tables?.gsub?.features) {
@@ -549,17 +559,17 @@ function extractFeatures(font: any): string[] {
   return Array.from(features);
 }
 
-function determineGenericFamily(characteristics: any): string {
+function determineGenericFamily(characteristics: FontCharacteristics): GenericFamily {
   if (characteristics.isMonospace) return 'monospace';
   if (characteristics.isSerif) return 'serif';
   return 'sans-serif';
 }
 
-function determinePrimaryPlatform(platforms: string[]): any {
+function determinePrimaryPlatform(platforms: TargetPlatform[]): TargetPlatform {
   if (platforms.includes('web')) return 'web';
   if (platforms.includes('macos')) return 'macos';
   if (platforms.includes('windows')) return 'windows';
-  return platforms[0] as any;
+  return platforms[0];
 }
 
 function generateCSSDeclaration(primaryFont: string, fallbackStack: string[], genericFamily: string): string {
@@ -571,8 +581,8 @@ function generateCSSDeclaration(primaryFont: string, fallbackStack: string[], ge
 }
 
 function calculateConfidenceScore(
-  availableFonts: any[],
-  characteristics: any,
+  availableFonts: SystemFontStack['availableFonts'],
+  characteristics: FontCharacteristics,
   _textContent?: string
 ): number {
   let score = 0;

@@ -1,4 +1,5 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { TextToolResult } from '../types/typography.js';
 import { TypographyValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
 import { 
@@ -10,7 +11,7 @@ import {
 import { loadFontBuffer } from './loadFont.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<TextToolResult>;
 }
 
 /**
@@ -288,7 +289,7 @@ async function measureTextDimensions(
           char: char,
           advance: advance,
           leftSideBearing: (glyph.leftSideBearing || 0) * scale,
-          rightSideBearing: ((glyph.advanceWidth || 0) - ((glyph as any).rightSideBearing || 0)) * scale,
+          rightSideBearing: ((glyph.advanceWidth || 0) - (glyph.rightSideBearing || 0)) * scale,
           bbox: scaledBBox
         });
       }
@@ -297,7 +298,7 @@ async function measureTextDimensions(
     // Calculate font metrics
     const ascender = font.ascender * scale;
     const descender = font.descender * scale;
-    const lineGap = ((font as any).lineGap || 0) * scale;
+    const lineGap = (font.lineGap || 0) * scale;
     const lineHeight = ascender - descender + lineGap;
     
     // Calculate baseline positions
@@ -400,7 +401,7 @@ export async function calculateLineHeight(
   
   const ascender = font.ascender * scale;
   const descender = font.descender * scale;
-  const lineGap = ((font as any).lineGap || 0) * scale;
+  const lineGap = (font.lineGap || 0) * scale;
   
   return ascender - descender + lineGap;
 }

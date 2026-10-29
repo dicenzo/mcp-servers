@@ -1,4 +1,6 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { TextToolResult } from '../types/typography.js';
+import type { Font, LayoutTable } from 'opentype.js';
 import { TypographyValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
 import { 
@@ -11,7 +13,7 @@ import {
 import { loadFontBuffer } from './loadFont.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<TextToolResult>;
 }
 
 /**
@@ -221,7 +223,7 @@ async function performFontValidation(
     
     // Parse font using opentype.js
     const opentype = await import('opentype.js');
-    let font: any;
+    let font: Font;
     
     try {
       font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
@@ -334,7 +336,7 @@ async function performFontValidation(
 /**
  * Validates font structure and required tables
  */
-function validateFontStructure(font: any): {
+function validateFontStructure(font: Font): {
   errors: Array<{ code: string; message: string; severity: 'error' | 'warning' | 'info'; location?: string }>;
   warnings: Array<{ code: string; message: string; recommendation?: string }>;
 } {
@@ -367,7 +369,7 @@ function validateFontStructure(font: any): {
   
   // Check character mapping. opentype.js exposes the parsed mapping as
   // cmap.glyphIndexMap; it does not provide a cmap.subtables array.
-  const cmap: any = font.tables.cmap;
+  const cmap = font.tables.cmap;
   const cmapEntryCount = cmap?.subtables?.length ?? Object.keys(cmap?.glyphIndexMap ?? {}).length;
   if (cmap && cmapEntryCount === 0) {
     errors.push({
@@ -403,7 +405,7 @@ function validateFontStructure(font: any): {
 /**
  * Analyzes font metadata for completeness
  */
-function analyzeFontMetadata(font: any): {
+function analyzeFontMetadata(font: Font): {
   hasValidTables: boolean;
   hasKerningInfo: boolean;
   hasOpenTypeFeatures: boolean;
@@ -426,7 +428,7 @@ function analyzeFontMetadata(font: any): {
 /**
  * Analyzes font performance characteristics
  */
-function analyzePerformance(font: any, fontBuffer: Buffer, loadTime: number): {
+function analyzePerformance(font: Font, fontBuffer: Buffer, loadTime: number): {
   loadTime: number;
   fileSize: number;
   glyphCount: number;
@@ -464,7 +466,7 @@ function analyzePerformance(font: any, fontBuffer: Buffer, loadTime: number): {
 /**
  * Analyzes font compatibility across platforms and browsers
  */
-function analyzeCompatibility(font: any, fontBuffer: Buffer, _platforms: string[]): {
+function analyzeCompatibility(font: Font, fontBuffer: Buffer, _platforms: string[]): {
   webBrowsers: Record<string, boolean>;
   operatingSystems: Record<string, boolean>;
   unicodeSupport: {
@@ -506,7 +508,7 @@ function analyzeCompatibility(font: any, fontBuffer: Buffer, _platforms: string[
 /**
  * Analyzes font license and embedding permissions
  */
-function analyzeLicense(font: any): {
+function analyzeLicense(font: Font): {
   warnings: Array<{ code: string; message: string; recommendation?: string }>;
   recommendations: string[];
 } {
@@ -553,7 +555,12 @@ function analyzeLicense(font: any): {
 /**
  * Generates recommendations based on analysis
  */
-function generateRecommendations(font: any, fontBuffer: Buffer, performance: any, compatibility: any): string[] {
+function generateRecommendations(
+  font: Font,
+  fontBuffer: Buffer,
+  performance: FontValidationReport['performance'],
+  compatibility: FontValidationReport['compatibility']
+): string[] {
   const recommendations: string[] = [];
   
   // File size recommendations
@@ -609,7 +616,7 @@ function detectFontFormat(buffer: Buffer): 'ttf' | 'otf' | 'woff' | 'woff2' {
   }
 }
 
-function extractFeatures(font: any): string[] {
+function extractFeatures(font: Font): string[] {
   const features = new Set<string>();
   
   if (font.tables?.gsub?.features) {
@@ -627,11 +634,11 @@ function extractFeatures(font: any): string[] {
   return Array.from(features);
 }
 
-function hasKerningInGPOS(gposTable: any): boolean {
+function hasKerningInGPOS(gposTable: LayoutTable): boolean {
   return Boolean(gposTable.features?.kern);
 }
 
-function isWebOptimized(font: any): boolean {
+function isWebOptimized(font: Font): boolean {
   // Check for web optimization indicators
   const hasWebOptimizations = Boolean(
     font.tables.os2 && // Has OS/2 table for web metrics
@@ -642,7 +649,7 @@ function isWebOptimized(font: any): boolean {
   return hasWebOptimizations;
 }
 
-function analyzeUnicodeSupport(font: any): {
+function analyzeUnicodeSupport(font: Font): {
   version: string;
   supportedBlocks: string[];
   missingBlocks: string[];
@@ -676,8 +683,8 @@ function analyzeUnicodeSupport(font: any): {
 }
 
 function createFailedValidationReport(
-  errors: any[],
-  warnings: any[],
+  errors: FontValidationReport['errors'],
+  warnings: FontValidationReport['warnings'],
   recommendations: string[],
   fontBuffer: Buffer,
   loadTime: number

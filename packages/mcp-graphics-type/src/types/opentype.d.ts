@@ -52,18 +52,16 @@ declare module 'opentype.js' {
         isFixedPitch: boolean;
       };
       cmap?: {
-        subtables: any[];
+        // opentype.js exposes the parsed mapping as glyphIndexMap; subtables is not populated.
+        subtables?: unknown[];
+        glyphIndexMap?: Record<string, number>;
       };
-      gsub?: {
-        scripts: Record<string, any>;
-        features: Record<string, any>;
-      };
-      gpos?: {
-        scripts: Record<string, any>;
-        features: Record<string, any>;
-      };
-      kern?: any;
-      fvar?: any;
+      gsub?: LayoutTable;
+      gpos?: LayoutTable;
+      kern?: unknown;
+      fvar?: unknown;
+      // opentype.js keys every parsed table by name; tables not modelled above are opaque.
+      [tableName: string]: unknown;
     };
     glyphs: {
       glyphs: Glyph[];
@@ -73,6 +71,22 @@ declare module 'opentype.js' {
     toArrayBuffer(): ArrayBuffer;
   }
   
+  /**
+   * GSUB/GPOS layout table. Only the members this package reads are modelled.
+   * Note: at runtime opentype.js stores `scripts` and `features` as arrays of
+   * `{ tag, script }` / `{ tag, feature }` records, so keys are array indices.
+   */
+  export interface LayoutTable {
+    scripts: Record<string, LayoutScriptRecord>;
+    features: Record<string, unknown>;
+  }
+
+  export interface LayoutScriptRecord {
+    tag?: string;
+    script?: unknown;
+    langSys?: Record<string, unknown>;
+  }
+
   export interface Glyph {
     index: number;
     name?: string;

@@ -59,17 +59,17 @@ class TypographyServer {
       try {
         switch (name) {
           case 'type.loadFont':
-            return await (loadFontTool as any).invoke(args);
+            return await loadFontTool.invoke(args);
           case 'type.shapeText':
-            return await (shapeTextTool as any).invoke(args);
+            return await shapeTextTool.invoke(args);
           case 'type.measureText':
-            return await (measureTextTool as any).invoke(args);
+            return await measureTextTool.invoke(args);
           case 'type.subsetFont':
-            return await (subsetFontTool as any).invoke(args);
+            return await subsetFontTool.invoke(args);
           case 'type.generateFallback':
-            return await (generateFallbackTool as any).invoke(args);
+            return await generateFallbackTool.invoke(args);
           case 'type.validateFont':
-            return await (validateFontTool as any).invoke(args);
+            return await validateFontTool.invoke(args);
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
