@@ -8,7 +8,7 @@ import { z } from 'zod';
  */
 
 // Supported image formats
-export const SupportedImageFormats = ['png', 'jpeg', 'jpg', 'webp', 'avif', 'gif', 'tiff', 'bmp'] as const;
+export const SupportedImageFormats = ['png', 'jpeg', 'jpg', 'webp', 'avif', 'gif', 'tiff'] as const;
 export type ImageFormat = typeof SupportedImageFormats[number];
 
 // Image input validation schema
