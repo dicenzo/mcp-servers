@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as opentype from 'opentype.js';
-import { TypographyValidator, PerformanceValidator } from '../util/validation.js';
+import { TypographyValidator } from '../util/validation.js';
 import { PerformanceMonitor, FontCache } from '../util/performance.js';
 import {
   allowedFontRoots,
@@ -19,7 +19,6 @@ import {
   FontInput, 
   FontMetadata, 
   TypographyErrorCode,
-  UNICODE_BLOCKS 
 } from '../types/typography.js';
 
 interface ExecutableTool extends Tool {
@@ -290,7 +289,7 @@ async function readFontSource(input: FontInput): Promise<Buffer> {
             fontBuffer = fs.readFileSync(path.join(fontPath, fontFile));
             break;
           }
-        } catch (error) {
+        } catch {
           // Continue searching in other paths
         }
       }
@@ -357,7 +356,7 @@ function getSystemFontPaths(): string[] {
 /**
  * Extracts comprehensive metadata from font buffer
  */
-async function extractFontMetadata(fontBuffer: Buffer, input: FontInput): Promise<FontMetadata> {
+async function extractFontMetadata(fontBuffer: Buffer, _input: FontInput): Promise<FontMetadata> {
   try {
     // Use opentype.js for primary metadata extraction
     const font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
@@ -395,7 +394,7 @@ async function extractFontMetadata(fontBuffer: Buffer, input: FontInput): Promis
       isFixedPitch: Boolean(font.tables?.post?.isFixedPitch),
       isItalic: Boolean(font.tables?.head?.macStyle && (font.tables.head.macStyle & 0x02)),
       isBold: Boolean(font.tables?.head?.macStyle && (font.tables.head.macStyle & 0x01)),
-      isRegular: !Boolean(font.tables?.head?.macStyle),
+      isRegular: !font.tables?.head?.macStyle,
       supportedScripts: extractSupportedScripts(font),
       supportedLanguages: extractSupportedLanguages(font),
       features: extractOpenTypeFeatures(font),

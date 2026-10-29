@@ -1,14 +1,11 @@
 #!/usr/bin/env node
 
-import { z } from 'zod';
 import { ColorUtils } from '../util/colorUtils.js';
 import {
   ColorBrandMatchInputSchema,
-  ColorBrandMatchInput,
   ColorMatch,
   ColorErrorCode,
   Color,
-  ColorInput
 } from '../types/color.js';
 
 /**
@@ -136,7 +133,7 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
           success: false,
           error: colorError
         };
-      } catch (parseError) {
+      } catch {
         // Handle unstructured errors
         return {
           success: false,

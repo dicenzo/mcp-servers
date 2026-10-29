@@ -26,6 +26,8 @@ export const webSearchTool: Tool = {
     },
     required: ['query']
   },
+  // The tool contract is a generator (index.ts reads one next()); this tool returns its single result
+  // eslint-disable-next-line require-yield
   async *invoke(input: z.infer<typeof Input>) {
     try {
       const { query, k } = Input.parse(input);
@@ -244,5 +246,5 @@ function filterForBusinessQuality(results: SearchResult[], maxResults: number): 
   return scoredResults
     .sort((a, b) => b.score - a.score)
     .slice(0, maxResults)
-    .map(({ score, ...result }) => result);
+    .map(({ score: _score, ...result }) => result);
 }

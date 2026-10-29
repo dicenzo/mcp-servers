@@ -440,8 +440,8 @@ function getAndroidFallbacks(characteristics: any): string[] {
  */
 function createUnifiedFallbackStack(
   platformCandidates: Map<string, string[]>,
-  characteristics: any,
-  options: any
+  _characteristics: any,
+  _options: any
 ): string[] {
   const fontCounts = new Map<string, number>();
   const allCandidates = new Set<string>();
@@ -573,7 +573,7 @@ function generateCSSDeclaration(primaryFont: string, fallbackStack: string[], ge
 function calculateConfidenceScore(
   availableFonts: any[],
   characteristics: any,
-  textContent?: string
+  _textContent?: string
 ): number {
   let score = 0;
   
@@ -607,7 +607,7 @@ async function checkFontInstalled(fontName: string): Promise<boolean> {
   return systemFonts.includes(fontName) || isSystemFont(fontName);
 }
 
-async function findFontPath(fontName: string): Promise<string | undefined> {
+async function findFontPath(_fontName: string): Promise<string | undefined> {
   // In a real implementation, you would search system font directories
   return undefined;
 }

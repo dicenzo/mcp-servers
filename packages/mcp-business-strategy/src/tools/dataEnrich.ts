@@ -39,6 +39,8 @@ export const dataEnrichTool: Tool = {
     }, 
     required: ['topic'] 
   },
+  // The tool contract is a generator (index.ts reads one next()); this tool returns its single result
+  // eslint-disable-next-line require-yield
   async *invoke(input: z.infer<typeof Input>) {
     try {
       const { topic } = Input.parse(input);

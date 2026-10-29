@@ -6,7 +6,6 @@ import {
   ColorErrorCode
 } from '../types/color.js';
 import * as culori from 'culori';
-import chroma from 'chroma-js';
 
 /**
  * Advanced color utility functions for conversions and operations
@@ -112,7 +111,7 @@ export class ColorUtils {
         hex: culori.formatHex(culoriColor),
         css: culori.formatCss(culoriColor)
       };
-    } catch (error) {
+    } catch {
       throw new Error('Invalid color string format');
     }
   }
@@ -359,9 +358,6 @@ export class ColorUtils {
       if (!baseHsl || typeof baseHsl !== 'object' || !('h' in baseHsl) || baseHsl.h === undefined) {
         throw new Error('Failed to extract hue from base color');
       }
-
-      const baseHue = baseHsl.h;
-      const colors: Color[] = [baseColor]; // Include base color
 
       switch (harmony) {
         case 'monochromatic':
