@@ -196,8 +196,12 @@ export class ColorUtils {
         const rgbConverter = culori.converter('rgb');
         convertedColor = rgbConverter(sourceColor);
       } else {
-        // Map color spaces to culori equivalents for conversion
-        const culoriTargetSpace = targetSpace === 'srgb' ? 'rgb' : targetSpace;
+        // Map color spaces to culori equivalents for conversion. hsla/rgba are hsl/rgb:
+        // alpha travels separately on the Color object.
+        const culoriTargetSpace =
+          targetSpace === 'srgb' || targetSpace === 'rgba' ? 'rgb' :
+          targetSpace === 'hsla' ? 'hsl' :
+          targetSpace;
         
         // Convert to target space using culori converter
         const targetConverter = culori.converter(culoriTargetSpace as CuloriMode);
@@ -215,10 +219,12 @@ export class ColorUtils {
       switch (targetSpace) {
         case 'srgb':
         case 'rgb':
+        case 'rgba':
           // rgb-mode culori colors always carry r/g/b; NaN matches rounding a missing channel
           values = [channels.r, channels.g, channels.b].map(v => this.roundToPrecision(v ?? NaN, precision));
           break;
         case 'hsl':
+        case 'hsla':
           values = [
             channels.h || 0, 
             channels.s || 0, 
@@ -423,10 +429,11 @@ export class ColorUtils {
     
     switch (space) {
       case 'srgb':
-        return { mode: 'rgb', r: values[0], g: values[1], b: values[2], alpha };
       case 'rgb':
+      case 'rgba':
         return { mode: 'rgb', r: values[0], g: values[1], b: values[2], alpha };
       case 'hsl':
+      case 'hsla':
         return { mode: 'hsl', h: values[0], s: values[1], l: values[2], alpha };
       case 'oklch':
         return { mode: 'oklch', l: values[0], c: values[1], h: values[2], alpha };
@@ -459,8 +466,10 @@ export class ColorUtils {
     switch (space) {
       case 'srgb':
       case 'rgb':
+      case 'rgba':
         return values.every(v => v >= 0 && v <= 1);
       case 'hsl':
+      case 'hsla':
         return values[0] >= 0 && values[0] <= 360 && // hue
                values[1] >= 0 && values[1] <= 1 &&   // saturation 
                values[2] >= 0 && values[2] <= 1;     // lightness
