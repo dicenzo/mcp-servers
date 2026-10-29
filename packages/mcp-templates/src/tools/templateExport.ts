@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   TemplateExportInputSchema,
   RenderedTemplate,
@@ -14,7 +14,7 @@ import { PerformanceMonitor } from '../util/performance.js';
 import { formatBytes } from '../util/helpers.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<CallToolResult>;
 }
 
 /**
@@ -139,7 +139,7 @@ export const templateExportTool: ExecutableTool = {
         throw new Error(`Template lookup by ID not implemented: ${templateInput}`);
       } else if (isRenderedTemplate(templateInput)) {
         // Already rendered template
-        renderedTemplate = templateInput as RenderedTemplate;
+        renderedTemplate = templateInput;
       } else {
         // Template definition - need to render first
         if (!variables) {
@@ -249,13 +249,13 @@ export const templateExportTool: ExecutableTool = {
 /**
  * Check if input is a rendered template
  */
-function isRenderedTemplate(obj: any): boolean {
-    return obj && 
-           typeof obj === 'object' && 
-           obj.id && 
-           obj.templateId && 
-           obj.content && 
-           obj.generatedAt;
+function isRenderedTemplate(obj: unknown): obj is RenderedTemplate {
+    if (!obj || typeof obj !== 'object') return false;
+    const candidate = obj as Partial<RenderedTemplate>;
+    return Boolean(candidate.id && 
+           candidate.templateId && 
+           candidate.content && 
+           candidate.generatedAt);
 }
 
   /**

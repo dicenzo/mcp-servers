@@ -1,16 +1,33 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   ComponentLibraryItem,
   ComponentLibrary,
   TemplateError,
   TemplateErrorCode,
-  ComponentType
+  ComponentType,
+  TemplateComponent
 } from '../types/template.js';
 import { PerformanceMonitor } from '../util/performance.js';
 import { generateId, getCurrentTimestamp } from '../util/helpers.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<CallToolResult>;
+}
+
+/** Component as supplied to template.library.add (id is generated; version and tags default) */
+type LibraryComponentInput = Omit<ComponentLibraryItem, 'id' | 'version' | 'tags'> & {
+  version?: string;
+  tags?: string[];
+};
+
+interface LibraryAddArgs {
+  component: LibraryComponentInput;
+  library?: string;
+  options?: {
+    validate?: boolean;
+    overwrite?: boolean;
+    generatePreview?: boolean;
+  };
 }
 
 // In-memory component library storage (in production, this would be persistent)
@@ -19,7 +36,7 @@ const componentLibraries: Map<string, ComponentLibrary> = new Map();
 /**
  * Validate component for library addition
  */
-function validateComponent(componentData: any): TemplateError[] {
+function validateComponent(componentData: Partial<LibraryComponentInput>): TemplateError[] {
   const errors: TemplateError[] = [];
 
   // Required fields
@@ -121,7 +138,7 @@ function validateComponent(componentData: any): TemplateError[] {
 /**
  * Generate preview for component (placeholder implementation)
  */
-async function generatePreview(_component: any): Promise<string | undefined> {
+async function generatePreview(_component: TemplateComponent): Promise<string | undefined> {
   // In a real implementation, this would render the component to create a preview
   // For now, return undefined to indicate no preview generated
   return undefined;
@@ -251,7 +268,7 @@ export const templateLibraryAddTool: ExecutableTool = {
     
     try {
       // Parse and validate input
-      const { component: componentData, library: libraryName = 'default', options = {} } = args as any;
+      const { component: componentData, library: libraryName = 'default', options = {} } = args as LibraryAddArgs;
       
       // Validate component if requested
       if (options.validate !== false) {

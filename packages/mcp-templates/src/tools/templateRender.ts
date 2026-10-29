@@ -1,17 +1,18 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   TemplateRenderInputSchema,
   Template,
   RenderedTemplate,
   TemplateErrorCode,
-  ExportFormat
+  ExportFormat,
+  VariableMap
 } from '../types/template.js';
 import { TemplateEngine } from '../engine/templateEngine.js';
 import { TemplateValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<CallToolResult>;
 }
 
 /**
@@ -144,7 +145,7 @@ export const templateRenderTool: ExecutableTool = {
           mimeType = 'image/svg+xml';
       }
 
-      const result = {
+      const result: Record<string, unknown> = {
         success: true,
         rendered: {
           id: renderedTemplate.id,
@@ -167,7 +168,7 @@ export const templateRenderTool: ExecutableTool = {
 
       // Include metadata if requested
       if (options.includeMetadata !== false) {
-        (result as any).metadata = {
+        result.metadata = {
           generatedAt: renderedTemplate.generatedAt,
           templateMetadata: template.metadata,
           renderingDetails: {
@@ -218,7 +219,7 @@ export const templateRenderTool: ExecutableTool = {
  */
 export async function templateRender(
   template: Template | string,
-  variables: Record<string, any>,
+  variables: VariableMap,
   options: {
     format?: ExportFormat;
     validateVariables?: boolean;
