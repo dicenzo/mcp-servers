@@ -87,13 +87,13 @@ class TypographyServer {
     };
 
     process.on('SIGINT', async () => {
-      console.log('[MCP Typography] Shutting down server...');
+      console.error('[MCP Typography] Shutting down server...');
       await this.server.close();
       process.exit(0);
     });
 
     process.on('SIGTERM', async () => {
-      console.log('[MCP Typography] Shutting down server...');
+      console.error('[MCP Typography] Shutting down server...');
       await this.server.close();
       process.exit(0);
     });

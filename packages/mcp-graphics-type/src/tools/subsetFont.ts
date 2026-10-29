@@ -1,6 +1,6 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { TextToolResult } from '../types/typography.js';
-import type { Glyph } from 'opentype.js';
+import type { Font, Glyph } from 'opentype.js';
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import * as fs from 'fs';
@@ -12,7 +12,9 @@ import {
   SubsetFontInputSchema, 
   SubsetFontInput, 
   FontSubset,
-  TypographyErrorCode 
+  TypographyErrorCode,
+  MAX_CODEPOINT,
+  MAX_UNICODE_RANGES
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
 
@@ -81,11 +83,12 @@ export const subsetFontTool: ExecutableTool = {
             items: {
               type: 'object',
               properties: {
-                start: { type: 'number', minimum: 0 },
-                end: { type: 'number', minimum: 0 }
+                start: { type: 'integer', minimum: 0, maximum: MAX_CODEPOINT },
+                end: { type: 'integer', minimum: 0, maximum: MAX_CODEPOINT }
               },
               required: ['start', 'end']
             },
+            maxItems: MAX_UNICODE_RANGES,
             description: 'Unicode ranges to include'
           },
           features: {
@@ -352,7 +355,7 @@ async function createSubsetWithFonttools(
 
     // Unicode ranges go in the same --unicodes list (pyftsubset accepts "start-end" hex ranges)
     if (options.unicodeRanges) {
-      unicodeSpecs.push(...options.unicodeRanges.map(r => `${r.start.toString(16)}-${r.end.toString(16)}`));
+      unicodeSpecs.push(...mergeUnicodeRanges(options.unicodeRanges).map(r => `${r.start.toString(16)}-${r.end.toString(16)}`));
     }
     args.push(`--unicodes=${unicodeSpecs.join(',')}`);
     
@@ -458,15 +461,13 @@ async function createBasicSubset(
     }
   }
   
-  // Add glyphs for Unicode ranges if specified
+  // Add glyphs for Unicode ranges if specified. Walk the font's cmap rather
+  // than every codepoint in each range: a range can span 1.1M codepoints.
   if (options.unicodeRanges) {
-    for (const range of options.unicodeRanges) {
-      for (let codepoint = range.start; codepoint <= range.end; codepoint++) {
-        const char = String.fromCodePoint(codepoint);
-        const glyph = font.charToGlyph(char);
-        if (glyph) {
-          glyphsToInclude.add(glyph);
-        }
+    for (const codepoint of codepointsInRanges(font, options.unicodeRanges)) {
+      const glyph = font.charToGlyph(String.fromCodePoint(codepoint));
+      if (glyph) {
+        glyphsToInclude.add(glyph);
       }
     }
   }
@@ -506,6 +507,65 @@ async function createBasicSubset(
     glyphsIncluded: glyphArray.length,
     totalGlyphs: font.numGlyphs
   };
+}
+
+/**
+ * Sorts ranges and merges any that overlap or touch, so each codepoint is
+ * covered by exactly one range.
+ */
+export function mergeUnicodeRanges(
+  ranges: Array<{ start: number; end: number }>
+): Array<{ start: number; end: number }> {
+  const sorted = [...ranges].sort((a, b) => a.start - b.start);
+  const merged: Array<{ start: number; end: number }> = [];
+
+  for (const range of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && range.start <= last.end + 1) {
+      last.end = Math.max(last.end, range.end);
+    } else {
+      merged.push({ start: range.start, end: range.end });
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Returns the codepoints mapped by the font's cmap that fall inside any of
+ * the ranges. Cost is proportional to the cmap size, not the range span.
+ */
+export function codepointsInRanges(
+  font: Font,
+  ranges: Array<{ start: number; end: number }>
+): number[] {
+  const merged = mergeUnicodeRanges(ranges);
+  const glyphIndexMap = font.tables.cmap?.glyphIndexMap ?? {};
+
+  const inRanges = (codepoint: number): boolean => {
+    // Binary search over the sorted, non-overlapping ranges
+    let low = 0;
+    let high = merged.length - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      const range = merged[mid];
+      if (!range) {
+        return false;
+      }
+      if (codepoint < range.start) {
+        high = mid - 1;
+      } else if (codepoint > range.end) {
+        low = mid + 1;
+      } else {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  return Object.keys(glyphIndexMap)
+    .map(Number)
+    .filter(codepoint => Number.isInteger(codepoint) && inRanges(codepoint));
 }
 
 /**

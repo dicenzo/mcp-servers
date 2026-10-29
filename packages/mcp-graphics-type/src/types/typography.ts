@@ -143,12 +143,18 @@ export const TextMetricsSchema = z.object({
 });
 
 // Font Subsetting Types
+/** Highest valid Unicode codepoint */
+export const MAX_CODEPOINT = 0x10FFFF;
+
+/** Upper bound on unicodeRanges entries accepted by type.subsetFont */
+export const MAX_UNICODE_RANGES = 256;
+
 export const FontSubsetOptionsSchema = z.object({
   characters: z.string(),
   unicodeRanges: z.array(z.object({
-    start: z.number(),
-    end: z.number()
-  })).optional(),
+    start: z.number().int().min(0).max(MAX_CODEPOINT),
+    end: z.number().int().min(0).max(MAX_CODEPOINT)
+  })).max(MAX_UNICODE_RANGES).optional(),
   features: z.array(z.string()).optional(),
   hinting: z.boolean().default(true),
   desubroutinize: z.boolean().default(false),
