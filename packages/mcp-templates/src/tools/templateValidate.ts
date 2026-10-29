@@ -73,7 +73,7 @@ export const templateValidateTool: ExecutableTool = {
       // Validate input
       const validatedInput = TemplateValidateInputSchema.parse(args);
       const { template, variables } = validatedInput;
-      const options = (validatedInput as any).options || {};
+      const options = validatedInput.options || {};
 
       // Perform basic template validation
       let validationReport: ValidationReport;
