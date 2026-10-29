@@ -123,6 +123,9 @@ export const generateFallbackTool: ExecutableTool = {
         // Validate input
         const input = TypographyValidator.validateInput(GenerateFallbackInputSchema, args) as GenerateFallbackInput;
         
+        // An empty list means "no preference": use the schema default rather than no platforms
+        const targetPlatforms = input.targetPlatforms?.length ? input.targetPlatforms : ['web' as const];
+
         // Load primary font
         const fontBuffer = await loadFontBuffer(input.primaryFont);
         
@@ -130,7 +133,7 @@ export const generateFallbackTool: ExecutableTool = {
         const fontStack = await generateSystemFontStack(
           fontBuffer, 
           input.primaryFont,
-          input.targetPlatforms || ['web'],
+          targetPlatforms,
           {
             textContent: input.textContent,
             preferredGenericFamily: input.preferredGenericFamily,
@@ -140,7 +143,7 @@ export const generateFallbackTool: ExecutableTool = {
         
         return {
           fontStack,
-          targetPlatforms: input.targetPlatforms || ['web']
+          targetPlatforms
         };
       });
 
