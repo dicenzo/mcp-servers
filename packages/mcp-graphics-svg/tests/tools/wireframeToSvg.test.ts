@@ -100,9 +100,7 @@ describe('wireframeToSvg Tool', () => {
   });
 
   describe('executeWireframeToSvg', () => {
-    // Skip DOM-dependent tests in CI environment to avoid getBBox errors
-    // These tests would pass in a proper browser environment
-    it.skip('should render simple box wireframe', async () => {
+    it('should render simple box wireframe', async () => {
       const args = {
         wireframe_text: '┌─────────┐\n│ Header  │\n└─────────┘',
         width: 800,
@@ -113,6 +111,7 @@ describe('wireframeToSvg Tool', () => {
       const result = await executeWireframeToSvg(args);
       expect(result).toContain('<svg');
       expect(result).toContain('</svg>');
+      expect(result).toContain('>Header</text>');
     });
 
     // Test the parser functionality which doesn't depend on DOM

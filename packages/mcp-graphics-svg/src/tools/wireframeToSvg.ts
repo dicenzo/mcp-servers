@@ -1,6 +1,6 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { SVG, registerWindow } from '@svgdotjs/svg.js';
+import { SVG, registerWindow, type Container } from '@svgdotjs/svg.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<any>;
@@ -208,6 +208,27 @@ class WireframeParser {
   }
 }
 
+/**
+ * Adds a single-line text element whose top-left corner sits at (x, y).
+ *
+ * svg.js's `text()` and `move()` on text measure the element with getBBox(),
+ * which does not exist in server-side DOMs such as jsdom, so this tool would
+ * throw for any wireframe containing text. `plain()` plus explicit x/y
+ * attributes builds the same markup without layout measurement.
+ */
+function addText(
+  parent: Container,
+  content: string,
+  x: number,
+  y: number,
+  options: { fill: string; weight?: string }
+): void {
+  parent.plain(content)
+    .attr({ x, y, 'dominant-baseline': 'hanging' })
+    .font({ family: 'Arial, sans-serif', size: 14, ...(options.weight ? { weight: options.weight } : {}) })
+    .fill(options.fill);
+}
+
 export async function executeWireframeToSvg(args: z.infer<typeof WireframeToSvgSchema>): Promise<string> {
   // Use JSDOM for SVG creation
   const { JSDOM } = await import('jsdom');
@@ -244,10 +265,7 @@ export async function executeWireframeToSvg(args: z.infer<typeof WireframeToSvgS
         break;
 
       case 'text':
-        draw.text(element.content)
-          .move(element.x, element.y)
-          .font({ family: 'Arial, sans-serif', size: 14 })
-          .fill(colors.text);
+        addText(draw, element.content, element.x, element.y, { fill: colors.text });
         break;
 
       case 'button':
@@ -257,17 +275,11 @@ export async function executeWireframeToSvg(args: z.infer<typeof WireframeToSvgS
           .fill(colors.accent)
           .stroke({ color: colors.border, width: 1 })
           .radius(4);
-        button.text(element.content)
-          .move(element.x, element.y)
-          .font({ family: 'Arial, sans-serif', size: 14, weight: 'bold' })
-          .fill('#ffffff');
+        addText(button, element.content, element.x, element.y, { fill: '#ffffff', weight: 'bold' });
         break;
 
       case 'link':
-        draw.text(element.content)
-          .move(element.x, element.y)
-          .font({ family: 'Arial, sans-serif', size: 14 })
-          .fill(colors.accent);
+        addText(draw, element.content, element.x, element.y, { fill: colors.accent });
         break;
     }
   }

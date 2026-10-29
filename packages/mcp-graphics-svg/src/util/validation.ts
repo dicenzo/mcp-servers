@@ -125,7 +125,17 @@ export class SVGValidator {
    * Validates color values (hex, rgb, named colors)
    */
   static validateColor(color: string): void {
-    if (!color || typeof color !== 'string') return; // Optional colors are allowed
+    // Optional colors are allowed: an absent or empty value means "not specified"
+    if (color === undefined || color === null || color === '') return;
+
+    if (typeof color !== 'string') {
+      throw new Error(JSON.stringify({
+        code: SVGErrorCode.INVALID_INPUT,
+        message: 'Color must be a string',
+        details: { color, receivedType: typeof color },
+        suggestions: ['Provide the color as a string, e.g. "#ff0000", "rgb(255, 0, 0)" or "red"']
+      }));
+    }
 
     const hexPattern = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
     const rgbPattern = /^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/;

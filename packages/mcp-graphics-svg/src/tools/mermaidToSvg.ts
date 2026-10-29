@@ -87,8 +87,7 @@ export const mermaidToSvgTool: ExecutableTool = {
     required: ['mermaid_code']
   },
   invoke: async (args: unknown) => {
-    const validatedArgs = MermaidToSvgSchema.parse(args);
-    const svg = await executeMermaidToSvg(validatedArgs);
+    const svg = await executeMermaidToSvg(args as z.input<typeof MermaidToSvgSchema>);
     return {
       content: [
         {
@@ -100,7 +99,12 @@ export const mermaidToSvgTool: ExecutableTool = {
   }
 };
 
-export async function executeMermaidToSvg(args: z.infer<typeof MermaidToSvgSchema>): Promise<string> {
+/**
+ * Accepts the tool's input shape (defaults optional) and validates it, so direct
+ * callers get the same defaults and validation as the MCP `invoke` path.
+ */
+export async function executeMermaidToSvg(input: z.input<typeof MermaidToSvgSchema>): Promise<string> {
+  const args = MermaidToSvgSchema.parse(input);
   // Set up DOM environment for Mermaid
   const dom = new JSDOM('<!DOCTYPE html><html><body><div id="mermaid-div"></div></body></html>');
   const window = dom.window as any;
@@ -184,7 +188,6 @@ export function wireframeToMermaid(wireframeText: string): string {
   
   // Extract sections and components
   const sections: string[] = [];
-  let currentSection = '';
   
   for (const line of lines) {
     // Look for section headers (### or ##)

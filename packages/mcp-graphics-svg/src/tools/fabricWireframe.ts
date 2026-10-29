@@ -89,8 +89,7 @@ export const fabricWireframeTool: ExecutableTool = {
     required: ['wireframe_text']
   },
   invoke: async (args: unknown) => {
-    const validatedArgs = FabricWireframeSchema.parse(args);
-    const result = await executeFabricWireframe(validatedArgs);
+    const result = await executeFabricWireframe(args as z.input<typeof FabricWireframeSchema>);
     return {
       content: [
         {
@@ -102,7 +101,12 @@ export const fabricWireframeTool: ExecutableTool = {
   }
 };
 
-export async function executeFabricWireframe(args: z.infer<typeof FabricWireframeSchema>): Promise<string> {
+/**
+ * Accepts the tool's input shape (defaults optional) and validates it, so direct
+ * callers get the same defaults and validation as the MCP `invoke` path.
+ */
+export async function executeFabricWireframe(input: z.input<typeof FabricWireframeSchema>): Promise<string> {
+  const args = FabricWireframeSchema.parse(input);
   // Fabric.js functionality disabled due to Canvas build issues
   // Return a placeholder SVG for now
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${args.width}" height="${args.height}" viewBox="0 0 ${args.width} ${args.height}">

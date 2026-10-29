@@ -107,9 +107,9 @@ describe('Performance Utilities', () => {
         const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
         
         // Mock memory usage to simulate high memory usage
-        const originalMemoryUsage = process.memoryUsage;
+        const memoryUsageSpy = jest.spyOn(process, 'memoryUsage');
         let memoryCallCount = 0;
-        (process.memoryUsage as jest.Mock) = jest.fn(() => {
+        memoryUsageSpy.mockImplementation(() => {
           memoryCallCount++;
           const baseMemory = { rss: 1000000, heapUsed: 1000000, heapTotal: 1000000, external: 1000000, arrayBuffers: 0 };
           if (memoryCallCount === 1) {
@@ -129,7 +129,7 @@ describe('Performance Utilities', () => {
           expect.stringContaining('[Memory Warning] test.memory used')
         );
 
-        process.memoryUsage = originalMemoryUsage;
+        memoryUsageSpy.mockRestore();
         consoleSpy.mockRestore();
       });
     });
@@ -259,8 +259,8 @@ describe('Performance Utilities', () => {
       });
 
       it('should format MB values correctly', () => {
-        const originalMemoryUsage = process.memoryUsage;
-        (process.memoryUsage as jest.Mock) = jest.fn(() => ({
+        const memoryUsageSpy = jest.spyOn(process, 'memoryUsage');
+        memoryUsageSpy.mockImplementation(() => ({
           rss: 1024 * 1024, // 1MB
           heapUsed: 2 * 1024 * 1024, // 2MB
           heapTotal: 3 * 1024 * 1024, // 3MB
@@ -275,7 +275,7 @@ describe('Performance Utilities', () => {
         expect(usage.heapTotal.mb).toBe(3);
         expect(usage.external.mb).toBe(0.5);
 
-        process.memoryUsage = originalMemoryUsage;
+        memoryUsageSpy.mockRestore();
       });
     });
 
@@ -291,8 +291,8 @@ describe('Performance Utilities', () => {
       });
 
       it('should throw error when memory limit exceeded', async () => {
-        const originalMemoryUsage = process.memoryUsage;
-        (process.memoryUsage as jest.Mock) = jest.fn(() => ({
+        const memoryUsageSpy = jest.spyOn(process, 'memoryUsage');
+        memoryUsageSpy.mockImplementation(() => ({
           rss: 1024 * 1024,
           heapUsed: 200 * 1024 * 1024, // 200MB
           heapTotal: 300 * 1024 * 1024,
@@ -309,15 +309,15 @@ describe('Performance Utilities', () => {
           MemoryOptimizer.monitorMemory(testOperation, 100) // 100MB limit
         ).rejects.toThrow(/Memory limit exceeded/);
 
-        process.memoryUsage = originalMemoryUsage;
+        memoryUsageSpy.mockRestore();
       });
 
       it('should log memory usage notice for high delta', async () => {
         const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
         
-        const originalMemoryUsage = process.memoryUsage;
+        const memoryUsageSpy = jest.spyOn(process, 'memoryUsage');
         let callCount = 0;
-        (process.memoryUsage as jest.Mock) = jest.fn(() => {
+        memoryUsageSpy.mockImplementation(() => {
           callCount++;
           const baseUsage = 10 * 1024 * 1024; // 10MB
           return {
@@ -337,7 +337,7 @@ describe('Performance Utilities', () => {
           expect.stringContaining('[Memory Notice] Operation used 15.00MB additional memory')
         );
 
-        process.memoryUsage = originalMemoryUsage;
+        memoryUsageSpy.mockRestore();
         consoleSpy.mockRestore();
       });
 
