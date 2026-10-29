@@ -5,8 +5,10 @@ import {
   TemplateError,
   TemplateErrorCode,
   ComponentType,
-  TemplateComponent
+  TemplateComponent,
+  PositionSchema
 } from '../types/template.js';
+import { z } from 'zod';
 import { PerformanceMonitor } from '../util/performance.js';
 import { generateId, getCurrentTimestamp } from '../util/helpers.js';
 
@@ -20,15 +22,38 @@ type LibraryComponentInput = Omit<ComponentLibraryItem, 'id' | 'version' | 'tags
   tags?: string[];
 };
 
-interface LibraryAddArgs {
-  component: LibraryComponentInput;
-  library?: string;
-  options?: {
-    validate?: boolean;
-    overwrite?: boolean;
-    generatePreview?: boolean;
-  };
-}
+export const MAX_LIBRARIES = 50;
+export const MAX_COMPONENTS_PER_LIBRARY = 500;
+/** Max serialized size of one library item */
+export const MAX_LIBRARY_ITEM_BYTES = 256 * 1024;
+
+/**
+ * Structural schema for template.library.add input. Always enforced (the
+ * `validate` option only toggles the friendlier semantic checks below).
+ */
+const LibraryAddArgsSchema = z.object({
+  component: z.object({
+    name: z.string().max(100),
+    description: z.string().max(500).optional(),
+    category: z.string().max(100),
+    tags: z.array(z.string().max(50)).max(20).optional(),
+    component: z.object({
+      id: z.string().max(200),
+      type: z.nativeEnum(ComponentType),
+      position: PositionSchema
+    }).passthrough(),
+    preview: z.string().max(MAX_LIBRARY_ITEM_BYTES).optional(),
+    version: z.string().max(50).optional(),
+    author: z.string().max(200).optional(),
+    dependencies: z.array(z.string().max(200)).max(50).optional()
+  }),
+  library: z.string().max(64).regex(/^[a-zA-Z0-9-_]+$/).optional(),
+  options: z.object({
+    validate: z.boolean().optional(),
+    overwrite: z.boolean().optional(),
+    generatePreview: z.boolean().optional()
+  }).optional()
+});
 
 // In-memory component library storage (in production, this would be persistent)
 const componentLibraries: Map<string, ComponentLibrary> = new Map();
@@ -268,7 +293,17 @@ export const templateLibraryAddTool: ExecutableTool = {
     
     try {
       // Parse and validate input
-      const { component: componentData, library: libraryName = 'default', options = {} } = args as LibraryAddArgs;
+      const parsedArgs = LibraryAddArgsSchema.safeParse(args);
+      if (!parsedArgs.success) {
+        throw new Error(`Invalid input: ${parsedArgs.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
+      }
+      const { library: libraryName = 'default', options = {} } = parsedArgs.data;
+      // The schema checks structure; per-type component fields are checked semantically below
+      const componentData = parsedArgs.data.component as unknown as LibraryComponentInput;
+
+      if (Buffer.byteLength(JSON.stringify(componentData), 'utf8') > MAX_LIBRARY_ITEM_BYTES) {
+        throw new Error(`Component exceeds the size limit of ${MAX_LIBRARY_ITEM_BYTES} bytes`);
+      }
       
       // Validate component if requested
       if (options.validate !== false) {
@@ -297,6 +332,9 @@ export const templateLibraryAddTool: ExecutableTool = {
       // Get or create library
       let library = componentLibraries.get(libraryName);
       if (!library) {
+        if (componentLibraries.size >= MAX_LIBRARIES) {
+          throw new Error(`Library limit reached (max ${MAX_LIBRARIES} libraries)`);
+        }
         library = {
           name: libraryName,
           version: '1.0.0',
@@ -334,6 +372,10 @@ export const templateLibraryAddTool: ExecutableTool = {
             }, null, 2)
           }]
         };
+      }
+
+      if (existingIndex < 0 && library.components.length >= MAX_COMPONENTS_PER_LIBRARY) {
+        throw new Error(`Component limit reached for library '${libraryName}' (max ${MAX_COMPONENTS_PER_LIBRARY} components)`);
       }
 
       // Create library item

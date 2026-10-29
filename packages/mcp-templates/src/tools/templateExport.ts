@@ -1,6 +1,7 @@
 import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   TemplateExportInputSchema,
+  RenderedTemplateSchema,
   RenderedTemplate,
   Template,
   ExportFormat,
@@ -137,9 +138,13 @@ export const templateExportTool: ExecutableTool = {
       if (typeof templateInput === 'string') {
         // Template ID - would need to load and render
         throw new Error(`Template lookup by ID not implemented: ${templateInput}`);
-      } else if (isRenderedTemplate(templateInput)) {
-        // Already rendered template
-        renderedTemplate = templateInput;
+      } else if (looksLikeRenderedTemplate(templateInput)) {
+        // Already rendered template: validate fully (sizes included) before trusting it
+        const parsed = RenderedTemplateSchema.safeParse(templateInput);
+        if (!parsed.success) {
+          throw new Error(`Invalid rendered template: ${parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
+        }
+        renderedTemplate = parsed.data;
       } else {
         // Template definition - need to render first
         if (!variables) {
@@ -247,15 +252,12 @@ export const templateExportTool: ExecutableTool = {
 };
 
 /**
- * Check if input is a rendered template
+ * Check if input is shaped like a rendered template (it is then validated with RenderedTemplateSchema)
  */
-function isRenderedTemplate(obj: unknown): obj is RenderedTemplate {
+function looksLikeRenderedTemplate(obj: unknown): boolean {
     if (!obj || typeof obj !== 'object') return false;
     const candidate = obj as Partial<RenderedTemplate>;
-    return Boolean(candidate.id && 
-           candidate.templateId && 
-           candidate.content && 
-           candidate.generatedAt);
+    return Boolean(candidate.content || candidate.generatedAt);
 }
 
   /**
