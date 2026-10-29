@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { ZodError } from 'zod';
 import { ColorUtils } from '../util/colorUtils.js';
 import {
   ColorBrandLintInputSchema,
@@ -7,6 +8,7 @@ import {
   BrandLintReport,
   ColorErrorCode,
   Color,
+  ColorInput,
   BrandRules,
   AccessibilityContext
 } from '../types/color.js';
@@ -51,15 +53,7 @@ export async function colorLintBrand(input: unknown): Promise<ColorLintBrandResp
     const { palette, rules, context } = validated;
     
     // Parse palette colors
-    const parsedColors: Color[] = [];
-    for (const colorInput of palette) {
-      try {
-        const parsedColor = ColorUtils.parseColorInput(colorInput);
-        parsedColors.push(parsedColor);
-      } catch (error) {
-        console.warn('Skipping invalid color in palette:', colorInput, error);
-      }
-    }
+    const parsedColors = parseValidColors(palette, 'palette');
     
     if (parsedColors.length === 0) {
       throw new Error('No valid colors found in palette');
@@ -96,9 +90,9 @@ export async function colorLintBrand(input: unknown): Promise<ColorLintBrandResp
     }
     
     // Check for color duplicates
-    await lintDuplicates(parsedColors, issues);
+    const duplicateCount = await lintDuplicates(parsedColors, issues);
     rulesApplied.push('duplicates');
-    totalScore -= issues.filter(i => i.message.includes('duplicate')).length * 5;
+    totalScore -= duplicateCount * 5;
     
     const endTime = performance.now();
     const processingTime = Math.round((endTime - startTime) * 100) / 100;
@@ -129,6 +123,28 @@ export async function colorLintBrand(input: unknown): Promise<ColorLintBrandResp
     };
     
   } catch (error) {
+    // Handle schema validation errors. Checked first: a ZodError's message is
+    // itself JSON (the issue list), so the structured-error branch below would
+    // otherwise return that array as the error, with no code or message.
+    if (error instanceof ZodError) {
+      return {
+        success: false,
+        error: {
+          code: ColorErrorCode.PROCESSING_FAILED,
+          message: ColorUtils.describeValidationError(error),
+          details: {
+            input,
+            validationErrors: error.issues,
+            processingTime: Math.round((performance.now() - startTime) * 100) / 100
+          },
+          suggestions: [
+            'Provide a palette of 1-20 colors and a rules object',
+            'Ensure minContrast is between 1 and 21 and maxDeltaE between 0 and 100'
+          ]
+        }
+      };
+    }
+
     // Handle structured errors from ColorUtils
     if (error instanceof Error) {
       try {
@@ -214,7 +230,10 @@ async function lintAllowedColors(
 ): Promise<void> {
   if (!allowedColors) return;
   
-  const parsedAllowedColors = allowedColors.map(ColorUtils.parseColorInput);
+  const parsedAllowedColors = parseValidColors(allowedColors, 'allowedColors');
+  if (parsedAllowedColors.length === 0) {
+    throw new Error('No valid colors found in allowedColors');
+  }
   
   for (const color of colors) {
     let isAllowed = false;
@@ -257,7 +276,7 @@ async function lintForbiddenColors(
 ): Promise<void> {
   if (!forbiddenColors) return;
   
-  const parsedForbiddenColors = forbiddenColors.map(ColorUtils.parseColorInput);
+  const parsedForbiddenColors = parseValidColors(forbiddenColors, 'forbiddenColors');
   
   for (const color of colors) {
     for (const forbiddenColor of parsedForbiddenColors) {
@@ -315,12 +334,13 @@ async function lintAccessibilityRules(
 }
 
 /**
- * Lint for duplicate colors
+ * Lint for duplicate colors; returns the number of duplicate issues added
  */
 async function lintDuplicates(
   colors: Color[],
   issues: BrandLintReport['issues']
-): Promise<void> {
+): Promise<number> {
+  let duplicateCount = 0;
   const duplicates = new Set<number>();
   
   for (let i = 0; i < colors.length; i++) {
@@ -330,6 +350,7 @@ async function lintDuplicates(
         
         if (deltaE < 1) { // Essentially the same color
           duplicates.add(j);
+          duplicateCount++;
           issues.push({
             type: 'off-brand',
             severity: 'info',
@@ -343,6 +364,23 @@ async function lintDuplicates(
       }
     }
   }
+
+  return duplicateCount;
+}
+
+/**
+ * Parse color inputs, skipping (with a warning) any that are invalid
+ */
+function parseValidColors(inputs: ColorInput[], label: string): Color[] {
+  const parsed: Color[] = [];
+  for (const colorInput of inputs) {
+    try {
+      parsed.push(ColorUtils.parseColorInput(colorInput));
+    } catch (error) {
+      console.warn(`Skipping invalid color in ${label}:`, colorInput, error);
+    }
+  }
+  return parsed;
 }
 
 /**

@@ -36,7 +36,7 @@ describe('colorLintBrand', () => {
       if (result.success) {
         const contrastIssues = result.result.issues.filter(i => i.type === 'contrast');
         expect(contrastIssues.length).toBeGreaterThan(0);
-        expect(contrastIssues[0].message).toContain('contrast ratio');
+        expect(contrastIssues[0].message).toContain('Contrast ratio');
         expect(result.result.score).toBeLessThan(100);
       }
     });

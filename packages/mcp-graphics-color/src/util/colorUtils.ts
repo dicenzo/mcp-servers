@@ -7,6 +7,7 @@ import {
 } from '../types/color.js';
 import * as culori from 'culori';
 import type { Color as CuloriColor, Mode as CuloriMode } from 'culori';
+import type { ZodError } from 'zod';
 
 /**
  * Channel values a culori color object may carry, keyed by channel name.
@@ -43,6 +44,22 @@ export class ColorUtils {
     'slategray', 'slategrey', 'snow', 'springgreen', 'steelblue', 'tan', 'teal', 'thistle',
     'tomato', 'turquoise', 'violet', 'wheat', 'white', 'whitesmoke', 'yellow', 'yellowgreen'
   ]);
+
+  /**
+   * Describe schema validation failures in readable terms, e.g.
+   * "brand palette: Array must contain at least 1 element(s)".
+   * camelCase field names are split into words; a failure on the whole
+   * input (such as null) is reported against "input".
+   */
+  static describeValidationError(error: ZodError): string {
+    const descriptions = error.issues.map(issue => {
+      const field = issue.path.length > 0
+        ? issue.path.map(part => String(part).replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()).join(' > ')
+        : 'input';
+      return `${field}: ${issue.message}`;
+    });
+    return `Invalid input parameters: ${descriptions.join('; ')}`;
+  }
 
   /**
    * Parse and normalize color input to internal Color format

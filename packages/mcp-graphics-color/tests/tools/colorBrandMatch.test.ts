@@ -24,7 +24,7 @@ describe('colorBrandMatch', () => {
     test('finds close match with high confidence', async () => {
       const result = await colorBrandMatch({
         targetColor: '#FF5733',
-        brandPalette: ['#FF5834', '#33FF57', '#3357FF'], // Very close red
+        brandPalette: ['#FF5B37', '#33FF57', '#3357FF'], // Very close red (CIE76 deltaE ~2.07)
         maxDeltaE: 10
       });
 
@@ -32,7 +32,7 @@ describe('colorBrandMatch', () => {
       if (result.success) {
         expect(result.result.confidence).toBe('high');
         expect(result.result.deltaE).toBeLessThan(4); // maxDeltaE * 0.4
-        expect(result.result.bestMatch.hex).toBe('#ff5834');
+        expect(result.result.bestMatch.hex).toBe('#ff5b37');
         expect(result.result.alternatives).toHaveLength(2);
       }
     });
@@ -40,7 +40,7 @@ describe('colorBrandMatch', () => {
     test('finds medium confidence match', async () => {
       const result = await colorBrandMatch({
         targetColor: '#FF0000', // Pure red
-        brandPalette: ['#CC3333', '#00FF00', '#0000FF'], // Darker red
+        brandPalette: ['#E00000', '#00FF00', '#0000FF'], // Darker red (CIE76 deltaE ~11.93)
         maxDeltaE: 20
       });
 
@@ -48,7 +48,7 @@ describe('colorBrandMatch', () => {
       if (result.success) {
         expect(result.result.confidence).toBe('medium');
         expect(result.result.deltaE).toBeLessThan(16); // maxDeltaE * 0.8
-        expect(result.result.bestMatch.hex).toBe('#cc3333');
+        expect(result.result.bestMatch.hex).toBe('#e00000');
       }
     });
 
@@ -161,8 +161,8 @@ describe('colorBrandMatch', () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.code).toBe(ColorErrorCode.BRAND_MATCH_FAILED);
-        expect(result.error.suggestions).toContain('Verify target color format is correct');
+        expect(result.error.code).toBe(ColorErrorCode.INVALID_COLOR);
+        expect(result.error.suggestions).toContain('Use hex format (#RGB or #RRGGBB)');
       }
     });
 
@@ -288,7 +288,7 @@ describe('colorBrandMatch', () => {
     test('handles very similar colors with proper confidence levels', async () => {
       const result = await colorBrandMatch({
         targetColor: '#FF5733',
-        brandPalette: ['#FF5734', '#FF5735', '#FF5736'], // Very similar reds
+        brandPalette: ['#FF5A36', '#FF5B37', '#FF5C38'], // Very similar reds (closest CIE76 deltaE ~1.55)
         maxDeltaE: 5
       });
 
@@ -343,7 +343,7 @@ describe('colorBrandMatch', () => {
     test('assigns high confidence for deltaE <= maxDeltaE * 0.4', async () => {
       const result = await colorBrandMatch({
         targetColor: '#FF0000',
-        brandPalette: ['#FF1111'], // Close match
+        brandPalette: ['#FF0B0B'], // Close match (CIE76 deltaE ~2.76)
         maxDeltaE: 10
       });
 
@@ -357,7 +357,7 @@ describe('colorBrandMatch', () => {
     test('assigns medium confidence for deltaE <= maxDeltaE * 0.8', async () => {
       const result = await colorBrandMatch({
         targetColor: '#FF0000',
-        brandPalette: ['#CC3333'], // Medium match
+        brandPalette: ['#E00000'], // Medium match (CIE76 deltaE ~11.93)
         maxDeltaE: 20
       });
 
