@@ -64,26 +64,26 @@ class LayoutServer {
 
       try {
         switch (name) {
-          case 'layout.createGrid':
-            return await (createGridTool as any).invoke(args);
+        case 'layout.createGrid':
+          return await (createGridTool as any).invoke(args);
             
-          case 'layout.createFlex':
-            return await (createFlexTool as any).invoke(args);
+        case 'layout.createFlex':
+          return await (createFlexTool as any).invoke(args);
             
-          case 'layout.addConstraints':
-            return await (addConstraintsTool as any).invoke(args);
+        case 'layout.addConstraints':
+          return await (addConstraintsTool as any).invoke(args);
             
-          case 'layout.autoLayout':
-            return await (autoLayoutTool as any).invoke(args);
+        case 'layout.autoLayout':
+          return await (autoLayoutTool as any).invoke(args);
             
-          case 'layout.responsive':
-            return await (responsiveTool as any).invoke(args);
+        case 'layout.responsive':
+          return await (responsiveTool as any).invoke(args);
             
-          case 'layout.measure':
-            return await (measureTool as any).invoke(args);
+        case 'layout.measure':
+          return await (measureTool as any).invoke(args);
             
-          default:
-            throw new Error(`Unknown tool: ${name}`);
+        default:
+          throw new Error(`Unknown tool: ${name}`);
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

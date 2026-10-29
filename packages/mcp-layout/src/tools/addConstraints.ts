@@ -271,7 +271,7 @@ export const addConstraintsTool: ExecutableTool = {
             operations: performance.operations
           }
         },
-        css: "CSS generation temporarily disabled",
+        css: 'CSS generation temporarily disabled',
         warnings: allErrors.filter(e => e.code !== 'CONSTRAINT_CONFLICT').map(e => e.message)
       };
 

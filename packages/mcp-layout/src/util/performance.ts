@@ -128,7 +128,7 @@ export class LayoutPerformanceTracker {
     maxDuration: number;
     totalOperations: number;
     operationTypes: Record<string, number>;
-  } {
+    } {
     if (this.history.length === 0) {
       return {
         averageDuration: 0,

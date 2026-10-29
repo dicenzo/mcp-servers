@@ -145,24 +145,24 @@ export class AutoLayoutEngine {
     // Container sizing based on children count
     if (content.children || content.items) {
       const itemCount = Array.isArray(content.children) ? content.children.length : 
-                        Array.isArray(content.items) ? content.items.length : 1;
+        Array.isArray(content.items) ? content.items.length : 1;
       baseSize.height = Math.max(baseSize.height, itemCount * 40);
       baseSize.width = Math.max(baseSize.width, 200);
     }
 
     // Element type adjustments
     switch (elementType) {
-      case 'span':
-        baseSize.height = Math.min(baseSize.height, 30);
-        break;
-      case 'image':
-        baseSize.width = Math.max(baseSize.width, 100);
-        baseSize.height = Math.max(baseSize.height, 100);
-        break;
-      case 'svg':
-        baseSize.width = Math.max(baseSize.width, 50);
-        baseSize.height = Math.max(baseSize.height, 50);
-        break;
+    case 'span':
+      baseSize.height = Math.min(baseSize.height, 30);
+      break;
+    case 'image':
+      baseSize.width = Math.max(baseSize.width, 100);
+      baseSize.height = Math.max(baseSize.height, 100);
+      break;
+    case 'svg':
+      baseSize.width = Math.max(baseSize.width, 50);
+      baseSize.height = Math.max(baseSize.height, 50);
+      break;
     }
 
     return baseSize;
@@ -196,15 +196,15 @@ export class AutoLayoutEngine {
 
     // Element type priority adjustments
     switch (elementType) {
-      case 'text':
-        priority += 50;
-        break;
-      case 'image':
-        priority += 75;
-        break;
-      case 'svg':
-        priority += 25;
-        break;
+    case 'text':
+      priority += 50;
+      break;
+    case 'image':
+      priority += 75;
+      break;
+    case 'svg':
+      priority += 25;
+      break;
     }
 
     return priority;
@@ -263,15 +263,15 @@ export class AutoLayoutEngine {
     const sortedElements = [...analyzedElements].sort((a, b) => b.priority - a.priority);
 
     switch (config.direction) {
-      case 'vertical':
-        constraints.push(...this.generateVerticalLayoutConstraints(sortedElements, config, bounds, monitor));
-        break;
-      case 'horizontal':
-        constraints.push(...this.generateHorizontalLayoutConstraints(sortedElements, config, bounds, monitor));
-        break;
-      case 'grid':
-        constraints.push(...this.generateGridLayoutConstraints(sortedElements, config, bounds, monitor));
-        break;
+    case 'vertical':
+      constraints.push(...this.generateVerticalLayoutConstraints(sortedElements, config, bounds, monitor));
+      break;
+    case 'horizontal':
+      constraints.push(...this.generateHorizontalLayoutConstraints(sortedElements, config, bounds, monitor));
+      break;
+    case 'grid':
+      constraints.push(...this.generateGridLayoutConstraints(sortedElements, config, bounds, monitor));
+      break;
     }
 
     // Apply padding constraints
@@ -327,35 +327,35 @@ export class AutoLayoutEngine {
 
       // Horizontal alignment
       switch (config.alignment) {
-        case 'start':
-          constraints.push({
-            type: 'position',
-            element: item.element.id,
-            property: 'x',
-            value: bounds.x + config.padding.left,
-            relation: 'equal',
-            priority: 700
-          });
-          break;
-        case 'center':
-          constraints.push({
-            type: 'alignment',
-            element: item.element.id,
-            property: 'center-x',
-            value: 0,
-            priority: 700
-          });
-          break;
-        case 'end':
-          constraints.push({
-            type: 'position',
-            element: item.element.id,
-            property: 'right',
-            value: config.padding.right,
-            relation: 'equal',
-            priority: 700
-          });
-          break;
+      case 'start':
+        constraints.push({
+          type: 'position',
+          element: item.element.id,
+          property: 'x',
+          value: bounds.x + config.padding.left,
+          relation: 'equal',
+          priority: 700
+        });
+        break;
+      case 'center':
+        constraints.push({
+          type: 'alignment',
+          element: item.element.id,
+          property: 'center-x',
+          value: 0,
+          priority: 700
+        });
+        break;
+      case 'end':
+        constraints.push({
+          type: 'position',
+          element: item.element.id,
+          property: 'right',
+          value: config.padding.right,
+          relation: 'equal',
+          priority: 700
+        });
+        break;
       }
 
       currentY += item.naturalSize.height + config.spacing;
@@ -411,35 +411,35 @@ export class AutoLayoutEngine {
 
       // Vertical alignment
       switch (config.alignment) {
-        case 'start':
-          constraints.push({
-            type: 'position',
-            element: item.element.id,
-            property: 'y',
-            value: bounds.y + config.padding.top,
-            relation: 'equal',
-            priority: 700
-          });
-          break;
-        case 'center':
-          constraints.push({
-            type: 'alignment',
-            element: item.element.id,
-            property: 'center-y',
-            value: 0,
-            priority: 700
-          });
-          break;
-        case 'end':
-          constraints.push({
-            type: 'position',
-            element: item.element.id,
-            property: 'bottom',
-            value: config.padding.bottom,
-            relation: 'equal',
-            priority: 700
-          });
-          break;
+      case 'start':
+        constraints.push({
+          type: 'position',
+          element: item.element.id,
+          property: 'y',
+          value: bounds.y + config.padding.top,
+          relation: 'equal',
+          priority: 700
+        });
+        break;
+      case 'center':
+        constraints.push({
+          type: 'alignment',
+          element: item.element.id,
+          property: 'center-y',
+          value: 0,
+          priority: 700
+        });
+        break;
+      case 'end':
+        constraints.push({
+          type: 'position',
+          element: item.element.id,
+          property: 'bottom',
+          value: config.padding.bottom,
+          relation: 'equal',
+          priority: 700
+        });
+        break;
       }
 
       currentX += item.naturalSize.width + config.spacing;

@@ -225,7 +225,7 @@ export const createFlexTool: ExecutableTool = {
             operations: performance.operations
           }
         },
-        css: "CSS generation temporarily disabled",
+        css: 'CSS generation temporarily disabled',
         warnings: allErrors.filter(e => e.code !== 'INVALID_CONFIG').map(e => e.message)
       };
 
