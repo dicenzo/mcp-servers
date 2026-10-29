@@ -27,22 +27,20 @@ describe('Templates Tool', () => {
   });
 
   describe('Input Validation', () => {
+    // Tools throw on invalid input; src/index.ts turns the throw into the MCP error response
+    // ({ error: true, message } with isError), which tests/index.test.ts covers.
     it('should validate required name parameter', async () => {
       const generator = tool.invoke({} as any);
-      const result = await generator.next();
-      
-      expect(result.value).toBeDefined();
-      expect(result.value.type).toBe('text');
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow(/"name"[\s\S]*Required/);
+      expect(mockReadTemplate).not.toHaveBeenCalled();
     });
 
     it('should validate name is a string', async () => {
       const generator = tool.invoke({ name: 123 } as any);
-      const result = await generator.next();
-      
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow('Expected string, received number');
+      expect(mockReadTemplate).not.toHaveBeenCalled();
     });
 
     it('should accept valid name parameter', async () => {
@@ -124,13 +122,10 @@ describe('Templates Tool', () => {
       mockReadTemplate.mockRejectedValue(new Error('File not found'));
 
       const generator = tool.invoke({ name: templateName });
-      const result = await generator.next();
-      
-      expect(result.value).toBeDefined();
-      expect(result.value.type).toBe('text');
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
-      expect(response.message).toContain('File not found');
+
+      // The tool lets readTemplate's error propagate; index.ts reports it to the client
+      await expect(generator.next()).rejects.toThrow('File not found');
+      expect(mockReadTemplate).toHaveBeenCalledWith(templateName);
     });
 
     it('should handle permission errors', async () => {
@@ -138,11 +133,10 @@ describe('Templates Tool', () => {
       mockReadTemplate.mockRejectedValue(new Error('Permission denied'));
 
       const generator = tool.invoke({ name: templateName });
-      const result = await generator.next();
-      
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
-      expect(response.message).toContain('Permission denied');
+
+      // The tool lets readTemplate's error propagate; index.ts reports it to the client
+      await expect(generator.next()).rejects.toThrow('Permission denied');
+      expect(mockReadTemplate).toHaveBeenCalledWith(templateName);
     });
 
     it('should handle network errors', async () => {
@@ -150,11 +144,10 @@ describe('Templates Tool', () => {
       mockReadTemplate.mockRejectedValue(new Error('Network timeout'));
 
       const generator = tool.invoke({ name: templateName });
-      const result = await generator.next();
-      
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
-      expect(response.message).toContain('Network timeout');
+
+      // The tool lets readTemplate's error propagate; index.ts reports it to the client
+      await expect(generator.next()).rejects.toThrow('Network timeout');
+      expect(mockReadTemplate).toHaveBeenCalledWith(templateName);
     });
   });
 

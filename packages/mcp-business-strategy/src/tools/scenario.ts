@@ -249,11 +249,12 @@ function generateSensitivityMatrix(
   // Test each variable independently with +20% change
   for (const [variable, values] of Object.entries(knobs)) {
     const baseValue = base[variable];
-    // Skip knobs with no base value; 0 is a valid base (e.g. zero CAC)
-    if (baseValue === undefined) continue;
-    
+    // Skip knobs with no base value; 0 is a valid base (e.g. zero CAC).
+    // Skip knobs with no values too: there is nothing to test, and Math.max() of nothing is -Infinity.
+    if (baseValue === undefined || values.length === 0) continue;
+
     // Find a test value (preferably 20% higher, or use max value)
-    const testValue = values.find(v => v > baseValue) || Math.max(...values);
+    const testValue = values.find(v => v > baseValue) ?? Math.max(...values);
     
     // Calculate outputs with this variable changed
     const testScenario = { ...base, [variable]: testValue };
@@ -304,6 +305,16 @@ function generateSummary(
 } {
   // Find most sensitive variable
   const mostSensitive = sensitivityMatrix.length > 0 ? sensitivityMatrix[0].variable : 'none';
+  
+  // A knob with an empty value list yields no scenarios, so there is no best or worst case
+  if (scenarios.length === 0) {
+    return {
+      most_sensitive_variable: mostSensitive,
+      best_case_scenario: 'none',
+      worst_case_scenario: 'none',
+      total_scenarios: 0
+    };
+  }
   
   // Find best and worst case scenarios based on revenue
   let bestScenario = scenarios[0];

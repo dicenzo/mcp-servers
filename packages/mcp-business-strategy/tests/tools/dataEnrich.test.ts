@@ -15,24 +15,18 @@ describe('Data Enrich Tool', () => {
   });
 
   describe('Input Validation', () => {
+    // Tools throw on invalid input; src/index.ts turns the throw into the MCP error response
+    // ({ error: true, message } with isError), which tests/index.test.ts covers.
     it('should validate required topic parameter', async () => {
       const generator = tool.invoke({} as any);
-      const result = await generator.next();
-      
-      expect(result.value).toBeDefined();
-      expect(result.value.type).toBe('text');
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow(/Data enrichment failed: .*"topic"/s);
     });
 
     it('should validate topic is not empty', async () => {
       const generator = tool.invoke({ topic: '' });
-      const result = await generator.next();
-      
-      expect(result.value).toBeDefined();
-      expect(result.value.type).toBe('text');
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow('Topic cannot be empty');
     });
 
     it('should accept valid topic', async () => {
@@ -54,14 +48,14 @@ describe('Data Enrich Tool', () => {
       const response = JSON.parse(result.value.text);
       
       expect(response.topic).toBe('artificial intelligence');
-      expect(response.tam).toBeGreaterThan(100000000000); // > $100B
+      expect(response.tam).toBeGreaterThanOrEqual(100000000000); // >= $100B, the inclusive floor of the generated range
       expect(response.sam).toBeGreaterThan(0);
       expect(response.som).toBeGreaterThan(0);
       expect(response.growth_rate).toBeGreaterThanOrEqual(20);
       expect(response.growth_rate).toBeLessThanOrEqual(45);
       expect(response.key_metrics).toHaveLength(4);
       expect(response.market_segments).toContain('Generative AI Platforms');
-      expect(response.market_leaders).toContain('OpenAI');
+      expect(response.competitive_landscape.market_leaders).toContain('OpenAI');
       expect(response.trends).toContain('Increasing enterprise adoption of generative AI');
       expect(response.data_quality).toBe('High');
       expect(response.last_updated).toBeDefined();
@@ -84,11 +78,11 @@ describe('Data Enrich Tool', () => {
       const response = JSON.parse(result.value.text);
       
       expect(response.topic).toBe('SaaS platforms');
-      expect(response.tam).toBeGreaterThan(200000000000); // > $200B
+      expect(response.tam).toBeGreaterThanOrEqual(200000000000); // >= $200B, the inclusive floor of the generated range
       expect(response.growth_rate).toBeGreaterThanOrEqual(10);
       expect(response.growth_rate).toBeLessThanOrEqual(25);
       expect(response.market_segments).toContain('Customer Relationship Management (CRM)');
-      expect(response.market_leaders).toContain('Salesforce');
+      expect(response.competitive_landscape.market_leaders).toContain('Salesforce');
       expect(response.trends).toContain('Vertical SaaS solutions gaining market share');
     });
 
@@ -109,11 +103,11 @@ describe('Data Enrich Tool', () => {
       const response = JSON.parse(result.value.text);
       
       expect(response.topic).toBe('healthcare technology');
-      expect(response.tam).toBeGreaterThan(300000000000); // > $300B
+      expect(response.tam).toBeGreaterThanOrEqual(300000000000); // >= $300B, the inclusive floor of the generated range
       expect(response.growth_rate).toBeGreaterThanOrEqual(8);
       expect(response.growth_rate).toBeLessThanOrEqual(20);
       expect(response.market_segments).toContain('Electronic Health Records (EHR)');
-      expect(response.market_leaders).toContain('Epic Systems');
+      expect(response.competitive_landscape.market_leaders).toContain('Epic Systems');
       expect(response.regulatory_factors).toContain('HIPAA privacy and security requirements');
     });
 
@@ -134,11 +128,11 @@ describe('Data Enrich Tool', () => {
       const response = JSON.parse(result.value.text);
       
       expect(response.topic).toBe('fintech solutions');
-      expect(response.tam).toBeGreaterThan(150000000000); // > $150B
+      expect(response.tam).toBeGreaterThanOrEqual(150000000000); // >= $150B, the inclusive floor of the generated range
       expect(response.growth_rate).toBeGreaterThanOrEqual(15);
       expect(response.growth_rate).toBeLessThanOrEqual(35);
       expect(response.market_segments).toContain('Digital Banking and Neobanks');
-      expect(response.market_leaders).toContain('Stripe');
+      expect(response.competitive_landscape.market_leaders).toContain('Stripe');
       expect(response.trends).toContain('Embedded finance integration across industries');
     });
 
@@ -159,12 +153,21 @@ describe('Data Enrich Tool', () => {
       const response = JSON.parse(result.value.text);
       
       expect(response.topic).toBe('e-commerce platforms');
-      expect(response.tam).toBeGreaterThan(400000000000); // > $400B
+      expect(response.tam).toBeGreaterThanOrEqual(400000000000); // >= $400B, the inclusive floor of the generated range
       expect(response.growth_rate).toBeGreaterThanOrEqual(12);
       expect(response.growth_rate).toBeLessThanOrEqual(30);
       expect(response.market_segments).toContain('B2C E-commerce Platforms');
-      expect(response.market_leaders).toContain('Amazon');
+      expect(response.competitive_landscape.market_leaders).toContain('Amazon');
       expect(response.trends).toContain('Headless commerce and API-first architectures');
+    });
+
+    it('should route retail topics to e-commerce, not AI', async () => {
+      // "retail" contains the letters "ai"; a substring match used to send it to the AI branch
+      const generator = tool.invoke({ topic: 'online retail' });
+      const result = await generator.next();
+      
+      const response = JSON.parse(result.value.text);
+      expect(response.market_segments).toContain('B2C E-commerce Platforms');
     });
 
     it('should generate e-commerce data for marketplace topics', async () => {
@@ -176,6 +179,26 @@ describe('Data Enrich Tool', () => {
     });
   });
 
+  describe('Topic Routing', () => {
+    it('should prefer the industry over generic platform/app wording', async () => {
+      const generator = tool.invoke({ topic: 'healthcare app' });
+      const result = await generator.next();
+      
+      const response = JSON.parse(result.value.text);
+      expect(response.market_segments).toContain('Electronic Health Records (EHR)');
+    });
+
+    it('should not match short keywords inside other words', async () => {
+      // "supply chain" contains "ai", "happy" contains "app"
+      const generator = tool.invoke({ topic: 'happy supply chain' });
+      const result = await generator.next();
+      
+      const response = JSON.parse(result.value.text);
+      expect(response.data_quality).toBe('Estimated');
+      expect(response.market_segments).toContain('Enterprise Solutions');
+    });
+  });
+
   describe('General Market Data Generation', () => {
     it('should generate general market data for unknown topics', async () => {
       const generator = tool.invoke({ topic: 'widget manufacturing' });
@@ -184,7 +207,7 @@ describe('Data Enrich Tool', () => {
       const response = JSON.parse(result.value.text);
       
       expect(response.topic).toBe('widget manufacturing');
-      expect(response.tam).toBeGreaterThan(50000000000); // > $50B
+      expect(response.tam).toBeGreaterThanOrEqual(50000000000); // >= $50B, the inclusive floor of the generated range
       expect(response.growth_rate).toBeGreaterThanOrEqual(5);
       expect(response.growth_rate).toBeLessThanOrEqual(20);
       expect(response.market_segments).toContain('Enterprise Solutions');
@@ -255,12 +278,8 @@ describe('Data Enrich Tool', () => {
   describe('Error Handling', () => {
     it('should handle invalid input gracefully', async () => {
       const generator = tool.invoke({ topic: null } as any);
-      const result = await generator.next();
-      
-      expect(result.value).toBeDefined();
-      expect(result.value.type).toBe('text');
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow('Expected string, received null');
     });
 
     it('should handle very long topic names', async () => {

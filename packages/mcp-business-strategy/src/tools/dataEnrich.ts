@@ -64,17 +64,14 @@ export const dataEnrichTool: ExecutableTool = {
 
 async function generateMarketData(topic: string): Promise<MarketData> {
   const normalizedTopic = topic.toLowerCase();
+  // Short keywords must match whole words: a plain substring check sent "retail", "email" and
+  // "supply chain" to the AI branch (they contain "ai") and "happy" to SaaS (it contains "app").
+  const hasWord = (word: string) => new RegExp(`\\b${word}\\b`).test(normalizedTopic);
   
   // AI and Technology Markets
-  if (normalizedTopic.includes('ai') || normalizedTopic.includes('artificial intelligence') || 
-      normalizedTopic.includes('machine learning') || normalizedTopic.includes('ml')) {
+  if (hasWord('ai') || normalizedTopic.includes('artificial intelligence') || 
+      normalizedTopic.includes('machine learning') || hasWord('ml')) {
     return generateAIMarketData(topic);
-  }
-  
-  // SaaS and Software Markets
-  if (normalizedTopic.includes('saas') || normalizedTopic.includes('software') || 
-      normalizedTopic.includes('platform') || normalizedTopic.includes('app')) {
-    return generateSaaSMarketData(topic);
   }
   
   // Healthcare Markets
@@ -93,6 +90,13 @@ async function generateMarketData(topic: string): Promise<MarketData> {
   if (normalizedTopic.includes('ecommerce') || normalizedTopic.includes('e-commerce') || 
       normalizedTopic.includes('retail') || normalizedTopic.includes('marketplace')) {
     return generateEcommerceMarketData(topic);
+  }
+  
+  // SaaS and Software Markets. Checked after the industry branches because "platform" and "app"
+  // are generic: "e-commerce platforms" or "healthcare app" belong to their industry, not to SaaS.
+  if (hasWord('saas') || normalizedTopic.includes('software') || 
+      normalizedTopic.includes('platform') || hasWord('apps?')) {
+    return generateSaaSMarketData(topic);
   }
   
   // Default: General business market analysis

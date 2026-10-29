@@ -4,6 +4,8 @@ export default {
   extensionsToTreatAsEsm: ['.ts'],
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    // node-fetch v3 is ESM-only and cannot load under ts-jest's CommonJS output; see the stub
+    '^node-fetch$': '<rootDir>/tests/stubs/node-fetch.ts',
   },
   transform: {
     '^.+\\.ts$': ['ts-jest', {

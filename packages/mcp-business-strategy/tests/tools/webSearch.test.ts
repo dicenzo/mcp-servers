@@ -28,34 +28,25 @@ describe('Web Search Tool', () => {
   });
 
   describe('Input Validation', () => {
+    // Tools throw on invalid input; src/index.ts turns the throw into the MCP error response
+    // ({ error: true, message } with isError), which tests/index.test.ts covers.
     it('should validate required query parameter', async () => {
       const generator = tool.invoke({} as any);
-      const result = await generator.next();
-      
-      expect(result.value).toBeDefined();
-      expect(result.value.type).toBe('text');
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow(/Web search failed: .*query/s);
     });
 
     it('should validate query is not empty', async () => {
       const generator = tool.invoke({ query: '' });
-      const result = await generator.next();
-      
-      expect(result.value).toBeDefined();
-      expect(result.value.type).toBe('text');
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow('Query cannot be empty');
     });
 
     it('should validate k parameter bounds', async () => {
       const generator = tool.invoke({ query: 'test', k: 25 });
-      const result = await generator.next();
-      
-      expect(result.value).toBeDefined();
-      expect(result.value.type).toBe('text');
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow('less than or equal to 20');
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it('should use default k value when not provided', async () => {
@@ -157,6 +148,8 @@ describe('Web Search Tool', () => {
 
   describe('SerpAPI Integration', () => {
     beforeEach(() => {
+      // Tavily needs a key too, or it is skipped rather than tried and failed
+      process.env.TAVILY_API_KEY = 'test-tavily-key';
       process.env.SERPAPI_KEY = 'test-serpapi-key';
     });
 
@@ -184,10 +177,12 @@ describe('Web Search Tool', () => {
       const result = await generator.next();
       
       expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenNthCalledWith(1, 'https://api.tavily.com/search', expect.any(Object));
+      // SerpAPI takes its key in the query string, so the request has no init options
       expect(mockFetch).toHaveBeenLastCalledWith(
-        expect.stringContaining('serpapi.com/search'),
-        expect.any(Object)
+        expect.stringContaining('serpapi.com/search')
       );
+      expect(mockFetch.mock.lastCall?.[0]).toContain('api_key=test-serpapi-key');
 
       const response = JSON.parse(result.value.text);
       expect(response.source).toBe('live_search');
@@ -196,6 +191,9 @@ describe('Web Search Tool', () => {
 
   describe('Brave Search Integration', () => {
     beforeEach(() => {
+      // Tavily and SerpAPI need keys too, or they are skipped rather than tried and failed
+      process.env.TAVILY_API_KEY = 'test-tavily-key';
+      process.env.SERPAPI_KEY = 'test-serpapi-key';
       process.env.BRAVE_API_KEY = 'test-brave-key';
     });
 
