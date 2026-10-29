@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { ExecutableTool } from './types.js';
 import { z } from 'zod';
 
 const Input = z.object({ 
@@ -34,7 +34,7 @@ interface ScenarioAnalysis {
   generated_at: string;
 }
 
-export const scenarioTool: Tool = {
+export const scenarioTool: ExecutableTool = {
   name: 'scenario.run',
   description: 'Generate comprehensive scenario analysis with sensitivity testing for business model variables and financial projections.',
   inputSchema: { 
@@ -236,12 +236,14 @@ function generateSensitivityMatrix(
   impact_on_payback: number;
   rank: number;
 }> {
+  // combined_impact is only used for ranking, but it stays on each row (and so in the output)
   const matrix: Array<{
     variable: string;
     impact_on_revenue: number;
     impact_on_ltv: number;
     impact_on_payback: number;
     rank: number;
+    combined_impact: number;
   }> = [];
   
   // Test each variable independently with +20% change
@@ -258,18 +260,19 @@ function generateSensitivityMatrix(
     
     // Calculate impact percentages
     const revenueImpact = baseCaseOutputs.revenue ? 
-      ((testOutputs.revenue! - baseCaseOutputs.revenue) / baseCaseOutputs.revenue) * 100 : 0;
+      ((testOutputs.revenue - baseCaseOutputs.revenue) / baseCaseOutputs.revenue) * 100 : 0;
     const ltvImpact = baseCaseOutputs.ltv ? 
-      ((testOutputs.ltv! - baseCaseOutputs.ltv) / baseCaseOutputs.ltv) * 100 : 0;
+      ((testOutputs.ltv - baseCaseOutputs.ltv) / baseCaseOutputs.ltv) * 100 : 0;
     const paybackImpact = baseCaseOutputs.payback ? 
-      ((testOutputs.payback! - baseCaseOutputs.payback) / baseCaseOutputs.payback) * 100 : 0;
+      ((testOutputs.payback - baseCaseOutputs.payback) / baseCaseOutputs.payback) * 100 : 0;
     
     matrix.push({
       variable,
       impact_on_revenue: Math.round(revenueImpact * 100) / 100,
       impact_on_ltv: Math.round(ltvImpact * 100) / 100,
       impact_on_payback: Math.round(paybackImpact * 100) / 100,
-      rank: 0 // Will be calculated after all variables
+      rank: 0, // Will be calculated after all variables
+      combined_impact: 0 // Set during ranking below
     });
   }
   
@@ -278,10 +281,10 @@ function generateSensitivityMatrix(
     const combinedImpact = Math.abs(item.impact_on_revenue) * 0.4 + 
                           Math.abs(item.impact_on_ltv) * 0.4 + 
                           Math.abs(item.impact_on_payback) * 0.2;
-    (item as any).combined_impact = combinedImpact;
+    item.combined_impact = combinedImpact;
   });
   
-  matrix.sort((a, b) => (b as any).combined_impact - (a as any).combined_impact);
+  matrix.sort((a, b) => b.combined_impact - a.combined_impact);
   matrix.forEach((item, index) => {
     item.rank = index + 1;
   });

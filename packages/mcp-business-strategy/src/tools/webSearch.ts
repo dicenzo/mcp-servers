@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { ExecutableTool } from './types.js';
 import fetch from 'node-fetch';
 import { z } from 'zod';
 
@@ -6,6 +6,19 @@ const Input = z.object({
   query: z.string().min(1, "Query cannot be empty"), 
   k: z.number().min(1).max(20).default(5) 
 });
+
+// Shapes of the fields read from each provider's JSON response (all external data, so optional)
+interface TavilyResponse {
+  results?: { title: string; url: string; content: string; published_date?: string }[];
+}
+
+interface SerpApiResponse {
+  organic_results?: { title: string; link: string; snippet: string }[];
+}
+
+interface BraveResponse {
+  web?: { results?: { title: string; url: string; description: string; age?: string }[] };
+}
 
 interface SearchResult {
   title: string;
@@ -15,7 +28,7 @@ interface SearchResult {
   domain?: string;
 }
 
-export const webSearchTool: Tool = {
+export const webSearchTool: ExecutableTool = {
   name: 'web.search',
   description: 'Search the web and return curated business/market research results with credible sources.',
   inputSchema: {
@@ -46,18 +59,20 @@ export const webSearchTool: Tool = {
       }
       
       // Strategy 2: Try SerpAPI (if API key available)
-      if (results.length === 0 && process.env.SERPAPI_KEY) {
+      const serpApiKey = process.env.SERPAPI_KEY;
+      if (results.length === 0 && serpApiKey) {
         try {
-          results = await searchWithSerpAPI(query, k);
+          results = await searchWithSerpAPI(query, k, serpApiKey);
         } catch (error) {
           console.error('[MCP Tool] SerpAPI search failed:', error);
         }
       }
       
       // Strategy 3: Try Brave Search API (if API key available)
-      if (results.length === 0 && process.env.BRAVE_API_KEY) {
+      const braveApiKey = process.env.BRAVE_API_KEY;
+      if (results.length === 0 && braveApiKey) {
         try {
-          results = await searchWithBrave(query, k);
+          results = await searchWithBrave(query, k, braveApiKey);
         } catch (error) {
           console.error('[MCP Tool] Brave search failed:', error);
         }
@@ -110,8 +125,8 @@ async function searchWithTavily(query: string, k: number): Promise<SearchResult[
     throw new Error(`Tavily API error: ${response.status}`);
   }
   
-  const data = await response.json() as any;
-  return data.results?.map((result: any) => ({
+  const data = await response.json() as TavilyResponse;
+  return data.results?.map((result) => ({
     title: result.title,
     url: result.url,
     snippet: result.content,
@@ -120,11 +135,11 @@ async function searchWithTavily(query: string, k: number): Promise<SearchResult[
   })) || [];
 }
 
-async function searchWithSerpAPI(query: string, k: number): Promise<SearchResult[]> {
+async function searchWithSerpAPI(query: string, k: number, apiKey: string): Promise<SearchResult[]> {
   const params = new URLSearchParams({
     engine: 'google',
     q: query,
-    api_key: process.env.SERPAPI_KEY!,
+    api_key: apiKey,
     num: k.toString(),
     hl: 'en',
     gl: 'us'
@@ -136,8 +151,8 @@ async function searchWithSerpAPI(query: string, k: number): Promise<SearchResult
     throw new Error(`SerpAPI error: ${response.status}`);
   }
   
-  const data = await response.json() as any;
-  return data.organic_results?.map((result: any) => ({
+  const data = await response.json() as SerpApiResponse;
+  return data.organic_results?.map((result) => ({
     title: result.title,
     url: result.link,
     snippet: result.snippet,
@@ -145,7 +160,7 @@ async function searchWithSerpAPI(query: string, k: number): Promise<SearchResult
   })) || [];
 }
 
-async function searchWithBrave(query: string, k: number): Promise<SearchResult[]> {
+async function searchWithBrave(query: string, k: number, apiKey: string): Promise<SearchResult[]> {
   const params = new URLSearchParams({
     q: query,
     count: k.toString(),
@@ -156,7 +171,7 @@ async function searchWithBrave(query: string, k: number): Promise<SearchResult[]
   const response = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
     headers: {
       'Accept': 'application/json',
-      'X-Subscription-Token': process.env.BRAVE_API_KEY!
+      'X-Subscription-Token': apiKey
     }
   });
   
@@ -164,8 +179,8 @@ async function searchWithBrave(query: string, k: number): Promise<SearchResult[]
     throw new Error(`Brave API error: ${response.status}`);
   }
   
-  const data = await response.json() as any;
-  return data.web?.results?.map((result: any) => ({
+  const data = await response.json() as BraveResponse;
+  return data.web?.results?.map((result) => ({
     title: result.title,
     url: result.url,
     snippet: result.description,

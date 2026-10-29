@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { ExecutableTool } from './types.js';
 import { z } from 'zod';
 
 const Input = z.object({
@@ -53,7 +53,7 @@ interface UnitEconScenario {
   paybackMonths: number;
 }
 
-export const unitEconTool: Tool = {
+export const unitEconTool: ExecutableTool = {
   name: 'unitecon.calc',
   description: 'Calculate comprehensive unit economics including LTV, CAC payback, retention metrics, and business health indicators.',
   inputSchema: {

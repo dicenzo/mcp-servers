@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { ExecutableTool } from './types.js';
 import { z } from 'zod';
 
 const Input = z.object({ 
@@ -29,7 +29,7 @@ interface MarketData {
   last_updated: string;
 }
 
-export const dataEnrichTool: Tool = {
+export const dataEnrichTool: ExecutableTool = {
   name: 'data.enrich',
   description: 'Enrich business topics with market data, sizing estimates, competitive analysis, and industry trends.',
   inputSchema: { 
