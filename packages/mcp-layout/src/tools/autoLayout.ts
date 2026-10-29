@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { 
   LayoutElementSchema,
   AutoLayoutConfigSchema,
@@ -11,7 +11,7 @@ import { AutoLayoutEngine } from '../util/autoLayout.js';
 import { PerformanceMonitor } from '../util/performance.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<CallToolResult>;
 }
 
 /**
@@ -101,7 +101,7 @@ export const autoLayoutTool: ExecutableTool = {
     required: ['elements', 'bounds']
   },
 
-  async invoke(args: unknown): Promise<any> {
+  async invoke(args: unknown): Promise<CallToolResult> {
     const monitor = new PerformanceMonitor();
     monitor.start('auto-layout');
 

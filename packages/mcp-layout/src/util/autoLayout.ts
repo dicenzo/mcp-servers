@@ -105,7 +105,7 @@ export class AutoLayoutEngine {
   /**
    * Determine content type from element content
    */
-  private static determineContentType(content: Record<string, any>): 'text' | 'image' | 'container' | 'empty' {
+  private static determineContentType(content: Record<string, unknown>): 'text' | 'image' | 'container' | 'empty' {
     if (content.text || content.title || content.label) {
       return 'text';
     }
@@ -124,7 +124,7 @@ export class AutoLayoutEngine {
   /**
    * Calculate natural size based on content
    */
-  private static calculateContentSize(content: Record<string, any>, elementType: string): { width: number; height: number } {
+  private static calculateContentSize(content: Record<string, unknown>, elementType: string): { width: number; height: number } {
     const baseSize = { width: 100, height: 50 };
 
     // Text content sizing
@@ -169,7 +169,7 @@ export class AutoLayoutEngine {
   /**
    * Calculate content priority for layout ordering
    */
-  private static calculateContentPriority(content: Record<string, any>, elementType: string): number {
+  private static calculateContentPriority(content: Record<string, unknown>, elementType: string): number {
     let priority = 500; // Base priority
 
     // Higher priority for titles and headings
@@ -211,7 +211,7 @@ export class AutoLayoutEngine {
   /**
    * Calculate content flexibility for responsive behavior
    */
-  private static calculateContentFlexibility(content: Record<string, any>, _elementType: string): { horizontal: number; vertical: number } {
+  private static calculateContentFlexibility(content: Record<string, unknown>, _elementType: string): { horizontal: number; vertical: number } {
     const flexibility = { horizontal: 1, vertical: 1 };
 
     // Text is more flexible horizontally

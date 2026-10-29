@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { 
   FlexConfigSchema,
   FlexElementSchema,
@@ -13,7 +13,7 @@ import { PerformanceMonitor } from '../util/performance.js';
 import { LayoutValidator } from '../util/validation.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<CallToolResult>;
 }
 
 /**
@@ -161,7 +161,7 @@ export const createFlexTool: ExecutableTool = {
     required: ['config', 'elements', 'bounds']
   },
 
-  async invoke(args: unknown): Promise<any> {
+  async invoke(args: unknown): Promise<CallToolResult> {
     const monitor = new PerformanceMonitor();
     monitor.start('flex-creation');
 
@@ -257,7 +257,7 @@ export const createFlexTool: ExecutableTool = {
   /**
    * Generate CSS for the flex layout
    */
-  generateFlexCSS(this: any, layout: FlexLayout): string {
+  generateFlexCSS(layout: FlexLayout): string {
     const { config } = layout;
     
     let css = '.flex-container {\n';

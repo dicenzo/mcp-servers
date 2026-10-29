@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { 
   LayoutElementSchema,
   BreakpointSchema,
@@ -11,7 +11,7 @@ import { ResponsiveEngine } from '../util/responsiveEngine.js';
 import { PerformanceMonitor } from '../util/performance.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<CallToolResult>;
 }
 
 /**
@@ -97,7 +97,7 @@ export const responsiveTool: ExecutableTool = {
     required: ['elements', 'baseLayout']
   },
 
-  async invoke(args: unknown): Promise<any> {
+  async invoke(args: unknown): Promise<CallToolResult> {
     const monitor = new PerformanceMonitor();
     monitor.start('responsive-layout');
 

@@ -6,6 +6,8 @@ import {
   LayoutElement,
   GridConfig,
   FlexConfig,
+  GridElement,
+  FlexElement,
 } from '../types/layout.js';
 import { PerformanceMonitor } from './performance.js';
 import { GridEngine } from './gridEngine.js';
@@ -110,7 +112,7 @@ export class ResponsiveEngine {
       case 'flex':
         return this.adaptFlexLayout(baseLayout, elements, breakpoint, bounds, monitor);
       default:
-        throw new Error(`Unsupported layout type for responsive adaptation: ${(baseLayout as any).type}`);
+        throw new Error(`Unsupported layout type for responsive adaptation: ${(baseLayout as { type: string }).type}`);
       }
     } finally {
       monitor?.recordIteration();
@@ -176,7 +178,7 @@ export class ResponsiveEngine {
   /**
    * Adapt grid elements for breakpoint
    */
-  private static adaptGridElements(elements: any[], breakpoint: Breakpoint, bounds: Rectangle): any[] {
+  private static adaptGridElements(elements: GridElement[], breakpoint: Breakpoint, bounds: Rectangle): GridElement[] {
     return elements.map(element => {
       const adapted = { ...element };
 
@@ -265,7 +267,7 @@ export class ResponsiveEngine {
   /**
    * Adapt flex elements for breakpoint
    */
-  private static adaptFlexElements(elements: any[], breakpoint: Breakpoint, bounds: Rectangle): any[] {
+  private static adaptFlexElements(elements: FlexElement[], breakpoint: Breakpoint, bounds: Rectangle): FlexElement[] {
     return elements.map(element => {
       const adapted = { ...element };
 

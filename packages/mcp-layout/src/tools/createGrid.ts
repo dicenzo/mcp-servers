@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { 
   GridConfigSchema,
   GridElementSchema,
@@ -13,7 +13,7 @@ import { PerformanceMonitor } from '../util/performance.js';
 import { LayoutValidator } from '../util/validation.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<CallToolResult>;
 }
 
 /**
@@ -289,7 +289,7 @@ export const createGridTool: ExecutableTool = {
     required: ['config', 'elements', 'bounds']
   },
 
-  async invoke(args: unknown): Promise<any> {
+  async invoke(args: unknown): Promise<CallToolResult> {
     const monitor = new PerformanceMonitor();
     monitor.start('grid-creation');
 
