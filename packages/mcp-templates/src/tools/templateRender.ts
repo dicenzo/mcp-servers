@@ -1,10 +1,8 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import {
-  TemplateRenderInput,
   TemplateRenderInputSchema,
   Template,
   RenderedTemplate,
-  TemplateError,
   TemplateErrorCode,
   ExportFormat
 } from '../types/template.js';

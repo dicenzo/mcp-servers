@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import {
   Template,
   TemplateComponent,
@@ -249,7 +248,7 @@ export class TemplateValidator {
     }
   }
 
-  private static validateShapeComponent(component: any, errors: TemplateError[], warnings: TemplateError[]): void {
+  private static validateShapeComponent(component: any, errors: TemplateError[], _warnings: TemplateError[]): void {
     const validShapes = ['rect', 'circle', 'ellipse', 'polygon', 'path'];
     if (!validShapes.includes(component.shape)) {
       errors.push({
@@ -286,7 +285,7 @@ export class TemplateValidator {
     }
   }
 
-  private static validateSvgComponent(component: any, errors: TemplateError[], warnings: TemplateError[]): void {
+  private static validateSvgComponent(component: any, errors: TemplateError[], _warnings: TemplateError[]): void {
     if (!component.svgContent) {
       errors.push({
         code: TemplateErrorCode.INVALID_TEMPLATE,
@@ -297,7 +296,7 @@ export class TemplateValidator {
     }
   }
 
-  private static validateHtmlComponent(component: any, errors: TemplateError[], warnings: TemplateError[]): void {
+  private static validateHtmlComponent(component: any, errors: TemplateError[], _warnings: TemplateError[]): void {
     if (!component.htmlContent) {
       errors.push({
         code: TemplateErrorCode.INVALID_TEMPLATE,
@@ -469,7 +468,7 @@ export class TemplateValidator {
     return errors;
   }
 
-  private static validateCustomRules(name: string, value: any, rules: any[]): TemplateError[] {
+  private static validateCustomRules(_name: string, _value: any, _rules: any[]): TemplateError[] {
     // Implementation similar to template engine validation
     return [];
   }
@@ -511,27 +510,31 @@ export class TemplateValidator {
     };
     
     switch (component.type) {
-      case ComponentType.TEXT:
+      case ComponentType.TEXT: {
         const textComp = component as any;
         if (textComp.content) checkString(textComp.content, 'text content');
         break;
-        
-      case ComponentType.IMAGE:
+      }
+
+      case ComponentType.IMAGE: {
         const imageComp = component as any;
         if (imageComp.source) checkString(imageComp.source, 'image source');
         break;
-        
-      case ComponentType.SVG:
+      }
+
+      case ComponentType.SVG: {
         const svgComp = component as any;
         if (svgComp.svgContent) checkString(svgComp.svgContent, 'SVG content');
         break;
-        
-      case ComponentType.HTML:
+      }
+
+      case ComponentType.HTML: {
         const htmlComp = component as any;
         if (htmlComp.htmlContent) checkString(htmlComp.htmlContent, 'HTML content');
         break;
-        
-      case ComponentType.GROUP:
+      }
+
+      case ComponentType.GROUP: {
         const groupComp = component as any;
         if (groupComp.children) {
           for (const child of groupComp.children) {
@@ -539,6 +542,7 @@ export class TemplateValidator {
           }
         }
         break;
+      }
     }
     
     // Check conditional and repeat expressions
@@ -703,7 +707,7 @@ export class PerformanceValidator {
       case ComponentType.HTML:
         score += 25;
         break;
-      case ComponentType.GROUP:
+      case ComponentType.GROUP: {
         const groupComp = component as any;
         score += 5;
         if (groupComp.children) {
@@ -712,6 +716,7 @@ export class PerformanceValidator {
           }
         }
         break;
+      }
     }
     
     // Add complexity for conditions and loops

@@ -8,7 +8,7 @@ import {
   TemplateError,
   TemplateErrorCode
 } from '../types/template.js';
-import { PerformanceMonitor, timeOperation } from './performance.js';
+import { timeOperation } from './performance.js';
 
 /**
  * Export utilities for converting templates to various formats

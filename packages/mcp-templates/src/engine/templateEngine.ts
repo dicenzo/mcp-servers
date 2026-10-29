@@ -1,5 +1,4 @@
 import Handlebars from 'handlebars';
-import Mustache from 'mustache';
 import {
   Template,
   TemplateComponent,
@@ -12,7 +11,6 @@ import {
   TemplateErrorCode,
   ValidationRule
 } from '../types/template.js';
-import { PerformanceMonitor } from '../util/performance.js';
 
 /**
  * Template Engine - Core template processing and variable substitution
@@ -66,12 +64,12 @@ export class TemplateEngine {
     );
 
     // Color helpers
-    this.handlebars.registerHelper('lighten', (color, amount) => {
+    this.handlebars.registerHelper('lighten', (color, _amount) => {
       // Basic color lightening - in production, use chroma-js
       return color; // Placeholder
     });
 
-    this.handlebars.registerHelper('darken', (color, amount) => {
+    this.handlebars.registerHelper('darken', (color, _amount) => {
       // Basic color darkening - in production, use chroma-js
       return color; // Placeholder
     });
@@ -86,7 +84,7 @@ export class TemplateEngine {
     );
 
     // Date helpers
-    this.handlebars.registerHelper('date', (date, format = 'YYYY-MM-DD') => {
+    this.handlebars.registerHelper('date', (date, _format = 'YYYY-MM-DD') => {
       const d = new Date(date);
       // Simple date formatting - in production, use moment.js or date-fns
       return d.toISOString().split('T')[0];
@@ -585,7 +583,7 @@ export class TemplateEngine {
       const template = this.handlebars.compile(`{{#if ${condition}}}true{{else}}false{{/if}}`);
       const result = template(variables);
       return result === 'true';
-    } catch (error) {
+    } catch {
       console.warn(`Failed to evaluate condition: ${condition}`);
       return true; // Default to showing component if condition fails
     }
@@ -609,7 +607,7 @@ export class TemplateEngine {
       try {
         const template = this.handlebars.compile(obj);
         return template(variables);
-      } catch (error) {
+      } catch {
         return obj; // Return original if template processing fails
       }
     }
@@ -707,14 +705,15 @@ export class TemplateEngine {
         // Wrap in group with position
         return `  <g transform="translate(${position.x}, ${position.y})">\n${component.svgContent}\n  </g>\n`;
       
-      case ComponentType.GROUP:
+      case ComponentType.GROUP: {
         let groupSvg = `  <g transform="translate(${position.x}, ${position.y})">\n`;
         for (const child of component.children) {
-          groupSvg += this.componentToSVG(child).replace(/^  /gm, '    ');
+          groupSvg += this.componentToSVG(child).replace(/^ {2}/gm, '    ');
         }
         groupSvg += '  </g>\n';
         return groupSvg;
-      
+      }
+
       case ComponentType.IMAGE:
         return `  <image x="${position.x}" y="${position.y}" width="${position.width}" ` +
                `height="${position.height}" href="${component.source}"/>\n`;
@@ -731,29 +730,32 @@ export class TemplateEngine {
     const positionStyle = `position: absolute; left: ${position.x}px; top: ${position.y}px; width: ${position.width}px; height: ${position.height}px;`;
     
     switch (component.type) {
-      case ComponentType.TEXT:
+      case ComponentType.TEXT: {
         const textStyle = `font-family: ${style.fontFamily || 'Arial'}; font-size: ${style.fontSize || 12}px; color: ${style.fill || '#000000'};`;
         return `  <div style="${positionStyle} ${textStyle}">${component.content}</div>\n`;
-      
+      }
+
       case ComponentType.IMAGE:
         return `  <img src="${component.source}" style="${positionStyle} object-fit: ${component.fit || 'cover'};" alt="${component.alt || ''}"/>\n`;
       
-      case ComponentType.SHAPE:
+      case ComponentType.SHAPE: {
         const bgColor = style.fill || 'transparent';
         const border = style.stroke ? `border: ${style.strokeWidth || 1}px solid ${style.stroke};` : '';
         const borderRadius = component.shape === 'circle' ? '50%' : '0';
         return `  <div style="${positionStyle} background: ${bgColor}; ${border} border-radius: ${borderRadius};"></div>\n`;
-      
+      }
+
       case ComponentType.HTML:
         return `  <div style="${positionStyle}">${component.htmlContent}</div>\n`;
       
-      case ComponentType.GROUP:
+      case ComponentType.GROUP: {
         let groupHtml = `  <div style="${positionStyle}">\n`;
         for (const child of component.children) {
-          groupHtml += this.componentToHTML(child).replace(/^  /gm, '    ');
+          groupHtml += this.componentToHTML(child).replace(/^ {2}/gm, '    ');
         }
         groupHtml += '  </div>\n';
         return groupHtml;
+      }
     }
     
     return '';
