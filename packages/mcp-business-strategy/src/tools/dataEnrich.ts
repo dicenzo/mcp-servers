@@ -1,8 +1,12 @@
 import { ExecutableTool } from './types.js';
 import { z } from 'zod';
 
+const MAX_TOPIC_LENGTH = 1000;
+
 const Input = z.object({ 
-  topic: z.string().min(1, "Topic cannot be empty") 
+  topic: z.string()
+    .min(1, "Topic cannot be empty")
+    .max(MAX_TOPIC_LENGTH, `Topic must be at most ${MAX_TOPIC_LENGTH} characters`) 
 });
 
 interface MarketData {
@@ -35,7 +39,7 @@ export const dataEnrichTool: ExecutableTool = {
   inputSchema: { 
     type: 'object', 
     properties: { 
-      topic: { type: 'string', description: 'Business topic, industry, or market to analyze' } 
+      topic: { type: 'string', description: 'Business topic, industry, or market to analyze', maxLength: MAX_TOPIC_LENGTH } 
     }, 
     required: ['topic'] 
   },

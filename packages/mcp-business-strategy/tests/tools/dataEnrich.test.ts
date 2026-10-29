@@ -29,6 +29,12 @@ describe('Data Enrich Tool', () => {
       await expect(generator.next()).rejects.toThrow('Topic cannot be empty');
     });
 
+    it('should reject an overlong topic', async () => {
+      const generator = tool.invoke({ topic: 'x'.repeat(1001) });
+
+      await expect(generator.next()).rejects.toThrow(/at most 1000 character/);
+    });
+
     it('should accept valid topic', async () => {
       const generator = tool.invoke({ topic: 'AI market' });
       const result = await generator.next();

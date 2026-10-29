@@ -43,6 +43,13 @@ describe('Templates Tool', () => {
       expect(mockReadTemplate).not.toHaveBeenCalled();
     });
 
+    it('should reject an overlong name', async () => {
+      const generator = tool.invoke({ name: 'a'.repeat(101) });
+
+      await expect(generator.next()).rejects.toThrow(/at most 100 character/);
+      expect(mockReadTemplate).not.toHaveBeenCalled();
+    });
+
     it('should accept valid name parameter', async () => {
       const mockContent = '# Test Template\n\nThis is a test template.';
       mockReadTemplate.mockResolvedValue(mockContent);

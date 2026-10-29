@@ -2,10 +2,26 @@ import { ExecutableTool } from './types.js';
 import fetch from 'node-fetch';
 import { z } from 'zod';
 
+const MAX_QUERY_LENGTH = 1000;
+const REQUEST_TIMEOUT_MS = 15000;
+
 const Input = z.object({ 
-  query: z.string().min(1, "Query cannot be empty"), 
+  query: z.string()
+    .min(1, "Query cannot be empty")
+    .max(MAX_QUERY_LENGTH, `Query must be at most ${MAX_QUERY_LENGTH} characters`), 
   k: z.number().min(1).max(20).default(5) 
 });
+
+/**
+ * One-line description of an error that is safe to log. node-fetch errors include the request URL,
+ * and SerpAPI takes its key in the query string, so strip any api_key value from the message.
+ */
+function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return 'Unknown error';
+  const code = (error as NodeJS.ErrnoException).code;
+  const message = error.message.replace(/(api_key=)[^&\s'"]*/gi, '$1[REDACTED]');
+  return `${error.name}${code ? ` (${code})` : ''}: ${message}`;
+}
 
 // Shapes of the fields read from each provider's JSON response (all external data, so optional)
 interface TavilyResponse {
@@ -34,7 +50,7 @@ export const webSearchTool: ExecutableTool = {
   inputSchema: {
     type: 'object',
     properties: { 
-      query: { type: 'string', description: 'Search query for business/market research' }, 
+      query: { type: 'string', description: 'Search query for business/market research', maxLength: MAX_QUERY_LENGTH }, 
       k: { type: 'number', description: 'Number of results to return (1-20)', minimum: 1, maximum: 20 } 
     },
     required: ['query']
@@ -54,7 +70,7 @@ export const webSearchTool: ExecutableTool = {
         try {
           results = await searchWithTavily(query, k);
         } catch (error) {
-          console.error('[MCP Tool] Tavily search failed:', error);
+          console.error('[MCP Tool] Tavily search failed:', describeError(error));
         }
       }
       
@@ -64,7 +80,7 @@ export const webSearchTool: ExecutableTool = {
         try {
           results = await searchWithSerpAPI(query, k, serpApiKey);
         } catch (error) {
-          console.error('[MCP Tool] SerpAPI search failed:', error);
+          console.error('[MCP Tool] SerpAPI search failed:', describeError(error));
         }
       }
       
@@ -74,7 +90,7 @@ export const webSearchTool: ExecutableTool = {
         try {
           results = await searchWithBrave(query, k, braveApiKey);
         } catch (error) {
-          console.error('[MCP Tool] Brave search failed:', error);
+          console.error('[MCP Tool] Brave search failed:', describeError(error));
         }
       }
       
@@ -100,7 +116,7 @@ export const webSearchTool: ExecutableTool = {
       };
       
     } catch (error) {
-      console.error(`[MCP Tool Error] web.search failed:`, error);
+      console.error(`[MCP Tool Error] web.search failed:`, describeError(error));
       throw new Error(`Web search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -119,7 +135,8 @@ async function searchWithTavily(query: string, k: number): Promise<SearchResult[
       search_depth: 'advanced',
       include_domains: ['forbes.com', 'techcrunch.com', 'statista.com', 'mckinsey.com', 'bcg.com', 'gartner.com'],
       exclude_domains: ['reddit.com', 'twitter.com', 'facebook.com']
-    })
+    }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
   });
   
   if (!response.ok) {
@@ -146,7 +163,7 @@ async function searchWithSerpAPI(query: string, k: number, apiKey: string): Prom
     gl: 'us'
   });
   
-  const response = await fetch(`https://serpapi.com/search?${params}`);
+  const response = await fetch(`https://serpapi.com/search?${params}`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   
   if (!response.ok) {
     throw new Error(`SerpAPI error: ${response.status}`);
@@ -173,7 +190,8 @@ async function searchWithBrave(query: string, k: number, apiKey: string): Promis
     headers: {
       'Accept': 'application/json',
       'X-Subscription-Token': apiKey
-    }
+    },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
   });
   
   if (!response.ok) {

@@ -77,6 +77,7 @@ Copy `.env.example` to `.env` in this folder, or set the variables in your MCP c
 
 - `web.search` returns generated placeholder results when no search key is set or every provider fails. The server logs a warning to stderr when this happens. Set at least one key for real results.
 - `data.enrich` does not call any external service. It matches keywords in the topic (AI, SaaS, fintech, healthcare, e-commerce, and a general fallback) and returns fixed figures stored in the source, with source names attached. Treat the output as rough illustrative estimates, not current research.
+- Inputs are size-capped. `scenario.run` accepts at most 50 base variables, 10 knobs, 100 values per knob, and 1,000 scenario combinations in total (the product of the knob value counts), with finite numbers only; variable names are limited to 64 characters. `web.search` queries and `data.enrich` topics are limited to 1,000 characters and template names to 100. Search provider requests time out after 15 seconds.
 - No templates ship with this package. Point `TEMPLATES_DIR` at your own folder of `.md` files.
 
 ## Known issues

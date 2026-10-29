@@ -415,4 +415,75 @@ describe('Scenario Analysis Tool', () => {
       expect(response.scenarios[0].inputs.other).toBe(50);
     });
   });
+
+  describe('Input Limits', () => {
+    // scenario.run builds the full cartesian product of knob values synchronously, so the
+    // index.ts timeout cannot interrupt it; oversized inputs must be rejected up front.
+    const knobsOf = (count: number, valuesPerKnob: number) =>
+      Object.fromEntries(
+        Array.from({ length: count }, (_, i) => [`k${i}`, Array.from({ length: valuesPerKnob }, (_, j) => j)])
+      );
+
+    it('should reject a knob grid whose combinations exceed the cap before generating it', async () => {
+      // 8 knobs x 10 values = 100,000,000 combinations: this used to exhaust memory
+      const generator = tool.invoke({ base: { price: 100 }, knobs: knobsOf(8, 10) });
+
+      await expect(generator.next()).rejects.toThrow(/100000000 scenarios.*maximum is 1000/);
+    });
+
+    it('should accept a grid at exactly the combination cap', async () => {
+      // 10 x 10 x 10 = 1000 combinations
+      const generator = tool.invoke({ base: { price: 100 }, knobs: knobsOf(3, 10) });
+      const result = await generator.next();
+
+      const response = JSON.parse(result.value.text);
+      expect(response.scenarios).toHaveLength(1000);
+    });
+
+    it('should reject too many knobs', async () => {
+      const generator = tool.invoke({ base: { price: 100 }, knobs: knobsOf(11, 1) });
+
+      await expect(generator.next()).rejects.toThrow(/at most 10 knobs/);
+    });
+
+    it('should reject too many values for one knob', async () => {
+      const generator = tool.invoke({ base: { price: 100 }, knobs: knobsOf(1, 101) });
+
+      await expect(generator.next()).rejects.toThrow(/at most 100/);
+    });
+
+    it('should reject too many base variables', async () => {
+      const base = Object.fromEntries(Array.from({ length: 51 }, (_, i) => [`v${i}`, i]));
+      const generator = tool.invoke({ base, knobs: { price: [100] } });
+
+      await expect(generator.next()).rejects.toThrow(/at most 50 base variables/);
+    });
+
+    it('should reject overlong variable names', async () => {
+      const generator = tool.invoke({ base: { price: 100 }, knobs: { ['x'.repeat(65)]: [1] } });
+
+      await expect(generator.next()).rejects.toThrow(/at most 64 character/);
+    });
+
+    it('should reject non-finite numbers', async () => {
+      // JSON.parse('1e999') is Infinity, so a client can send one
+      const inKnob = tool.invoke({ base: { price: 100 }, knobs: { price: [Infinity] } });
+      await expect(inKnob.next()).rejects.toThrow(/finite/);
+
+      const inBase = tool.invoke({ base: { price: -Infinity }, knobs: { price: [100] } });
+      await expect(inBase.next()).rejects.toThrow(/finite/);
+    });
+
+    it('should reject too many or overlong metrics', async () => {
+      const tooMany = tool.invoke({
+        base: { price: 100 },
+        knobs: { price: [100] },
+        metrics: Array.from({ length: 11 }, () => 'revenue')
+      });
+      await expect(tooMany.next()).rejects.toThrow(/at most 10/);
+
+      const tooLong = tool.invoke({ base: { price: 100 }, knobs: { price: [100] }, metrics: ['x'.repeat(33)] });
+      await expect(tooLong.next()).rejects.toThrow(/at most 32 character/);
+    });
+  });
 });
