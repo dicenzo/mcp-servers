@@ -464,7 +464,7 @@ function analyzePerformance(font: any, fontBuffer: Buffer, loadTime: number): {
 /**
  * Analyzes font compatibility across platforms and browsers
  */
-function analyzeCompatibility(font: any, fontBuffer: Buffer, platforms: string[]): {
+function analyzeCompatibility(font: any, fontBuffer: Buffer, _platforms: string[]): {
   webBrowsers: Record<string, boolean>;
   operatingSystems: Record<string, boolean>;
   unicodeSupport: {

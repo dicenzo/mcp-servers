@@ -167,7 +167,7 @@ export class ImageUtils {
     try {
       // Apply format-specific options
       const formatOptions = ImageUtils.getFormatOptions(format);
-      let outputSharp = sharpInstance.toFormat(format as any, formatOptions);
+      const outputSharp = sharpInstance.toFormat(format as any, formatOptions);
       
       // Generate output buffer
       const outputBuffer = await outputSharp.toBuffer();
@@ -714,7 +714,6 @@ export class ImageUtils {
           const { data, info } = layerBuffer;
           if (data && info && info.width && info.height) {
             for (let i = 3; i < data.length; i += 4) {
-              // @ts-ignore: data is checked above but TypeScript still complains about possible undefined access
               data[i] = Math.round((data[i] || 0) * layer.opacity);
             }
             

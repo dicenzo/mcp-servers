@@ -33,7 +33,7 @@ export async function imageFilter(input: unknown) {
       try {
         const imageError = JSON.parse(error.message);
         return { success: false, error: imageError };
-      } catch (parseError) {
+      } catch {
         return {
           success: false,
           error: {

@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 
-import { z } from 'zod';
 import { ColorUtils } from '../util/colorUtils.js';
 import {
   ColorConvertInputSchema,
-  ColorConvertInput,
   Color,
   ColorErrorCode
 } from '../types/color.js';
@@ -103,7 +101,7 @@ export async function colorConvert(input: unknown): Promise<ColorConvertResponse
           success: false,
           error: colorError
         };
-      } catch (parseError) {
+      } catch {
         // Handle unstructured errors
         return {
           success: false,
