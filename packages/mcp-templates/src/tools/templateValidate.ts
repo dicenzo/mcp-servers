@@ -1,6 +1,5 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import {
-  TemplateValidateInput,
   TemplateValidateInputSchema,
   Template,
   ValidationReport,
