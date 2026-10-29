@@ -346,13 +346,13 @@ async function createSubsetWithFonttools(
     
     // Add character specification
     const unicodes = Array.from(options.characters).map(c => c.codePointAt(0)).filter(Boolean);
-    args.push(`--unicodes=${unicodes.map(u => u!.toString(16)).join(',')}`);
-    
-    // Add Unicode ranges if specified
+    const unicodeSpecs = unicodes.map(u => u!.toString(16));
+
+    // Unicode ranges go in the same --unicodes list (pyftsubset accepts "start-end" hex ranges)
     if (options.unicodeRanges) {
-      const ranges = options.unicodeRanges.map(r => `U+${r.start.toString(16)}-${r.end.toString(16)}`);
-      args.push(`--unicodes-file=-`); // Will pass via stdin if needed
+      unicodeSpecs.push(...options.unicodeRanges.map(r => `${r.start.toString(16)}-${r.end.toString(16)}`));
     }
+    args.push(`--unicodes=${unicodeSpecs.join(',')}`);
     
     // Add feature options
     if (options.features && options.features.length > 0) {
