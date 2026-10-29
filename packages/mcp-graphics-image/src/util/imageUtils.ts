@@ -25,6 +25,18 @@ import {
   validateCompositionConfig
 } from '../types/image.js';
 
+/** Options object accepted by sharp's toFormat() */
+type SharpFormatOptions = NonNullable<Parameters<sharp.Sharp['toFormat']>[1]>;
+
+/**
+ * Map our ImageFormat to sharp's output format key.
+ * Note: 'bmp' is in ImageFormat but not in sharp.FormatEnum; it is passed
+ * through unchanged (as before) and sharp rejects it at runtime.
+ */
+function toSharpFormat(format: ImageFormat): keyof sharp.FormatEnum {
+  return format as keyof sharp.FormatEnum;
+}
+
 /**
  * ImageUtils - Comprehensive utility class for image processing operations
  * Built on Sharp library for high-performance image manipulation
@@ -58,7 +70,7 @@ export class ImageUtils {
     processingTime: number,
     inputSize: number = 0,
     outputSize: number = 0,
-    additionalMetadata: Record<string, any> = {}
+    additionalMetadata: Record<string, unknown> = {}
   ): ProcessingMetadata {
     return {
       operation,
@@ -167,7 +179,7 @@ export class ImageUtils {
     try {
       // Apply format-specific options
       const formatOptions = ImageUtils.getFormatOptions(format);
-      const outputSharp = sharpInstance.toFormat(format as any, formatOptions);
+      const outputSharp = sharpInstance.toFormat(toSharpFormat(format), formatOptions);
       
       // Generate output buffer
       const outputBuffer = await outputSharp.toBuffer();
@@ -214,7 +226,7 @@ export class ImageUtils {
   /**
    * Get format-specific options for Sharp
    */
-  static getFormatOptions(format: ImageFormat): Record<string, any> {
+  static getFormatOptions(format: ImageFormat): SharpFormatOptions {
     switch (format) {
       case 'jpeg':
       case 'jpg':
@@ -249,7 +261,7 @@ export class ImageUtils {
       // Apply quality if specified
       if (quality !== undefined) {
         const formatOptions = { ...ImageUtils.getFormatOptions(targetFormat), quality };
-        sharpInstance.toFormat(targetFormat as any, formatOptions);
+        sharpInstance.toFormat(toSharpFormat(targetFormat), formatOptions);
       }
       
       const base64Data = parsedInput.data.replace(/^data:image\/[a-z]+;base64,/, '');
@@ -567,7 +579,7 @@ export class ImageUtils {
           quality: optimizationSettings.quality,
           progressive: optimizationSettings.progressive
         };
-        sharpInstance = sharpInstance.toFormat(parsedInput.format as any, formatOptions);
+        sharpInstance = sharpInstance.toFormat(toSharpFormat(parsedInput.format), formatOptions);
       }
       
       // Apply size constraints if specified
@@ -592,7 +604,7 @@ export class ImageUtils {
       );
 
       // Enforce file size limit if specified
-      if (validOptions.maxFileSize && result.metadata.fileSize! > validOptions.maxFileSize) {
+      if (validOptions.maxFileSize && result.metadata.fileSize !== undefined && result.metadata.fileSize > validOptions.maxFileSize) {
         result = await ImageUtils.optimizeToFileSize(parsedInput, validOptions.maxFileSize, startTime, inputSize);
       }
 
@@ -664,10 +676,10 @@ export class ImageUtils {
         quality 
       };
       
-      sharpInstance.toFormat(imageInput.format as any, formatOptions);
+      sharpInstance.toFormat(toSharpFormat(imageInput.format), formatOptions);
       result = await ImageUtils.sharpToOutput(sharpInstance, imageInput.format, 'optimize_filesize', startTime, inputSize);
       quality -= 10;
-    } while (result.metadata.fileSize! > maxFileSize && quality > 10);
+    } while (result.metadata.fileSize !== undefined && result.metadata.fileSize > maxFileSize && quality > 10);
     
     return result;
   }
@@ -731,7 +743,7 @@ export class ImageUtils {
           input: layerBuffer,
           left: layer.x,
           top: layer.y,
-          blend: layer.blend as any
+          blend: layer.blend as sharp.Blend
         });
       }
 
