@@ -1,5 +1,7 @@
+import { registerWindow } from '@svgdotjs/svg.js';
+import { SVG_LIMITS } from '../../src/types/svg.js';
 import { svgTransformTool } from '../../src/tools/svgTransform.js';
-import { describe, test, expect } from '@jest/globals';
+import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 
 describe('svg.transform Tool', () => {
   const baseSVG = '<svg width="100" height="100"><rect x="10" y="10" width="50" height="50" fill="red"/></svg>';
@@ -417,5 +419,151 @@ describe('svg.transform Tool', () => {
       const response = JSON.parse(result.content[0].text);
       expect(response.metadata.transformedSize).toBeGreaterThan(response.metadata.originalSize);
     });
+  });
+});
+describe('svg.transform security hardening', () => {
+  const transform = async (svg: string, transforms: unknown[]) => {
+    const result = await svgTransformTool.invoke({ svg, transforms });
+    return { result, response: JSON.parse(result.content[0].text) };
+  };
+
+  test('rejects id selectors containing regex metacharacters without backtracking', async () => {
+    const svg = '<svg width="100" height="100"><rect id="' + 'a'.repeat(30) + '" width="5" height="5"/></svg>';
+    const start = Date.now();
+    const { result, response } = await transform(svg, [
+      { type: 'translate', values: [1, 1], element: '#(a|aa)*x' }
+    ]);
+    expect(Date.now() - start).toBeLessThan(1000);
+    expect(result.isError).toBe(true);
+    expect(response.message).toMatch(/selector|id/i);
+  });
+
+  test('rejects id selectors that would break out of the attribute', async () => {
+    const { result } = await transform('<svg width="10" height="10"><rect id="a" width="5" height="5"/></svg>', [
+      { type: 'translate', values: [1, 1], element: '#a" onload="alert(1)' }
+    ]);
+    expect(result.isError).toBe(true);
+  });
+
+  test('accepts ids using the full XML-name character set', async () => {
+    const svg = '<svg width="10" height="10"><rect id="icon_main.v2:part-1" width="5" height="5"/></svg>';
+    const { result, response } = await transform(svg, [
+      { type: 'translate', values: [3, 4], element: '#icon_main.v2:part-1' }
+    ]);
+    expect(result.isError).toBeUndefined();
+    expect(response.svg).toContain('translate(3, 4)');
+  });
+
+  test('targets a self-closing element without producing malformed markup', async () => {
+    const svg = '<svg width="100" height="100"><rect id="target" x="10" y="10" width="50" height="50" fill="red"/></svg>';
+    const { result, response } = await transform(svg, [
+      { type: 'translate', values: [20, 30], element: '#target' }
+    ]);
+    expect(result.isError).toBeUndefined();
+    expect(response.svg).toMatch(/<rect id="target"[^>]*transform="translate\(20, 30\)"[^>]*\/>/);
+    expect(response.svg).not.toContain('/ transform');
+  });
+
+  test('handles pathological input for element targeting in linear time', async () => {
+    const svg = '<svg width="10" height="10">' + '<'.repeat(900000) + '</svg>';
+    const start = Date.now();
+    await transform(svg, [{ type: 'translate', values: [1, 1], element: '#a' }]);
+    expect(Date.now() - start).toBeLessThan(1000);
+  });
+
+  test('handles pathological input for root transforms in linear time', async () => {
+    const svg = '<svg'.repeat(200000) + '</svg>';
+    const start = Date.now();
+    await transform(svg, [{ type: 'translate', values: [1, 1] }]);
+    expect(Date.now() - start).toBeLessThan(1000);
+  });
+
+  test('rejects input containing a DOCTYPE', async () => {
+    const { result } = await transform(
+      '<!DOCTYPE svg [<!ENTITY a "b">]><svg width="10" height="10"><text>&a;</text></svg>',
+      [{ type: 'translate', values: [1, 1] }]
+    );
+    expect(result.isError).toBe(true);
+  });
+
+  test('rejects SVG input larger than the size cap', async () => {
+    const svg = '<svg width="10" height="10">' + ' '.repeat(SVG_LIMITS.MAX_SVG_LENGTH) + '</svg>';
+    const { result } = await transform(svg, [{ type: 'translate', values: [1, 1] }]);
+    expect(result.isError).toBe(true);
+  });
+
+  test('rejects too many transforms', async () => {
+    const transforms = Array.from({ length: SVG_LIMITS.MAX_TRANSFORMS + 1 }, () => ({ type: 'translate', values: [1, 1] }));
+    const { result } = await transform('<svg width="10" height="10"></svg>', transforms);
+    expect(result.isError).toBe(true);
+  });
+});
+
+// Without a registered DOM window (the production case under Node), svg.js cannot
+// parse the input and svg.transform falls back to string-based transformation.
+describe('svg.transform string-based fallback (no DOM window)', () => {
+  beforeAll(() => {
+    registerWindow(undefined as any, undefined as any);
+  });
+
+  afterAll(() => {
+    registerWindow((global as any).window, (global as any).document);
+  });
+
+  const transform = async (svg: string, transforms: unknown[]) => {
+    const result = await svgTransformTool.invoke({ svg, transforms });
+    return { result, response: JSON.parse(result.content[0].text) };
+  };
+
+  test('adds a transform to a self-closing element targeted by id', async () => {
+    const { result, response } = await transform(
+      '<svg width="100" height="100"><rect id="target" x="10" y="10" width="50" height="50" fill="red"/></svg>',
+      [{ type: 'translate', values: [20, 30], element: '#target' }]
+    );
+    expect(result.isError).toBeUndefined();
+    expect(response.svg).toBe(
+      '<svg width="100" height="100"><rect id="target" x="10" y="10" width="50" height="50" fill="red" transform="translate(20, 30)"/></svg>'
+    );
+  });
+
+  test('appends to an existing transform attribute', async () => {
+    const { response } = await transform(
+      '<svg width="100" height="100"><g id="layer" transform="scale(2)"><rect width="5" height="5"/></g></svg>',
+      [{ type: 'rotate', values: [45], element: '#layer' }]
+    );
+    expect(response.svg).toContain('<g id="layer" transform="scale(2) rotate(45)">');
+  });
+
+  test('matches the id attribute exactly, not as a suffix of another attribute', async () => {
+    const { response } = await transform(
+      '<svg width="100" height="100"><rect data-id="target" width="5" height="5"/><rect id="target" width="6" height="6"/></svg>',
+      [{ type: 'translate', values: [1, 2], element: '#target' }]
+    );
+    expect(response.svg).toContain('<rect data-id="target" width="5" height="5"/>');
+    expect(response.svg).toContain('<rect id="target" width="6" height="6" transform="translate(1, 2)"/>');
+  });
+
+  test('wraps the root content in a group, keeping nested svg elements intact', async () => {
+    const { response } = await transform(
+      '<svg width="100" height="100"><svg x="5"><rect width="5" height="5"/></svg></svg>',
+      [{ type: 'translate', values: [1, 2] }]
+    );
+    expect(response.svg).toBe(
+      '<svg width="100" height="100"><g transform="translate(1, 2)"><svg x="5"><rect width="5" height="5"/></svg></g></svg>'
+    );
+  });
+
+  test('handles pathological input for element targeting in linear time', async () => {
+    const svg = '<svg width="10" height="10">' + '<'.repeat(900000) + '</svg>';
+    const start = Date.now();
+    await transform(svg, [{ type: 'translate', values: [1, 1], element: '#a' }]);
+    expect(Date.now() - start).toBeLessThan(1000);
+  });
+
+  test('handles pathological input for root transforms in linear time', async () => {
+    const svg = '<svg'.repeat(200000) + '</svg>';
+    const start = Date.now();
+    await transform(svg, [{ type: 'translate', values: [1, 1] }]);
+    expect(Date.now() - start).toBeLessThan(1000);
   });
 });

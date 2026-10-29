@@ -1,5 +1,6 @@
 import { describe, test, expect } from '@jest/globals';
 import { svgPathOperationsTool } from '../../src/tools/svgPathOperations.js';
+import { SVG_LIMITS } from '../../src/types/svg.js';
 
 describe('svg.path.operations Tool', () => {
   const simpleRect = 'M 10 10 L 60 10 L 60 60 L 10 60 Z';
@@ -466,5 +467,35 @@ describe('svg.path.operations Tool', () => {
       expect(response.operation.path2Length).toBe(triangle.length);
       expect(response.operation.resultLength).toBeGreaterThan(0);
     });
+  });
+});
+describe('svg.path.operations input caps', () => {
+  const run = async (path1: string, path2: string, operation: string) => {
+    const result = await svgPathOperationsTool.invoke({ path1, path2, operation });
+    return { result, response: JSON.parse(result.content[0].text) };
+  };
+
+  test('rejects path data larger than the path cap', async () => {
+    const big = 'M 0 0' + ' L 1 1'.repeat(SVG_LIMITS.MAX_PATH_LENGTH / 5);
+    const { result } = await run(big, 'M 0 0 L 1 1', 'union');
+    expect(result.isError).toBe(true);
+  });
+
+  test('rejects paths with more coordinates than the coordinate cap', async () => {
+    const many = 'M 0 0' + ' L 1 1'.repeat(SVG_LIMITS.MAX_PATH_COORDINATES + 1);
+    const { result, response } = await run(many, 'M 0 0 L 1 1', 'intersect');
+    expect(result.isError).toBe(true);
+    expect(response.message).toMatch(/coordinate/i);
+  });
+
+  test.each(['intersect', 'subtract', 'exclude'])('worst-case %s at the coordinate cap finishes within 1s', async (operation) => {
+    // Points that never fall within tolerance of each other force a full n*m scan
+    const pathA = 'M 0 0' + Array.from({ length: SVG_LIMITS.MAX_PATH_COORDINATES - 1 }, (_, i) => ` L ${i * 10} 0`).join('');
+    const pathB = 'M 0 5' + Array.from({ length: SVG_LIMITS.MAX_PATH_COORDINATES - 1 }, (_, i) => ` L ${i * 10} 5`).join('');
+    const start = Date.now();
+    const { result } = await run(pathA, pathB, operation);
+    expect(Date.now() - start).toBeLessThan(1000);
+    // An empty intersection is reported as an error; only the timing matters here
+    expect(result.content[0].type).toBe('text');
   });
 });

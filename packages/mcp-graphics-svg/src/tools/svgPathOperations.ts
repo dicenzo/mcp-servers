@@ -2,7 +2,8 @@ import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { 
   SVGPathOperationsInputSchema, 
   SVGErrorCode, 
-  SVGPathOperationsInput
+  SVGPathOperationsInput,
+  SVG_LIMITS
 } from '../types/svg.js';
 import { SVGValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
@@ -22,10 +23,12 @@ export const svgPathOperationsTool: ExecutableTool = {
     properties: {
       path1: {
         type: 'string',
+        maxLength: SVG_LIMITS.MAX_PATH_LENGTH,
         description: 'First SVG path data string (d attribute value)'
       },
       path2: {
         type: 'string',
+        maxLength: SVG_LIMITS.MAX_PATH_LENGTH,
         description: 'Second SVG path data string (d attribute value)'
       },
       operation: {
@@ -135,11 +138,16 @@ async function performPathOperation(
   options: { precision: number; tolerance: number }
 ): Promise<string> {
   
+  // Parse paths into coordinate arrays
+  const coords1 = parsePathToCoordinates(path1);
+  const coords2 = parsePathToCoordinates(path2);
+
+  // The operations compare every point of one path with every point of the
+  // other (O(n*m)), so cap the coordinate count to bound the running time
+  validateCoordinateCount(coords1.length, 'path1');
+  validateCoordinateCount(coords2.length, 'path2');
+
   try {
-    // Parse paths into coordinate arrays
-    const coords1 = parsePathToCoordinates(path1);
-    const coords2 = parsePathToCoordinates(path2);
-    
     // Perform the boolean operation
     let resultCoords: PathCoordinate[];
     
@@ -171,6 +179,17 @@ async function performPathOperation(
     // Fallback to simplified operations if complex algorithms fail
     console.warn('[svg.pathOperations] Complex operation failed, using simplified approach');
     return performSimplifiedOperation(path1, path2, operation, options);
+  }
+}
+
+/**
+ * Rejects paths with more coordinates than SVG_LIMITS.MAX_PATH_COORDINATES
+ */
+function validateCoordinateCount(count: number, pathName: string): void {
+  if (count > SVG_LIMITS.MAX_PATH_COORDINATES) {
+    throw new Error(
+      `${pathName} has ${count} coordinates; path operations support at most ${SVG_LIMITS.MAX_PATH_COORDINATES} coordinates per path`
+    );
   }
 }
 
@@ -320,6 +339,17 @@ function coordinatesToPath(coordinates: PathCoordinate[], precision: number): st
 }
 
 /**
+ * True when two points are within `tolerance` of each other. Compares squared
+ * distances to keep sqrt/pow out of the O(n*m) inner loops.
+ */
+function isWithinTolerance(a: PathCoordinate, b: PathCoordinate, tolerance: number): boolean {
+  if (tolerance < 0) return false;
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy <= tolerance * tolerance;
+}
+
+/**
  * Boolean operation implementations (simplified)
  * In a production system, these would use robust computational geometry libraries
  */
@@ -343,11 +373,7 @@ function performIntersection(
   
   for (const coord1 of coords1) {
     for (const coord2 of coords2) {
-      const distance = Math.sqrt(
-        Math.pow(coord1.x - coord2.x, 2) + Math.pow(coord1.y - coord2.y, 2)
-      );
-      
-      if (distance <= options.tolerance) {
+      if (isWithinTolerance(coord1, coord2, options.tolerance)) {
         intersection.push({
           x: (coord1.x + coord2.x) / 2,
           y: (coord1.y + coord2.y) / 2,
@@ -368,12 +394,7 @@ function performSubtraction(
 ): PathCoordinate[] {
   // Simplified subtraction: remove coords1 points near coords2 points
   return coords1.filter(coord1 => {
-    return !coords2.some(coord2 => {
-      const distance = Math.sqrt(
-        Math.pow(coord1.x - coord2.x, 2) + Math.pow(coord1.y - coord2.y, 2)
-      );
-      return distance <= options.tolerance;
-    });
+    return !coords2.some(coord2 => isWithinTolerance(coord1, coord2, options.tolerance));
   });
 }
 
@@ -387,12 +408,7 @@ function performExclusion(
   const intersection = performIntersection(coords1, coords2, options);
   
   return union.filter(coord => {
-    return !intersection.some(intCoord => {
-      const distance = Math.sqrt(
-        Math.pow(coord.x - intCoord.x, 2) + Math.pow(coord.y - intCoord.y, 2)
-      );
-      return distance <= options.tolerance;
-    });
+    return !intersection.some(intCoord => isWithinTolerance(coord, intCoord, options.tolerance));
   });
 }
 

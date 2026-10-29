@@ -1,5 +1,18 @@
 import { z } from 'zod';
+import { JSDOM } from 'jsdom';
 import { SVGError, SVGErrorCode } from '../types/svg.js';
+
+/** Elements that can run script or embed active foreign content */
+const ACTIVE_ELEMENTS = new Set(['script', 'foreignobject', 'iframe', 'embed', 'object', 'handler']);
+
+/** Animation elements whose `attributeName` can retarget event handlers or links */
+const ANIMATION_ELEMENTS = new Set(['set', 'animate', 'animatetransform', 'animatemotion', 'animatecolor']);
+
+const NODE_ELEMENT = 1;
+const NODE_PROCESSING_INSTRUCTION = 7;
+
+type DOMNode = JSDOM['window']['Node']['prototype'];
+type DOMElement = JSDOM['window']['Element']['prototype'];
 
 /**
  * Enhanced validation utility for SVG operations with comprehensive error handling
@@ -40,6 +53,20 @@ export class SVGValidator {
         code: SVGErrorCode.INVALID_SVG,
         message: 'SVG input must be a non-empty string',
         suggestions: ['Provide a valid SVG string', 'Check that SVG content is not null or undefined']
+      }));
+    }
+
+    // Reject document type declarations before anything parses the input.
+    // Internal <!ENTITY> definitions expand exponentially (billion laughs) in
+    // SVGO's parser, and SVG has no legitimate need for a DTD.
+    if (/<!(DOCTYPE|ENTITY)/i.test(svgString)) {
+      throw new Error(JSON.stringify({
+        code: SVGErrorCode.INVALID_SVG,
+        message: 'SVG input must not contain a DOCTYPE or ENTITY declaration',
+        suggestions: [
+          'Remove the <!DOCTYPE ...> declaration from the SVG',
+          'Replace custom entities with their literal text'
+        ]
       }));
     }
 
@@ -280,20 +307,88 @@ export class SVGSanitizer {
    * Sanitizes SVG content to prevent XSS and other security issues
    */
   static sanitizeSVG(svgContent: string): string {
-    // Remove potentially dangerous elements and attributes
+    // Every pattern here runs in linear time; inputs come from MCP callers.
+    let sanitized = removeScriptBlocks(svgContent);
+
     const dangerous = [
-      /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
-      /on\w+\s*=\s*["'][^"']*["']/gi, // Remove event handlers
+      // The leading \b anchors each match at the start of a word, so a long
+      // run like "ononon..." is scanned once rather than once per position
+      /\bon\w+\s*=\s*["'][^"']*["']/gi, // Remove event handlers
       /javascript:/gi,
       /data:text\/html/gi
     ];
 
-    let sanitized = svgContent;
     for (const pattern of dangerous) {
       sanitized = sanitized.replace(pattern, '');
     }
 
     return sanitized;
+  }
+
+  /**
+   * Removes active content from SVG markup using an XML parser (jsdom), so
+   * encodings that slip past string matching are still caught:
+   * - script, foreignObject and other embedding elements
+   * - every on* event handler attribute
+   * - set/animate elements that target on* attributes or href
+   * - href values other than local fragments (#id) and data:image/ URIs
+   * - processing instructions such as xml-stylesheet
+   *
+   * Returns the input unchanged when nothing was removed. Throws when the
+   * markup cannot be parsed, so unparseable content is never passed through.
+   */
+  static removeActiveContent(svgContent: string): string {
+    let dom: JSDOM;
+    try {
+      dom = new JSDOM(svgContent, { contentType: 'image/svg+xml' });
+    } catch (error) {
+      throw new Error(JSON.stringify({
+        code: SVGErrorCode.INVALID_SVG,
+        message: 'SVG could not be parsed as XML for security sanitization',
+        details: { reason: error instanceof Error ? error.message : String(error) },
+        suggestions: [
+          'Ensure the SVG is well-formed XML',
+          'Declare every namespace prefix you use, e.g. xmlns:xlink="http://www.w3.org/1999/xlink"'
+        ]
+      }));
+    }
+
+    const { document } = dom.window;
+    let changed = false;
+
+    const visit = (node: DOMNode): void => {
+      // Copy first: children may be removed while iterating
+      for (const child of Array.from(node.childNodes)) {
+        if (child.nodeType === NODE_PROCESSING_INSTRUCTION) {
+          child.parentNode?.removeChild(child);
+          changed = true;
+          continue;
+        }
+        if (child.nodeType !== NODE_ELEMENT) continue;
+
+        const element = child as DOMElement;
+        const name = element.localName.toLowerCase();
+        if (ACTIVE_ELEMENTS.has(name) || (ANIMATION_ELEMENTS.has(name) && targetsUnsafeAttribute(element))) {
+          element.parentNode?.removeChild(element);
+          changed = true;
+          continue;
+        }
+
+        for (const attr of Array.from(element.attributes)) {
+          const attrName = attr.localName.toLowerCase();
+          if (attrName.startsWith('on') || (attrName === 'href' && !isSafeHref(attr.value))) {
+            element.removeAttributeNode(attr);
+            changed = true;
+          }
+        }
+
+        visit(element);
+      }
+    };
+
+    visit(document);
+
+    return changed ? dom.serialize() : svgContent;
   }
 
   /**
@@ -316,4 +411,67 @@ export class SVGSanitizer {
       }));
     }
   }
+}
+
+/**
+ * Removes every `<script ...>...</script>` block (case-insensitive) in a single
+ * left-to-right pass. Equivalent to the regex
+ * `/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi`, which backtracks
+ * quadratically when many `<script` openings have no closing tag.
+ */
+function removeScriptBlocks(content: string): string {
+  const lower = content.toLowerCase();
+  const open = '<script';
+  const close = '</script>';
+  let result = '';
+  let cursor = 0;
+  let searchFrom = 0;
+
+  while (searchFrom < lower.length) {
+    const start = lower.indexOf(open, searchFrom);
+    if (start === -1) break;
+
+    // Match the regex's \b: "<scripts" or "<script_" is not a script tag
+    const next = lower.charAt(start + open.length);
+    if (/\w/.test(next)) {
+      searchFrom = start + open.length;
+      continue;
+    }
+
+    const end = lower.indexOf(close, start + open.length);
+    // Any later opening tag would have no closing tag either
+    if (end === -1) break;
+
+    result += content.slice(cursor, start);
+    cursor = end + close.length;
+    searchFrom = cursor;
+  }
+
+  return result + content.slice(cursor);
+}
+
+/** True when an animation element's attributeName targets an event handler or link */
+function targetsUnsafeAttribute(element: DOMElement): boolean {
+  const target = (element.getAttribute('attributeName') ?? '').trim().toLowerCase();
+  // Strip any namespace prefix, e.g. xlink:href -> href
+  const localTarget = target.slice(target.lastIndexOf(':') + 1);
+  return localTarget.startsWith('on') || localTarget === 'href';
+}
+
+/** Only same-document fragment references and inline images are allowed */
+function isSafeHref(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.startsWith('#') || /^data:image\//i.test(trimmed);
+}
+
+/**
+ * Escapes XML special characters for use in text content and attribute values
+ */
+export function escapeXML(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

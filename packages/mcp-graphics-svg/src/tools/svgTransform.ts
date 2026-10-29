@@ -3,7 +3,9 @@ import { SVG, Svg, Element, List } from '@svgdotjs/svg.js';
 import { 
   SVGTransformInputSchema, 
   SVGTransformInput, 
-  SVGErrorCode 
+  SVGErrorCode,
+  SVG_ID_PATTERN,
+  SVG_LIMITS
 } from '../types/svg.js';
 import { SVGValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
@@ -31,10 +33,12 @@ export const svgTransformTool: ExecutableTool = {
     properties: {
       svg: {
         type: 'string',
+        maxLength: SVG_LIMITS.MAX_SVG_LENGTH,
         description: 'SVG content to transform'
       },
       transforms: {
         type: 'array',
+        maxItems: SVG_LIMITS.MAX_TRANSFORMS,
         items: {
           type: 'object',
           properties: {
@@ -49,7 +53,8 @@ export const svgTransformTool: ExecutableTool = {
             },
             element: {
               type: 'string',
-              description: 'CSS selector or element ID to target (optional, applies to all if not specified)'
+              maxLength: SVG_LIMITS.MAX_SHORT_STRING_LENGTH,
+              description: 'CSS selector or element ID to target (optional, applies to all if not specified). ID selectors must match #[A-Za-z_][A-Za-z0-9_.:-]*'
             },
             origin: {
               type: 'object',
@@ -309,16 +314,27 @@ function applyTransformToElement(svgContent: string, selector: string, transform
   // Simple implementation for ID selector
   if (selector.startsWith('#')) {
     const id = selector.slice(1);
-    const pattern = new RegExp(`(<[^>]*id="${id}"[^>]*?)>`, 'i');
-    return svgContent.replace(pattern, (match, openTag) => {
-      if (match.includes('transform=')) {
-        // Append to existing transform
-        return match.replace(/transform="([^"]*)"/, `transform="$1 ${transformString}"`);
-      } else {
-        // Add new transform attribute
-        return `${openTag} transform="${transformString}">`;
+    // The schema already restricts ids to SVG_ID_PATTERN; re-check here so this
+    // function never builds a pattern from unvalidated input
+    if (!SVG_ID_PATTERN.test(id)) {
+      throw new Error(`Invalid id selector: ${selector}`);
+    }
+    const idAttribute = new RegExp(`\\sid="${escapeRegExp(id)}"`, 'i');
+
+    // Scan tag by tag: each character is examined once, so the cost stays
+    // linear however the input is shaped
+    let tagStart = svgContent.indexOf('<');
+    while (tagStart !== -1) {
+      const tagEnd = svgContent.indexOf('>', tagStart + 1);
+      if (tagEnd === -1) break;
+
+      const tag = svgContent.slice(tagStart, tagEnd + 1);
+      if (idAttribute.test(tag)) {
+        return svgContent.slice(0, tagStart) + addTransformToTag(tag, transformString) + svgContent.slice(tagEnd + 1);
       }
-    });
+      tagStart = svgContent.indexOf('<', tagEnd + 1);
+    }
+    return svgContent;
   }
   
   // For other selectors, apply to all matching elements (simplified)
@@ -326,14 +342,44 @@ function applyTransformToElement(svgContent: string, selector: string, transform
 }
 
 /**
+ * Adds a transform to a single opening tag, appending to an existing transform
+ * attribute or inserting one before the closing `>` or `/>`
+ */
+function addTransformToTag(tag: string, transformString: string): string {
+  if (tag.includes('transform=')) {
+    return tag.replace(/transform="([^"]*)"/, `transform="$1 ${transformString}"`);
+  }
+  const closing = tag.endsWith('/>') ? '/>' : '>';
+  const body = tag.slice(0, tag.length - closing.length).replace(/\s+$/, '');
+  return `${body} transform="${transformString}"${closing}`;
+}
+
+/**
+ * Escapes regular expression metacharacters so a string matches literally
+ */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
  * Applies transform to root SVG element
  */
 function applyTransformToRoot(svgContent: string, transformString: string): string {
-  // Wrap content in a transformed group
-  return svgContent.replace(
-    /(<svg[^>]*>)(.*?)(<\/svg>)/s,
-    `$1<g transform="${transformString}">$2</g>$3`
-  );
+  // Wrap the root's content in a transformed group. indexOf-based so the cost
+  // is linear; the regex /(<svg[^>]*>)(.*?)(<\/svg>)/s backtracked
+  // quadratically on inputs with many unterminated "<svg" openings.
+  const openStart = svgContent.indexOf('<svg');
+  if (openStart === -1) return svgContent;
+  const openEnd = svgContent.indexOf('>', openStart);
+  // The root's closing tag is the last one, which keeps nested <svg> elements intact
+  const closeStart = svgContent.lastIndexOf('</svg>');
+  if (openEnd === -1 || closeStart < openEnd) return svgContent;
+
+  return svgContent.slice(0, openEnd + 1) +
+    `<g transform="${transformString}">` +
+    svgContent.slice(openEnd + 1, closeStart) +
+    '</g>' +
+    svgContent.slice(closeStart);
 }
 
 /**

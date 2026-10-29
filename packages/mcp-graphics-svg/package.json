@@ -24,7 +24,7 @@
     "lint:fix": "eslint src/**/*.ts --fix"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.2.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@svgdotjs/svg.js": "^3.2.4",
     "chroma-js": "^2.4.2",
     "dotenv": "^16.4.5",
@@ -32,7 +32,7 @@
     "jsdom": "^26.1.0",
     "mermaid": "^10.9.1",
     "svgdom": "^0.1.19",
-    "svgo": "^3.3.2",
+    "svgo": "^3.3.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {

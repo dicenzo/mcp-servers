@@ -1,3 +1,4 @@
+import { SVG_LIMITS } from '../../src/types/svg';
 import { wireframeToSvgTool, executeWireframeToSvg } from '../../src/tools/wireframeToSvg';
 
 describe('wireframeToSvg Tool', () => {
@@ -159,5 +160,17 @@ describe('wireframeToSvg Tool', () => {
       expect(['minimal', 'detailed', 'interactive']).toContain(validArgs.style);
       expect(validArgs.colors?.border).toMatch(/^#[0-9a-fA-F]{6}$/);
     });
+  });
+});
+describe('wireframe.to.svg input caps', () => {
+  it('rejects wireframe text larger than the text cap', async () => {
+    await expect(wireframeToSvgTool.invoke({ wireframe_text: 'x'.repeat(SVG_LIMITS.MAX_TEXT_LENGTH + 1) })).rejects.toThrow();
+  });
+
+  it('rejects color strings longer than the short-string cap', async () => {
+    await expect(wireframeToSvgTool.invoke({
+      wireframe_text: 'Hello',
+      colors: { border: '#'.repeat(SVG_LIMITS.MAX_SHORT_STRING_LENGTH + 1), background: '#fff', text: '#000', accent: '#00f' }
+    })).rejects.toThrow();
   });
 });

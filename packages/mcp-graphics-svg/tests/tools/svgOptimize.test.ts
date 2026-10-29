@@ -1,5 +1,6 @@
 import { describe, test, expect } from '@jest/globals';
 import { svgOptimizeTool } from '../../src/tools/svgOptimize.js';
+import { SVG_LIMITS } from '../../src/types/svg.js';
 
 describe('svg.optimize Tool', () => {
   const unoptimizedSVG = `<?xml version="1.0" encoding="UTF-8"?>
@@ -373,5 +374,105 @@ describe('svg.optimize Tool', () => {
       expect(timestamp).toBeInstanceOf(Date);
       expect(timestamp.getTime()).toBeLessThanOrEqual(Date.now());
     });
+  });
+});
+describe('svg.optimize security hardening', () => {
+  const optimizeSvg = async (svg: string) => {
+    const result = await svgOptimizeTool.invoke({ svg });
+    return { result, response: JSON.parse(result.content[0].text) };
+  };
+
+  test('rejects internal entity expansion (billion laughs) before parsing', async () => {
+    const entities = ['<!ENTITY e0 "' + 'x'.repeat(100) + '">'];
+    for (let i = 1; i < 10; i++) {
+      entities.push(`<!ENTITY e${i} "${`&e${i - 1};`.repeat(10)}">`);
+    }
+    const svg = `<?xml version="1.0"?><!DOCTYPE svg [${entities.join('')}]>` +
+      '<svg xmlns="http://www.w3.org/2000/svg"><text>&e9;</text></svg>';
+
+    const start = Date.now();
+    const { result, response } = await optimizeSvg(svg);
+    expect(Date.now() - start).toBeLessThan(1000);
+    expect(result.isError).toBe(true);
+    expect(response.message).toMatch(/DOCTYPE|ENTITY/);
+  });
+
+  test('rejects SVG input larger than the size cap', async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg">' + ' '.repeat(SVG_LIMITS.MAX_SVG_LENGTH) + '</svg>';
+    const { result } = await optimizeSvg(svg);
+    expect(result.isError).toBe(true);
+  });
+
+  test('removes a script element whose closing tag evades the pre-check', async () => {
+    const { result, response } = await optimizeSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script ><rect width="10" height="10"/></svg>'
+    );
+    if (!result.isError) {
+      expect(response.svg).not.toMatch(/<script/i);
+      expect(response.svg).not.toContain('alert(1)');
+    }
+  });
+
+  test('removes <set> and <animate> elements that target event handlers or href', async () => {
+    const { result, response } = await optimizeSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">' +
+      '<rect width="10" height="10" fill="red"><set attributeName="onmouseover" to="alert(1)"/></rect>' +
+      // Entity-encoded payloads evade the string pre-check, so the parser-based pass must catch them
+      '<a><animate attributeName="href" values="jav&#x61;script:alert(1)"/><text>x</text></a>' +
+      '<a><animate attributeName="xlink:href" to="jav&#x61;script:alert(2)"/><text>y</text></a>' +
+      '</svg>'
+    );
+    expect(result.isError).toBeUndefined();
+    expect(response.svg).not.toContain('onmouseover');
+    expect(response.svg).not.toContain('alert(');
+    expect(response.svg).not.toMatch(/<set\b/);
+    expect(response.svg).not.toMatch(/<animate\b/);
+  });
+
+  test('removes foreignObject content', async () => {
+    const { result, response } = await optimizeSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject width="100" height="100">' +
+      '<iframe xmlns="http://www.w3.org/1999/xhtml" src="https://evil.example/"></iframe>' +
+      '</foreignObject><rect width="10" height="10" fill="red"/></svg>'
+    );
+    expect(result.isError).toBeUndefined();
+    expect(response.svg).not.toMatch(/foreignObject/i);
+    expect(response.svg).not.toContain('evil.example');
+  });
+
+  test('removes external hrefs but keeps fragment and data:image references', async () => {
+    const { result, response } = await optimizeSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">' +
+      '<defs><circle id="dot" r="5" fill="red"/></defs>' +
+      '<use href="#dot"/>' +
+      '<use xlink:href="https://evil.example/sprite.svg#x"/>' +
+      '<a href="https://evil.example/"><rect width="10" height="10" fill="blue"/></a>' +
+      '<image width="1" height="1" href="data:image/png;base64,iVBORw0KGgo="/>' +
+      '</svg>'
+    );
+    expect(result.isError).toBeUndefined();
+    expect(response.svg).not.toContain('evil.example');
+    // SVGO minifies ids, so check that a fragment reference survived rather than its name
+    expect(response.svg).toMatch(/<use href="#\w+"\/>/);
+    expect(response.svg).toContain('data:image/png;base64');
+  });
+
+  test('removes xml-stylesheet processing instructions', async () => {
+    const { result, response } = await optimizeSvg(
+      '<?xml-stylesheet href="https://evil.example/x.css"?><svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10" fill="red"/></svg>'
+    );
+    if (!result.isError) {
+      expect(response.svg).not.toContain('evil.example');
+    }
+  });
+
+  test('preserves ordinary content when nothing unsafe is present', async () => {
+    const { result, response } = await optimizeSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect x="10" y="10" width="50" height="50" fill="red"/></svg>'
+    );
+    expect(result.isError).toBeUndefined();
+    // SVGO converts the rect to an equivalent path
+    expect(response.svg).toMatch(/<(rect|path)\b/);
+    expect(response.svg).toContain('fill="red"');
   });
 });

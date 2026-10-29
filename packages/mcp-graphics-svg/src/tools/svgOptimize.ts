@@ -3,7 +3,8 @@ import { optimize } from 'svgo';
 import { 
   SVGOptimizeInputSchema, 
   SVGOptimizeInput, 
-  SVGErrorCode 
+  SVGErrorCode,
+  SVG_LIMITS
 } from '../types/svg.js';
 import { SVGValidator, SVGSanitizer } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
@@ -23,7 +24,8 @@ export const svgOptimizeTool: ExecutableTool = {
     properties: {
       svg: {
         type: 'string',
-        description: 'SVG content to optimize (as string)'
+        maxLength: SVG_LIMITS.MAX_SVG_LENGTH,
+        description: 'SVG content to optimize (as string). DOCTYPE/ENTITY declarations are rejected; scripts, event handlers, foreignObject and external links are removed from the output.'
       },
       options: {
         type: 'object',
@@ -105,16 +107,20 @@ export const svgOptimizeTool: ExecutableTool = {
           throw new Error('SVGO optimization failed - no output generated');
         }
         
+        // SVGO can normalize markup that evaded the string pre-check into working
+        // script, so sanitize the output with a real parser as the final step
+        const optimizedSVG = SVGSanitizer.removeActiveContent(optimizedResult.data);
+        
         // Validate optimized SVG
-        SVGValidator.validateSVGString(optimizedResult.data);
+        SVGValidator.validateSVGString(optimizedSVG);
         
         // Calculate optimization metrics
-        const optimizedSize = Buffer.byteLength(optimizedResult.data, 'utf8');
-        const optimizedElementCount = countSVGElements(optimizedResult.data);
+        const optimizedSize = Buffer.byteLength(optimizedSVG, 'utf8');
+        const optimizedElementCount = countSVGElements(optimizedSVG);
         const compressionRatio = ((originalSize - optimizedSize) / originalSize) * 100;
         
         return {
-          svg: optimizedResult.data,
+          svg: optimizedSVG,
           optimization: {
             originalSize,
             optimizedSize,
@@ -192,7 +198,9 @@ function buildSVGOConfig(options: {
           removeViewBox: options.removeViewBox || false
         }
       }
-    }
+    },
+    // Always on: strips <script>, on* handlers and javascript: links (disabled by default in SVGO)
+    'removeScriptElement'
   ];
 
   // Advanced optimizations for aggressive compression - add as simple strings for v3

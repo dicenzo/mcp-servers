@@ -568,3 +568,55 @@ describe('Validation Utilities', () => {
     });
   });
 });
+describe('Security hardening - validation', () => {
+  describe('validateSVGString rejects DTDs before any parsing', () => {
+    const billionLaughs = `<?xml version="1.0"?>
+<!DOCTYPE svg [
+  <!ENTITY a "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">
+  <!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">
+]>
+<svg xmlns="http://www.w3.org/2000/svg"><text>&b;</text></svg>`;
+
+    it('rejects input containing a DOCTYPE declaration', () => {
+      expect(() => SVGValidator.validateSVGString(billionLaughs)).toThrow(/DOCTYPE|ENTITY/);
+    });
+
+    it('rejects DOCTYPE regardless of case', () => {
+      const svg = '<!doctype svg><svg xmlns="http://www.w3.org/2000/svg"></svg>';
+      expect(() => SVGValidator.validateSVGString(svg)).toThrow(/DOCTYPE|ENTITY/);
+    });
+
+    it('rejects a bare ENTITY declaration', () => {
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg"><!ENTITY x "y"></svg>';
+      expect(() => SVGValidator.validateSVGString(svg)).toThrow(/DOCTYPE|ENTITY/);
+    });
+
+    it('still accepts an ordinary SVG with an XML declaration', () => {
+      const svg = '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"></svg>';
+      expect(() => SVGValidator.validateSVGString(svg)).not.toThrow();
+    });
+  });
+
+  describe('SVGSanitizer runs in linear time', () => {
+    it('handles many unclosed <script tags quickly', () => {
+      const payload = '<svg>' + '<script'.repeat(40000) + '</svg>'; // ~280 KB
+      const start = Date.now();
+      SVGSanitizer.sanitizeSVG(payload);
+      expect(Date.now() - start).toBeLessThan(1000);
+    });
+
+    it('handles long runs of "on" prefixes quickly', () => {
+      const payload = '<svg>' + 'on'.repeat(150000) + '</svg>'; // ~300 KB
+      const start = Date.now();
+      SVGSanitizer.sanitizeSVG(payload);
+      expect(Date.now() - start).toBeLessThan(1000);
+    });
+
+    it('still removes closed script elements and event handlers', () => {
+      const svg = '<svg><SCRIPT type="x">alert(1)</script><rect onclick="alert(1)"/></svg>';
+      const sanitized = SVGSanitizer.sanitizeSVG(svg);
+      expect(sanitized).not.toMatch(/script/i);
+      expect(sanitized).not.toContain('onclick');
+    });
+  });
+});
