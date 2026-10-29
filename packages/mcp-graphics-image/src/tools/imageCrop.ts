@@ -119,7 +119,7 @@ export const imageCropTool = {
         properties: {
           data: { type: 'string', description: 'Base64 encoded image data' },
           format: { 
-            enum: ['png', 'jpeg', 'jpg', 'webp', 'avif', 'gif', 'tiff', 'bmp'], 
+            enum: ['png', 'jpeg', 'jpg', 'webp', 'avif', 'gif', 'tiff'], 
             description: 'Image format' 
           }
         },

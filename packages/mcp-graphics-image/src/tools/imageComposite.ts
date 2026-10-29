@@ -69,7 +69,7 @@ export const imageCompositeTool = {
                   type: 'object',
                   properties: {
                     data: { type: 'string', description: 'Base64 encoded image data' },
-                    format: { enum: ['png', 'jpeg', 'jpg', 'webp', 'avif', 'gif', 'tiff', 'bmp'] }
+                    format: { enum: ['png', 'jpeg', 'jpg', 'webp', 'avif', 'gif', 'tiff'] }
                   },
                   required: ['data', 'format']
                 },

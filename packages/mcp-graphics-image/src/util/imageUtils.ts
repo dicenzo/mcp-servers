@@ -38,12 +38,10 @@ function toSharpBlend(blend: BlendMode): sharp.Blend {
 }
 
 /**
- * Map our ImageFormat to sharp's output format key.
- * Note: 'bmp' is in ImageFormat but not in sharp.FormatEnum; it is passed
- * through unchanged (as before) and sharp rejects it at runtime.
+ * Map our ImageFormat to sharp's output format key (every ImageFormat is one).
  */
 function toSharpFormat(format: ImageFormat): keyof sharp.FormatEnum {
-  return format as keyof sharp.FormatEnum;
+  return format;
 }
 
 /**
@@ -104,7 +102,7 @@ export class ImageUtils {
         details: { error: error instanceof Error ? error.message : 'Unknown error' },
         suggestions: [
           'Ensure image data is base64 encoded',
-          'Verify format is one of: png, jpeg, jpg, webp, avif, gif, tiff, bmp',
+          'Verify format is one of: png, jpeg, jpg, webp, avif, gif, tiff',
           'Check that data field is not empty'
         ]
       }));
