@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { 
   LayoutElementSchema,
   LayoutConstraintSchema,
@@ -12,7 +12,7 @@ import { PerformanceMonitor } from '../util/performance.js';
 import { LayoutValidator } from '../util/validation.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<CallToolResult>;
 }
 
 /**
@@ -190,7 +190,7 @@ export const addConstraintsTool: ExecutableTool = {
     required: ['elements', 'bounds']
   },
 
-  async invoke(args: unknown): Promise<any> {
+  async invoke(args: unknown): Promise<CallToolResult> {
     const monitor = new PerformanceMonitor();
     monitor.start('constraint-solving');
 
@@ -303,7 +303,7 @@ export const addConstraintsTool: ExecutableTool = {
   /**
    * Generate CSS for constraint-based layout
    */
-  generateConstraintCSS(this: any, elements: LayoutElement[]): string {
+  generateConstraintCSS(elements: LayoutElement[]): string {
     let css = '.constraint-container {\n';
     css += '  position: relative;\n';
     css += '}\n\n';

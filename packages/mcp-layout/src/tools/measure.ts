@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { 
   LayoutSchema,
   LayoutElementSchema,
@@ -10,7 +10,7 @@ import { LayoutMetricsCalculator } from '../util/layoutMetrics.js';
 import { PerformanceMonitor } from '../util/performance.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<CallToolResult>;
 }
 
 /**
@@ -95,7 +95,7 @@ export const measureTool: ExecutableTool = {
     required: ['layout', 'elements']
   },
 
-  async invoke(args: unknown): Promise<any> {
+  async invoke(args: unknown): Promise<CallToolResult> {
     const monitor = new PerformanceMonitor();
     monitor.start('layout-measurement');
 
@@ -114,7 +114,7 @@ export const measureTool: ExecutableTool = {
       // Calculate basic metrics
       const metrics = LayoutMetricsCalculator.calculateMetrics(layout, elements, monitor);
 
-      const result: any = {
+      const result: Record<string, unknown> = {
         success: true,
         metrics,
         layoutType: layout.type,
@@ -180,7 +180,7 @@ export const measureTool: ExecutableTool = {
   /**
    * Calculate rendering complexity score
    */
-  calculateRenderingComplexity(this: any, elements: LayoutElement[]): {
+  calculateRenderingComplexity(elements: LayoutElement[]): {
     score: number;
     factors: Record<string, number>;
     category: 'low' | 'moderate' | 'high' | 'extreme';
@@ -240,7 +240,7 @@ export const measureTool: ExecutableTool = {
   /**
    * Estimate memory footprint
    */
-  estimateMemoryFootprint(this: any, layout: Layout, elements: LayoutElement[]): {
+  estimateMemoryFootprint(layout: Layout, elements: LayoutElement[]): {
     estimatedBytes: number;
     breakdown: Record<string, number>;
     category: 'light' | 'moderate' | 'heavy' | 'extreme';
@@ -296,7 +296,7 @@ export const measureTool: ExecutableTool = {
   /**
    * Generate optimization suggestions
    */
-  generateOptimizationSuggestions(this: any,
+  generateOptimizationSuggestions(
     layout: Layout,
     elements: LayoutElement[],
     metrics: LayoutMetrics
@@ -337,7 +337,7 @@ export const measureTool: ExecutableTool = {
   /**
    * Check touch target sizes for accessibility
    */
-  checkTouchTargetSizes(this: any, elements: LayoutElement[]): {
+  checkTouchTargetSizes(elements: LayoutElement[]): {
     compliant: number;
     nonCompliant: Array<{ id: string; size: { width: number; height: number } }>;
     complianceRate: number;
@@ -369,7 +369,7 @@ export const measureTool: ExecutableTool = {
   /**
    * Analyze keyboard navigation flow
    */
-  analyzeKeyboardNavigation(this: any, elements: LayoutElement[]): {
+  analyzeKeyboardNavigation(elements: LayoutElement[]): {
     hasTabOrder: boolean;
     logicalFlow: boolean;
     issues: string[];
@@ -413,7 +413,7 @@ export const measureTool: ExecutableTool = {
   /**
    * Check screen reader compatibility
    */
-  checkScreenReaderCompatibility(this: any, elements: LayoutElement[]): {
+  checkScreenReaderCompatibility(elements: LayoutElement[]): {
     hasLabels: number;
     missingLabels: string[];
     hasHeadings: boolean;
@@ -457,7 +457,7 @@ export const measureTool: ExecutableTool = {
   /**
    * Detect potential color contrast issues
    */
-  detectColorContrastIssues(this: any, elements: LayoutElement[]): {
+  detectColorContrastIssues(elements: LayoutElement[]): {
     potentialIssues: Array<{ id: string; reason: string }>;
     needsManualCheck: string[];
   } {
