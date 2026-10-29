@@ -30,6 +30,7 @@ debug-*.mjs
 .idea/
 .vscode/
 .claude/
+.remember/
 *.log
 
 # Performance suite reports
