@@ -15,22 +15,18 @@ describe('Scenario Analysis Tool', () => {
   });
 
   describe('Input Validation', () => {
+    // Tools throw on invalid input; src/index.ts turns the throw into the MCP error response
+    // ({ error: true, message } with isError), which tests/index.test.ts covers.
     it('should validate required base parameter', async () => {
       const generator = tool.invoke({} as any);
-      const result = await generator.next();
-      
-      expect(result.value).toBeDefined();
-      expect(result.value.type).toBe('text');
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow(/Scenario analysis failed: .*"base"/s);
     });
 
     it('should validate required knobs parameter', async () => {
       const generator = tool.invoke({ base: { price: 100 } } as any);
-      const result = await generator.next();
-      
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow(/Scenario analysis failed: .*"knobs"/s);
     });
 
     it('should validate knobs contains arrays of numbers', async () => {
@@ -38,10 +34,8 @@ describe('Scenario Analysis Tool', () => {
         base: { price: 100 },
         knobs: { price: 'invalid' }
       } as any);
-      const result = await generator.next();
-      
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow('Expected array, received string');
     });
 
     it('should accept valid input', async () => {
@@ -296,8 +290,9 @@ describe('Scenario Analysis Tool', () => {
     });
 
     it('should provide recommendations for poor LTV:CAC ratios', async () => {
+      // LTV = 50 * 0.5 / 0.05 = 500; LTV:CAC = 500 / 300 = 1.67 (below the 3:1 threshold)
       const generator = tool.invoke({
-        base: { price: 50, cac: 100, churnMonthlyPct: 0.05, grossMarginPct: 0.5, customers: 1000 },
+        base: { price: 50, cac: 300, churnMonthlyPct: 0.05, grossMarginPct: 0.5, customers: 1000 },
         knobs: { price: [50] }
       });
       const result = await generator.next();
@@ -308,8 +303,9 @@ describe('Scenario Analysis Tool', () => {
     });
 
     it('should provide recommendations for long payback periods', async () => {
+      // Payback = CAC / monthly contribution = 400 / (50 * 0.5) = 16 months (over the 12-month threshold)
       const generator = tool.invoke({
-        base: { price: 50, cac: 100, churnMonthlyPct: 0.05, grossMarginPct: 0.5, customers: 1000 },
+        base: { price: 50, cac: 400, churnMonthlyPct: 0.05, grossMarginPct: 0.5, customers: 1000 },
         knobs: { price: [50] }
       });
       const result = await generator.next();
@@ -389,6 +385,10 @@ describe('Scenario Analysis Tool', () => {
       const response = JSON.parse(result.value.text);
       expect(response.scenarios).toHaveLength(0);
       expect(response.summary.total_scenarios).toBe(0);
+      expect(response.summary.best_case_scenario).toBe('none');
+      expect(response.summary.worst_case_scenario).toBe('none');
+      // A knob with no values has nothing to test, so it gets no sensitivity row
+      expect(response.sensitivity_matrix).toHaveLength(0);
     });
 
     it('should handle single value in knobs', async () => {

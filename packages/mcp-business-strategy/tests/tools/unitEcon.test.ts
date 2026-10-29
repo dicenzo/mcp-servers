@@ -15,14 +15,12 @@ describe('Unit Economics Tool', () => {
   });
 
   describe('Input Validation', () => {
+    // Tools throw on invalid input; src/index.ts turns the throw into the MCP error response
+    // ({ error: true, message } with isError), which tests/index.test.ts covers.
     it('should validate required parameters', async () => {
       const generator = tool.invoke({} as any);
-      const result = await generator.next();
-      
-      expect(result.value).toBeDefined();
-      expect(result.value.type).toBe('text');
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow(/Unit economics calculation failed: .*"price".*"grossMarginPct".*"cac".*"churnMonthlyPct"/s);
     });
 
     it('should validate price is positive', async () => {
@@ -32,10 +30,8 @@ describe('Unit Economics Tool', () => {
         cac: 50,
         churnMonthlyPct: 0.05
       });
-      const result = await generator.next();
-      
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow('Price must be positive');
     });
 
     it('should validate gross margin is between 0 and 1', async () => {
@@ -45,10 +41,8 @@ describe('Unit Economics Tool', () => {
         cac: 50,
         churnMonthlyPct: 0.05
       });
-      const result = await generator.next();
-      
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow('Gross margin must be between 0 and 1');
     });
 
     it('should validate CAC is non-negative', async () => {
@@ -58,10 +52,8 @@ describe('Unit Economics Tool', () => {
         cac: -10,
         churnMonthlyPct: 0.05
       });
-      const result = await generator.next();
-      
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow('CAC cannot be negative');
     });
 
     it('should validate churn rate is between 0 and 1', async () => {
@@ -71,10 +63,8 @@ describe('Unit Economics Tool', () => {
         cac: 50,
         churnMonthlyPct: 1.5
       });
-      const result = await generator.next();
-      
-      const response = JSON.parse(result.value.text);
-      expect(response.error).toBe(true);
+
+      await expect(generator.next()).rejects.toThrow('Monthly churn must be between 0 and 1');
     });
 
     it('should accept valid input', async () => {
@@ -125,8 +115,8 @@ describe('Unit Economics Tool', () => {
       const response = JSON.parse(result.value.text);
       
       // Payback = CAC / Monthly Contribution Margin
-      // Payback = 50 / 80 = 0.625 months
-      expect(response.paybackMonths).toBe(0.625);
+      // Payback = 50 / 80 = 0.625 months, reported like every money/month figure to 2 decimals
+      expect(response.paybackMonths).toBe(0.63);
     });
 
     it('should calculate LTV:CAC ratio correctly', async () => {
@@ -244,7 +234,10 @@ describe('Unit Economics Tool', () => {
       
       const response = JSON.parse(result.value.text);
       expect(response.paybackMonths).toBe(0);
-      expect(response.ltvCacRatio).toBe(Infinity);
+      // JSON has no Infinity (it serializes as null), so the tool divides by a CAC floor of $0.01:
+      // LTV 1600 / 0.01 = 160000
+      expect(response.ltvCacRatio).toBe(160000);
+      expect(response.healthScore).toBe('Excellent');
     });
 
     it('should handle very high churn rate', async () => {
@@ -277,10 +270,11 @@ describe('Unit Economics Tool', () => {
     });
 
     it('should assess good health for moderate metrics', async () => {
+      // Contribution 50/mo, LTV 1000, LTV:CAC 2.5 (2 pts), payback 8 months (1 pt), churn 5% (1 pt) = 4 -> Good
       const generator = tool.invoke({
         price: 100,
-        grossMarginPct: 0.7,
-        cac: 100,
+        grossMarginPct: 0.5,
+        cac: 400,
         churnMonthlyPct: 0.05 // 5% monthly churn
       });
       const result = await generator.next();
@@ -290,10 +284,11 @@ describe('Unit Economics Tool', () => {
     });
 
     it('should assess poor health for bad metrics', async () => {
+      // Contribution 50/mo, LTV 333, LTV:CAC 0.83 (0 pts), payback 8 months (1 pt), churn 15% (0 pts) = 1 -> Poor
       const generator = tool.invoke({
         price: 100,
         grossMarginPct: 0.5,
-        cac: 200,
+        cac: 400,
         churnMonthlyPct: 0.15 // 15% monthly churn
       });
       const result = await generator.next();
@@ -305,23 +300,26 @@ describe('Unit Economics Tool', () => {
 
   describe('Recommendations', () => {
     it('should provide recommendations for poor LTV:CAC ratio', async () => {
+      // LTV = 100 * 0.5 / 0.1 = 500; LTV:CAC = 500 / 600 = 0.83 (below 1:1)
       const generator = tool.invoke({
         price: 100,
         grossMarginPct: 0.5,
-        cac: 200,
+        cac: 600,
         churnMonthlyPct: 0.1
       });
       const result = await generator.next();
       
       const response = JSON.parse(result.value.text);
-      expect(response.recommendations).toContain('🚨 CRITICAL: LTV:CAC ratio below 1:1');
+      // Recommendations are full sentences; match on the leading phrase
+      expect(response.recommendations.some((r: string) => r.startsWith('🚨 CRITICAL: LTV:CAC ratio below 1:1'))).toBe(true);
     });
 
     it('should provide recommendations for high payback period', async () => {
+      // Payback = 400 / (50 * 0.5) = 16 months (over 12)
       const generator = tool.invoke({
         price: 50,
         grossMarginPct: 0.5,
-        cac: 100,
+        cac: 400,
         churnMonthlyPct: 0.05
       });
       const result = await generator.next();
