@@ -82,7 +82,7 @@ export const templateRenderTool: ExecutableTool = {
       // Validate input
       const validatedInput = TemplateRenderInputSchema.parse(args);
       const { template: templateInput, variables, format = ExportFormat.SVG } = validatedInput;
-      const options = (validatedInput as any).options || {};
+      const options = validatedInput.options || {};
 
       // Handle template input (string ID or inline template object)
       let template: Template;
