@@ -429,7 +429,12 @@ export const TemplateCreateInputSchema = z.object({
 export const TemplateRenderInputSchema = z.object({
   template: z.union([z.string(), TemplateSchema]),
   variables: z.record(z.any()),
-  format: z.nativeEnum(ExportFormat).optional()
+  format: z.nativeEnum(ExportFormat).optional(),
+  options: z.object({
+    includeMetadata: z.boolean().optional(),
+    optimizeOutput: z.boolean().optional(),
+    validateVariables: z.boolean().optional()
+  }).optional()
 });
 
 export const TemplateExportInputSchema = z.object({
@@ -440,5 +445,11 @@ export const TemplateExportInputSchema = z.object({
 
 export const TemplateValidateInputSchema = z.object({
   template: TemplateSchema,
-  variables: z.record(z.any()).optional()
+  variables: z.record(z.any()).optional(),
+  options: z.object({
+    strict: z.boolean().optional(),
+    checkPerformance: z.boolean().optional(),
+    validateReferences: z.boolean().optional(),
+    includeWarnings: z.boolean().optional()
+  }).optional()
 });
