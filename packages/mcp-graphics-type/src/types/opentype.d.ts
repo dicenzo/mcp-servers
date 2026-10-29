@@ -76,15 +76,23 @@ declare module 'opentype.js' {
    * Note: at runtime opentype.js stores `scripts` and `features` as arrays of
    * `{ tag, script }` / `{ tag, feature }` records, so keys are array indices.
    */
+  /** GSUB/GPOS as parsed by opentype.js: script and feature lists are arrays of tagged records */
   export interface LayoutTable {
-    scripts: Record<string, LayoutScriptRecord>;
-    features: Record<string, unknown>;
+    scripts: LayoutScriptRecord[];
+    features: LayoutFeatureRecord[];
   }
 
   export interface LayoutScriptRecord {
-    tag?: string;
-    script?: unknown;
-    langSys?: Record<string, unknown>;
+    tag: string;
+    script: {
+      defaultLangSys?: unknown;
+      langSysRecords: Array<{ tag: string; langSys: unknown }>;
+    };
+  }
+
+  export interface LayoutFeatureRecord {
+    tag: string;
+    feature: unknown;
   }
 
   export interface Glyph {

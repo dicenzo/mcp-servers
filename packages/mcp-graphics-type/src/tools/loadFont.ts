@@ -448,15 +448,15 @@ function extractSupportedScripts(font: opentype.Font): string[] {
   
   // Check GSUB table for script tags
   if (font.tables?.gsub?.scripts) {
-    for (const scriptTag of Object.keys(font.tables.gsub.scripts)) {
-      scripts.add(scriptTag);
+    for (const record of font.tables.gsub.scripts) {
+      scripts.add(record.tag);
     }
   }
   
   // Check GPOS table for script tags
   if (font.tables?.gpos?.scripts) {
-    for (const scriptTag of Object.keys(font.tables.gpos.scripts)) {
-      scripts.add(scriptTag);
+    for (const record of font.tables.gpos.scripts) {
+      scripts.add(record.tag);
     }
   }
   
@@ -476,22 +476,18 @@ function extractSupportedLanguages(font: opentype.Font): string[] {
   
   // Extract from GSUB table
   if (font.tables?.gsub?.scripts) {
-    for (const script of Object.values(font.tables.gsub.scripts)) {
-      if (script.langSys) {
-        for (const langTag of Object.keys(script.langSys)) {
-          languages.add(langTag);
-        }
+    for (const record of font.tables.gsub.scripts) {
+      for (const langSysRecord of record.script.langSysRecords) {
+        languages.add(langSysRecord.tag);
       }
     }
   }
   
   // Extract from GPOS table
   if (font.tables?.gpos?.scripts) {
-    for (const script of Object.values(font.tables.gpos.scripts)) {
-      if (script.langSys) {
-        for (const langTag of Object.keys(script.langSys)) {
-          languages.add(langTag);
-        }
+    for (const record of font.tables.gpos.scripts) {
+      for (const langSysRecord of record.script.langSysRecords) {
+        languages.add(langSysRecord.tag);
       }
     }
   }
@@ -512,15 +508,15 @@ function extractOpenTypeFeatures(font: opentype.Font): string[] {
   
   // Extract from GSUB table
   if (font.tables?.gsub?.features) {
-    for (const feature of Object.keys(font.tables.gsub.features)) {
-      features.add(feature);
+    for (const record of font.tables.gsub.features) {
+      features.add(record.tag);
     }
   }
   
   // Extract from GPOS table
   if (font.tables?.gpos?.features) {
-    for (const feature of Object.keys(font.tables.gpos.features)) {
-      features.add(feature);
+    for (const record of font.tables.gpos.features) {
+      features.add(record.tag);
     }
   }
   
