@@ -1,13 +1,11 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import {
-  TemplateLibraryAddInput,
   ComponentLibraryItem,
   ComponentLibrary,
   TemplateError,
   TemplateErrorCode,
   ComponentType
 } from '../types/template.js';
-import { TemplateValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
 import { generateId, getCurrentTimestamp } from '../util/helpers.js';
 
@@ -123,7 +121,7 @@ function validateComponent(componentData: any): TemplateError[] {
 /**
  * Generate preview for component (placeholder implementation)
  */
-async function generatePreview(component: any): Promise<string | undefined> {
+async function generatePreview(_component: any): Promise<string | undefined> {
   // In a real implementation, this would render the component to create a preview
   // For now, return undefined to indicate no preview generated
   return undefined;

@@ -1,13 +1,10 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import {
-  TemplateCreateInput,
   TemplateCreateInputSchema,
   Template,
-  TemplateError,
   TemplateErrorCode
 } from '../types/template.js';
 import { TemplateValidator, PerformanceValidator } from '../util/validation.js';
-import { PerformanceMonitor } from '../util/performance.js';
 import { generateId } from '../util/helpers.js';
 
 interface ExecutableTool extends Tool {

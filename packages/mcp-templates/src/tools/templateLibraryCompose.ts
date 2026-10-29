@@ -1,13 +1,8 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import {
-  TemplateLibraryComposeInput,
   Template,
-  TemplateMetadata,
-  Layout,
   VariableDefinition,
   ComponentLibraryItem,
-  TemplateComponent,
-  TemplateError,
   TemplateErrorCode
 } from '../types/template.js';
 import { searchComponents } from './templateLibraryAdd.js';
@@ -403,7 +398,6 @@ export const templateLibraryComposeTool: ExecutableTool = {
     
     const resolveComponent = async (spec: string | object): Promise<void> => {
       const id = typeof spec === 'string' ? spec : (spec as any).id;
-      const overrides = typeof spec === 'object' ? spec : {};
       
       if (processed.has(id)) return;
       processed.add(id);
@@ -516,7 +510,7 @@ export const templateLibraryComposeTool: ExecutableTool = {
   ): ComponentLibraryItem[] {
     const direction = config.direction || 'row';
     const gap = config.gap || 10;
-    const justify = config.justify || 'start';
+    // config.justify is not applied yet: components always fill the axis from the start
     
     const isRow = direction === 'row';
     const availableSpace = isRow ? 
@@ -555,9 +549,9 @@ export const templateLibraryComposeTool: ExecutableTool = {
    */
   applyConstraintLayout(
     components: ComponentLibraryItem[],
-    config: any,
-    templateWidth: number,
-    templateHeight: number
+    _config: any,
+    _templateWidth: number,
+    _templateHeight: number
   ): ComponentLibraryItem[] {
     // Placeholder - in a real implementation, this would solve layout constraints
     return components;
@@ -568,10 +562,9 @@ export const templateLibraryComposeTool: ExecutableTool = {
    */
   mergeComponentVariables(
     baseVariables: VariableDefinition[],
-    components: ComponentLibraryItem[]
+    _components: ComponentLibraryItem[]
   ): VariableDefinition[] {
     const merged = [...baseVariables];
-    const existingNames = new Set(baseVariables.map(v => v.name));
     
     // For now, just return base variables
     // In a real implementation, this would extract variables from component templates
