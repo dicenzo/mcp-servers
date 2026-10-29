@@ -3,8 +3,6 @@ import {
   AutoLayoutConfig,
   Rectangle,
   LayoutConstraint,
-  LayoutError,
-  LayoutErrorCode
 } from '../types/layout.js';
 import { PerformanceMonitor } from './performance.js';
 import { ConstraintSolver } from './constraintSolver.js';
@@ -213,7 +211,7 @@ export class AutoLayoutEngine {
   /**
    * Calculate content flexibility for responsive behavior
    */
-  private static calculateContentFlexibility(content: Record<string, any>, elementType: string): { horizontal: number; vertical: number } {
+  private static calculateContentFlexibility(content: Record<string, any>, _elementType: string): { horizontal: number; vertical: number } {
     const flexibility = { horizontal: 1, vertical: 1 };
 
     // Text is more flexible horizontally
@@ -293,7 +291,7 @@ export class AutoLayoutEngine {
     
     let currentY = bounds.y + config.padding.top;
 
-    elements.forEach((item, index) => {
+    elements.forEach((item, _index) => {
       monitor?.recordIteration();
 
       // Size constraints
@@ -377,7 +375,7 @@ export class AutoLayoutEngine {
     
     let currentX = bounds.x + config.padding.left;
 
-    elements.forEach((item, index) => {
+    elements.forEach((item, _index) => {
       monitor?.recordIteration();
 
       // Size constraints
@@ -611,7 +609,7 @@ export class AutoLayoutEngine {
   private static generatePaddingConstraints(
     elements: Array<{ element: LayoutElement }>,
     config: AutoLayoutConfig,
-    bounds: Rectangle
+    _bounds: Rectangle
   ): LayoutConstraint[] {
     const constraints: LayoutConstraint[] = [];
 

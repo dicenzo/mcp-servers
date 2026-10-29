@@ -5,7 +5,6 @@ import {
   Rectangle,
   GridElement,
   FlexElement,
-  LayoutElement,
   LayoutError,
   LayoutErrorCode,
   Breakpoint

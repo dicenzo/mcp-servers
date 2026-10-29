@@ -3,8 +3,6 @@ import {
   GridElement,
   GridLayout,
   Rectangle,
-  LayoutError,
-  LayoutErrorCode
 } from '../types/layout.js';
 import { PerformanceMonitor } from './performance.js';
 import { LayoutValidator } from './validation.js';
@@ -82,7 +80,7 @@ export class GridEngine {
   private static parseGridTracks(
     template: string,
     availableSpace: number,
-    axis: 'columns' | 'rows'
+    _axis: 'columns' | 'rows'
   ): Array<{ start: number; size: number; name?: string }> {
     const tracks: Array<{ start: number; size: number; name?: string }> = [];
     
@@ -407,7 +405,7 @@ export class GridEngine {
   private static parseGridLine(
     line: number | string | undefined,
     tracks: Array<{ start: number; size: number; name?: string }>,
-    type: 'start' | 'end'
+    _type: 'start' | 'end'
   ): number | undefined {
     if (line === undefined) {
       return undefined;
@@ -429,7 +427,7 @@ export class GridEngine {
   /**
    * Apply element self-alignment within its grid area
    */
-  private static applyElementAlignment(element: GridElement, bounds: Rectangle): void {
+  private static applyElementAlignment(element: GridElement, _bounds: Rectangle): void {
     // This is a simplified implementation
     // In a full implementation, this would adjust the element's final position
     // based on justifySelf and alignSelf properties

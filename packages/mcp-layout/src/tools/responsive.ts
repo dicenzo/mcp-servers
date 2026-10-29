@@ -6,7 +6,6 @@ import {
   LayoutElement,
   Breakpoint,
   Layout,
-  ResponsiveLayout
 } from '../types/layout.js';
 import { ResponsiveEngine } from '../util/responsiveEngine.js';
 import { PerformanceMonitor } from '../util/performance.js';

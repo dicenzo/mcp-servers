@@ -6,14 +6,10 @@ import {
   LayoutElement,
   GridConfig,
   FlexConfig,
-  AutoLayoutConfig,
-  LayoutError,
-  LayoutErrorCode
 } from '../types/layout.js';
 import { PerformanceMonitor } from './performance.js';
 import { GridEngine } from './gridEngine.js';
 import { FlexEngine } from './flexEngine.js';
-import { AutoLayoutEngine } from './autoLayout.js';
 import { LayoutValidator } from './validation.js';
 
 /**
@@ -233,7 +229,7 @@ export class ResponsiveEngine {
   /**
    * Adapt flex configuration for breakpoint
    */
-  private static adaptFlexConfig(config: FlexConfig, breakpoint: Breakpoint, bounds: Rectangle): FlexConfig {
+  private static adaptFlexConfig(config: FlexConfig, breakpoint: Breakpoint, _bounds: Rectangle): FlexConfig {
     const adapted = { ...config };
 
     // Change direction based on screen size
@@ -404,7 +400,6 @@ export class ResponsiveEngine {
     // Analyze content to determine optimal breakpoints
     const elementCount = elements.length;
     const hasImages = elements.some(el => el.content?.src || el.content?.image);
-    const hasText = elements.some(el => el.content?.text);
     
     // Mobile breakpoint
     breakpoints.push({

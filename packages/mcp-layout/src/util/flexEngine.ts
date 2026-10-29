@@ -3,8 +3,6 @@ import {
   FlexElement,
   FlexLayout,
   Rectangle,
-  LayoutError,
-  LayoutErrorCode
 } from '../types/layout.js';
 import { PerformanceMonitor } from './performance.js';
 import { LayoutValidator } from './validation.js';
@@ -246,7 +244,7 @@ export class FlexEngine {
   /**
    * Calculate natural (intrinsic) size of element
    */
-  private static calculateNaturalSize(element: FlexElement, mainAxis: 'horizontal' | 'vertical'): number {
+  private static calculateNaturalSize(element: FlexElement, _mainAxis: 'horizontal' | 'vertical'): number {
     // Simplified calculation based on content
     // In a real implementation, this would analyze text content, images, etc.
     if (element.content) {
@@ -758,14 +756,14 @@ export class FlexEngine {
         positions.push(0);
       } else {
         const spaceBetween = freeSpace / (line.length - 1);
-        line.forEach((item, index) => {
+        line.forEach((item, _index) => {
           positions.push(currentPosition);
           currentPosition += item.mainSize + spaceBetween;
         });
       }
       break;
 
-    case 'space-around':
+    case 'space-around': {
       const spaceAround = freeSpace / line.length;
       currentPosition = spaceAround / 2;
       line.forEach(item => {
@@ -773,8 +771,9 @@ export class FlexEngine {
         currentPosition += item.mainSize + spaceAround;
       });
       break;
+    }
 
-    case 'space-evenly':
+    case 'space-evenly': {
       const spaceEvenly = freeSpace / (line.length + 1);
       currentPosition = spaceEvenly;
       line.forEach(item => {
@@ -782,6 +781,7 @@ export class FlexEngine {
         currentPosition += item.mainSize + spaceEvenly;
       });
       break;
+    }
 
     default:
       // Fallback to flex-start
@@ -802,7 +802,7 @@ export class FlexEngine {
     item: { element: FlexElement; crossSize: number },
     lineStart: number,
     lineCrossSize: number,
-    axes: { cross: 'horizontal' | 'vertical' }
+    _axes: { cross: 'horizontal' | 'vertical' }
   ): number {
     const alignment = item.element.alignSelf || config.alignItems;
 

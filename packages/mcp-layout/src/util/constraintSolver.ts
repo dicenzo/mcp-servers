@@ -2,7 +2,6 @@ import {
   LayoutConstraint,
   LayoutElement,
   Rectangle,
-  LayoutError,
   LayoutErrorCode
 } from '../types/layout.js';
 import { PerformanceMonitor } from './performance.js';
@@ -388,7 +387,7 @@ export class ConstraintSolver {
     constraint: LayoutConstraint,
     elementBound: Rectangle,
     targetBound: Rectangle | null,
-    containerBounds: Rectangle
+    _containerBounds: Rectangle
   ): void {
     const value = typeof constraint.value === 'number' ? constraint.value : parseFloat(String(constraint.value));
     
@@ -513,16 +512,18 @@ export class ConstraintSolver {
 
     switch (constraint.property) {
     case 'center-x':
-    case 'horizontal-center':
+    case 'horizontal-center': {
       const referenceCenterX = referenceRect.x + referenceRect.width / 2;
       elementBound.x = referenceCenterX - elementBound.width / 2;
       break;
+    }
 
     case 'center-y':
-    case 'vertical-center':
+    case 'vertical-center': {
       const referenceCenterY = referenceRect.y + referenceRect.height / 2;
       elementBound.y = referenceCenterY - elementBound.height / 2;
       break;
+    }
 
     case 'left':
       elementBound.x = referenceRect.x;
