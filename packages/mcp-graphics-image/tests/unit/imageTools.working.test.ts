@@ -111,7 +111,8 @@ describe('Image Processing Tools - Working Tests', () => {
   describe('imageCrop', () => {
     it('should crop image successfully', async () => {
       // Create larger test image for cropping
-      const largerImg = 'iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFElEQVR42mNk+A8EDAwODIxMDOAAACwwAwLb4vdgAAAAAElFTkSuQmCC';
+      // Valid 10x10 red PNG (the previous fixture had a truncated IDAT that libpng rejects)
+      const largerImg = 'iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAFklEQVQYlWP4z8DwnxjMMKrwP12DBwCSw8c5bHZncwAAAABJRU5ErkJggg==';
       
       const result = await imageCrop({
         image: { data: largerImg, format: 'png' },

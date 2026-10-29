@@ -62,7 +62,7 @@ export async function imageResize(input: unknown): Promise<ImageResizeResponse> 
     const { image, dimensions, method, preserveAspectRatio, allowEnlargement } = validated;
     
     // Get original dimensions from ImageUtils
-    const sharpInstance = ImageUtils.createSharpFromInput(image);
+    const sharpInstance = await ImageUtils.createSharpFromInput(image);
     const metadata = await sharpInstance.metadata();
     const originalDimensions = {
       width: metadata.width || 0,
@@ -127,7 +127,6 @@ export async function imageResize(input: unknown): Promise<ImageResizeResponse> 
             code: ImageErrorCode.PROCESSING_FAILED,
             message: error.message || 'Image resize failed',
             details: {
-              input,
               processingTime: Math.round((performance.now() - startTime) * 100) / 100
             },
             suggestions: [
@@ -145,8 +144,7 @@ export async function imageResize(input: unknown): Promise<ImageResizeResponse> 
       success: false,
       error: {
         code: ImageErrorCode.PROCESSING_FAILED,
-        message: 'Unknown error during image resize',
-        details: { input }
+        message: 'Unknown error during image resize'
       }
     };
   }

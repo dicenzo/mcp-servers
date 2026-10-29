@@ -156,7 +156,6 @@ export async function imageConvert(input: unknown): Promise<ImageConvertResponse
             code: ImageErrorCode.PROCESSING_FAILED,
             message: error.message || 'Format conversion failed',
             details: {
-              input,
               processingTime: Math.round((performance.now() - startTime) * 100) / 100
             },
             suggestions: [
@@ -174,8 +173,7 @@ export async function imageConvert(input: unknown): Promise<ImageConvertResponse
       success: false,
       error: {
         code: ImageErrorCode.PROCESSING_FAILED,
-        message: 'Unknown error during format conversion',
-        details: { input }
+        message: 'Unknown error during format conversion'
       }
     };
   }

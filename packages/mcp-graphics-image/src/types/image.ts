@@ -11,12 +11,26 @@ import { z } from 'zod';
 export const SupportedImageFormats = ['png', 'jpeg', 'jpg', 'webp', 'avif', 'gif', 'tiff'] as const;
 export type ImageFormat = typeof SupportedImageFormats[number];
 
+// Memory limits from PRD
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB decoded input
+
+export const MEMORY_LIMITS = {
+  MAX_OPERATION_MEMORY: 100 * 1024 * 1024, // 100MB
+  MAX_IMAGE_SIZE,
+  // base64 inflates by 4/3; allow a little extra for a data URL prefix
+  MAX_BASE64_LENGTH: Math.ceil(MAX_IMAGE_SIZE / 3) * 4 + 64,
+  MAX_DIMENSION: 8192, // pixels per side
+  MAX_COMPOSITE_LAYERS: 10
+} as const;
+
 // Image input validation schema
 export const ImageInputSchema = z.object({
-  data: z.string().min(1, 'Image data cannot be empty'),
+  data: z.string()
+    .min(1, 'Image data cannot be empty')
+    .max(MEMORY_LIMITS.MAX_BASE64_LENGTH, 'Image data exceeds maximum size'),
   format: z.enum(SupportedImageFormats),
-  width: z.number().int().positive().optional(),
-  height: z.number().int().positive().optional(),
+  width: z.number().int().positive().max(MEMORY_LIMITS.MAX_DIMENSION).optional(),
+  height: z.number().int().positive().max(MEMORY_LIMITS.MAX_DIMENSION).optional(),
   metadata: z.record(z.unknown()).optional()
 });
 
@@ -24,8 +38,8 @@ export type ImageInput = z.infer<typeof ImageInputSchema>;
 
 // Dimensions schema
 export const DimensionsSchema = z.object({
-  width: z.number().int().positive().min(1).max(8192),
-  height: z.number().int().positive().min(1).max(8192)
+  width: z.number().int().positive().min(1).max(MEMORY_LIMITS.MAX_DIMENSION),
+  height: z.number().int().positive().min(1).max(MEMORY_LIMITS.MAX_DIMENSION)
 });
 
 export type Dimensions = z.infer<typeof DimensionsSchema>;
@@ -85,10 +99,10 @@ export const CompositeLayerSchema = z.object({
 export type CompositeLayer = z.infer<typeof CompositeLayerSchema>;
 
 export const CompositionConfigSchema = z.object({
-  width: z.number().int().positive(),
-  height: z.number().int().positive(),
+  width: z.number().int().positive().max(MEMORY_LIMITS.MAX_DIMENSION),
+  height: z.number().int().positive().max(MEMORY_LIMITS.MAX_DIMENSION),
   background: z.string().optional(), // Hex color or 'transparent'
-  layers: z.array(CompositeLayerSchema).min(1)
+  layers: z.array(CompositeLayerSchema).min(1).max(MEMORY_LIMITS.MAX_COMPOSITE_LAYERS)
 });
 
 export type CompositionConfig = z.infer<typeof CompositionConfigSchema>;
@@ -172,12 +186,6 @@ export const PERFORMANCE_THRESHOLDS = {
   COMPOSITE: 600 // ms for multi-layer composition
 } as const;
 
-// Memory limits from PRD
-export const MEMORY_LIMITS = {
-  MAX_OPERATION_MEMORY: 100 * 1024 * 1024, // 100MB
-  MAX_IMAGE_SIZE: 10 * 1024 * 1024, // 10MB input
-  MAX_DIMENSION: 8192 // pixels
-} as const;
 
 // Common image processing validation
 export const validateImageInput = (input: unknown): ImageInput => {
