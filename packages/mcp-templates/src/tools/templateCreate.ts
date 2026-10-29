@@ -1,4 +1,4 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   TemplateCreateInputSchema,
   Template,
@@ -8,7 +8,7 @@ import { TemplateValidator, PerformanceValidator } from '../util/validation.js';
 import { generateId } from '../util/helpers.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<CallToolResult>;
 }
 
 /**

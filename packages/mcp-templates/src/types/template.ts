@@ -20,7 +20,7 @@ export enum VariableType {
 
 export interface ValidationRule {
   type: 'min' | 'max' | 'pattern' | 'enum' | 'custom';
-  value?: any;
+  value?: unknown;
   message?: string;
 }
 
@@ -28,7 +28,7 @@ export interface VariableDefinition {
   name: string;
   type: VariableType;
   required: boolean;
-  default?: any;
+  default?: unknown;
   description?: string;
   validation?: ValidationRule[];
   // For array types
@@ -38,7 +38,7 @@ export interface VariableDefinition {
 }
 
 export interface VariableMap {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 // Validation schemas for variables
@@ -88,7 +88,7 @@ export interface Style {
   fontFamily?: string;
   fontWeight?: string | number;
   textAlign?: 'left' | 'center' | 'right';
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface BaseComponent {
@@ -121,7 +121,7 @@ export interface ImageComponent extends BaseComponent {
 export interface ShapeComponent extends BaseComponent {
   type: ComponentType.SHAPE;
   shape: 'rect' | 'circle' | 'ellipse' | 'polygon' | 'path';
-  shapeData: Record<string, any>;
+  shapeData: Record<string, unknown>;
 }
 
 export interface GroupComponent extends BaseComponent {
@@ -226,7 +226,7 @@ export interface LayoutConstraint {
   type: 'align' | 'distribute' | 'size' | 'position';
   target: string; // Component ID
   reference?: string; // Reference component ID
-  value: any;
+  value: unknown;
 }
 
 export interface Layout {
@@ -301,7 +301,7 @@ export enum TemplateErrorCode {
 export interface TemplateError {
   code: TemplateErrorCode;
   message: string;
-  details?: any;
+  details?: unknown;
   componentId?: string;
   variableName?: string;
   suggestions?: string[];

@@ -1,16 +1,18 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   TemplateValidateInputSchema,
   Template,
   ValidationReport,
   TemplateError,
-  TemplateErrorCode
+  TemplateErrorCode,
+  TemplateComponent,
+  ComponentType
 } from '../types/template.js';
 import { TemplateValidator, PerformanceValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
 
 interface ExecutableTool extends Tool {
-  invoke: (args: unknown) => Promise<any>;
+  invoke: (args: unknown) => Promise<CallToolResult>;
 }
 
 /**
@@ -99,7 +101,7 @@ export const templateValidateTool: ExecutableTool = {
       const validationScore = calculateValidationScore(validationReport, template);
 
       // Prepare detailed validation result
-      const result = {
+      const result: Record<string, unknown> = {
         success: true,
         validation: {
           valid: validationReport.valid,
@@ -144,7 +146,7 @@ export const templateValidateTool: ExecutableTool = {
 
       // Add suggestions if there are issues
       if (validationReport.errors.length > 0 || validationReport.warnings.length > 0) {
-        (result as any).suggestions = generateSuggestions(validationReport, template);
+        result.suggestions = generateSuggestions(validationReport, template);
       }
 
       return {
@@ -266,12 +268,12 @@ function assessComplexity(template: Template): 'low' | 'medium' | 'high' | 'very
 function getComponentTypes(template: Template): Record<string, number> {
     const types: Record<string, number> = {};
     
-    const countComponents = (components: any[]) => {
+    const countComponents = (components: TemplateComponent[]) => {
       for (const component of components) {
         types[component.type] = (types[component.type] || 0) + 1;
         
         // Recursively count group children
-        if (component.type === 'group' && component.children) {
+        if (component.type === ComponentType.GROUP && component.children) {
           countComponents(component.children);
         }
       }

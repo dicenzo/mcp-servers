@@ -40,7 +40,7 @@ export function deepClone<T>(obj: T): T {
 /**
  * Merge objects deeply
  */
-export function deepMerge<T extends Record<string, any>>(target: T, source: Partial<T>): T {
+export function deepMerge<T extends object>(target: T, source: Partial<T>): T {
   const result = { ...target };
   
   for (const key in source) {
@@ -49,7 +49,7 @@ export function deepMerge<T extends Record<string, any>>(target: T, source: Part
       const targetValue = result[key];
       
       if (isPlainObject(sourceValue) && isPlainObject(targetValue)) {
-        result[key] = deepMerge(targetValue as any, sourceValue as any) as T[Extract<keyof T, string>];
+        result[key] = deepMerge(targetValue, sourceValue as Partial<typeof targetValue>) as T[Extract<keyof T, string>];
       } else {
         result[key] = sourceValue as T[Extract<keyof T, string>];
       }
@@ -62,7 +62,7 @@ export function deepMerge<T extends Record<string, any>>(target: T, source: Part
 /**
  * Check if value is a plain object
  */
-export function isPlainObject(value: any): value is Record<string, any> {
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && 
          typeof value === 'object' && 
          !Array.isArray(value) && 
@@ -99,13 +99,13 @@ export function formatBytes(bytes: number, decimals: number = 2): string {
 /**
  * Debounce function execution
  */
-export function debounce<T extends (...args: any[]) => any>(
-  func: T, 
+export function debounce<A extends unknown[]>(
+  func: (...args: A) => unknown, 
   wait: number
-): (...args: Parameters<T>) => void {
+): (...args: A) => void {
   let timeout: NodeJS.Timeout;
   
-  return (...args: Parameters<T>) => {
+  return (...args: A) => {
     clearTimeout(timeout);
     timeout = setTimeout(() => func(...args), wait);
   };
@@ -114,13 +114,13 @@ export function debounce<T extends (...args: any[]) => any>(
 /**
  * Throttle function execution
  */
-export function throttle<T extends (...args: any[]) => any>(
-  func: T, 
+export function throttle<A extends unknown[]>(
+  func: (...args: A) => unknown, 
   limit: number
-): (...args: Parameters<T>) => void {
+): (...args: A) => void {
   let inThrottle: boolean;
   
-  return (...args: Parameters<T>) => {
+  return (...args: A) => {
     if (!inThrottle) {
       func(...args);
       inThrottle = true;
@@ -137,7 +137,7 @@ export async function retry<T>(
   maxAttempts: number = 3,
   delay: number = 1000
 ): Promise<T> {
-  let lastError: Error;
+  let lastError = new Error(`Operation not attempted (maxAttempts: ${maxAttempts})`);
   
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -155,7 +155,7 @@ export async function retry<T>(
     }
   }
   
-  throw lastError!;
+  throw lastError;
 }
 
 /**
@@ -258,16 +258,16 @@ export function roundTo(value: number, decimals: number): number {
 /**
  * Get nested property from object using dot notation
  */
-export function getNestedProperty(obj: any, path: string): any {
-  return path.split('.').reduce((current, key) => {
-    return current && current[key] !== undefined ? current[key] : undefined;
+export function getNestedProperty(obj: unknown, path: string): unknown {
+  return path.split('.').reduce<unknown>((current, key) => {
+    return current ? (current as Record<string, unknown>)[key] : undefined;
   }, obj);
 }
 
 /**
  * Set nested property on object using dot notation
  */
-export function setNestedProperty(obj: any, path: string, value: any): void {
+export function setNestedProperty(obj: Record<string, unknown>, path: string, value: unknown): void {
   const keys = path.split('.');
   const lastKey = keys.pop();
   
@@ -277,7 +277,7 @@ export function setNestedProperty(obj: any, path: string, value: any): void {
     if (!current[key] || typeof current[key] !== 'object') {
       current[key] = {};
     }
-    return current[key];
+    return current[key] as Record<string, unknown>;
   }, obj);
   
   target[lastKey] = value;
