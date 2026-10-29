@@ -1,10 +1,10 @@
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { ExecutableTool } from './types.js';
 import { z } from 'zod';
 import { readTemplate } from '../util/fs.js';
 
 const Input = z.object({ name: z.string() });
 
-export const templatesTool: Tool = {
+export const templatesTool: ExecutableTool = {
   name: 'templates.get',
   description: 'Return a template file content by name.',
   inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },

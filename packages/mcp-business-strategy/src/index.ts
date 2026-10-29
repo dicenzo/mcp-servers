@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { Resource, Tool, ListResourcesResult, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Resource, ListResourcesResult, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { webSearchTool } from './tools/webSearch.js';
@@ -10,6 +10,7 @@ import { unitEconTool } from './tools/unitEcon.js';
 import { scenarioTool } from './tools/scenario.js';
 import { templatesTool } from './tools/templates.js';
 import { templatesResourceProvider } from './resources/templates.resource.js';
+import { ExecutableTool } from './tools/types.js';
 
 const server = new Server(
   {
@@ -25,8 +26,8 @@ const server = new Server(
 );
 
 // Enhanced tool registry with error handling and logging
-const tools: Tool[] = [webSearchTool, dataEnrichTool, unitEconTool, scenarioTool, templatesTool];
-const toolMap = new Map<string, Tool>();
+const tools: ExecutableTool[] = [webSearchTool, dataEnrichTool, unitEconTool, scenarioTool, templatesTool];
+const toolMap = new Map<string, ExecutableTool>();
 
 // Build tool map for efficient lookup
 tools.forEach(tool => {
@@ -64,7 +65,7 @@ server.setRequestHandler(
       // Execute tool with timeout protection
       const timeoutMs = 60000; // 60 second timeout
       const toolPromise = (async () => {
-        const generator = (tool as any).invoke(args);
+        const generator = tool.invoke(args);
         const result = await generator.next();
         return result.value;
       })();
