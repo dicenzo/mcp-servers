@@ -249,7 +249,8 @@ function generateSensitivityMatrix(
   // Test each variable independently with +20% change
   for (const [variable, values] of Object.entries(knobs)) {
     const baseValue = base[variable];
-    if (!baseValue) continue;
+    // Skip knobs with no base value; 0 is a valid base (e.g. zero CAC)
+    if (baseValue === undefined) continue;
     
     // Find a test value (preferably 20% higher, or use max value)
     const testValue = values.find(v => v > baseValue) || Math.max(...values);
