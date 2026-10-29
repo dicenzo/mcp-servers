@@ -1,7 +1,7 @@
 import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { 
   GridConfigSchema,
-  GridElementSchema,
+  GridElementListSchema,
   RectangleSchema,
   GridConfig,
   GridElement,
@@ -304,7 +304,7 @@ export const createGridTool: ExecutableTool = {
 
       // Validate with Zod schemas
       const config = GridConfigSchema.parse(input.config);
-      const elements = input.elements.map(el => GridElementSchema.parse(el));
+      const elements = GridElementListSchema.parse(input.elements);
       const bounds = RectangleSchema.parse(input.bounds);
 
       // Additional validation

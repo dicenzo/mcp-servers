@@ -1,6 +1,6 @@
 import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { 
-  LayoutElementSchema,
+  LayoutElementListSchema,
   AutoLayoutConfigSchema,
   RectangleSchema,
   LayoutElement,
@@ -112,7 +112,7 @@ export const autoLayoutTool: ExecutableTool = {
         config?: AutoLayoutConfig;
       };
 
-      const elements = input.elements.map(el => LayoutElementSchema.parse(el));
+      const elements = LayoutElementListSchema.parse(input.elements);
       const bounds = RectangleSchema.parse(input.bounds);
       const config = input.config ? AutoLayoutConfigSchema.parse(input.config) : {
         direction: 'vertical' as const,

@@ -111,13 +111,13 @@ class LayoutServer {
     };
 
     process.on('SIGINT', async () => {
-      console.log('[MCP Layout] Shutting down server...');
+      console.error('[MCP Layout] Shutting down server...');
       await this.server.close();
       process.exit(0);
     });
 
     process.on('SIGTERM', async () => {
-      console.log('[MCP Layout] Shutting down server...');
+      console.error('[MCP Layout] Shutting down server...');
       await this.server.close();
       process.exit(0);
     });

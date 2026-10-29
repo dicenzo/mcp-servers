@@ -137,7 +137,7 @@ export class FlexEngine {
    */
   private static parseGap(config: FlexConfig): { main: number; cross: number } {
     const parseGapValue = (value: string): number => {
-      const match = value.match(/^(\d*\.?\d+)(px|em|rem|%)?$/);
+      const match = value.match(/^(\d+(?:\.\d+)?|\.\d+)(px|em|rem|%)?$/);
       if (match) {
         return parseFloat(match[1]);
       }

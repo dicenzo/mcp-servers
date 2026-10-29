@@ -1,7 +1,8 @@
 import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { 
-  LayoutElementSchema,
-  LayoutConstraintSchema,
+  LayoutElementListSchema,
+  LayoutConstraintListSchema,
+  MAX_CONSTRAINTS,
   RectangleSchema,
   LayoutElement,
   LayoutConstraint,
@@ -13,6 +14,8 @@ import { LayoutValidator } from '../util/validation.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
+  // Helper methods live on the tool object; SDK >= 1.18 no longer types Tool as passthrough
+  [helper: string]: unknown;
 }
 
 /**
@@ -205,9 +208,9 @@ export const addConstraintsTool: ExecutableTool = {
       };
 
       // Validate with Zod schemas
-      const elements = input.elements.map(el => LayoutElementSchema.parse(el));
+      const elements = LayoutElementListSchema.parse(input.elements);
       const bounds = RectangleSchema.parse(input.bounds);
-      const globalConstraints = (input.constraints || []).map(c => LayoutConstraintSchema.parse(c));
+      const globalConstraints = LayoutConstraintListSchema.parse(input.constraints || []);
 
       // Collect all constraints from elements and global constraints
       const allConstraints: LayoutConstraint[] = [...globalConstraints];
@@ -216,6 +219,10 @@ export const addConstraintsTool: ExecutableTool = {
           allConstraints.push(...element.constraints);
         }
       });
+
+      if (allConstraints.length > MAX_CONSTRAINTS) {
+        throw new Error(`Too many constraints: ${allConstraints.length} (at most ${MAX_CONSTRAINTS} allowed)`);
+      }
 
       // Validation
       const constraintErrors = LayoutValidator.validateConstraints(allConstraints);

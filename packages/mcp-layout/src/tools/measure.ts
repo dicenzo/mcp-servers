@@ -1,7 +1,7 @@
 import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { 
   LayoutSchema,
-  LayoutElementSchema,
+  LayoutElementListSchema,
   Layout,
   LayoutElement,
   LayoutMetrics
@@ -11,6 +11,8 @@ import { PerformanceMonitor } from '../util/performance.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
+  // Helper methods live on the tool object; SDK >= 1.18 no longer types Tool as passthrough
+  [helper: string]: unknown;
 }
 
 /**
@@ -109,7 +111,7 @@ export const measureTool: ExecutableTool = {
       };
 
       const layout = LayoutSchema.parse(input.layout);
-      const elements = input.elements.map(el => LayoutElementSchema.parse(el));
+      const elements = LayoutElementListSchema.parse(input.elements);
 
       // Calculate basic metrics
       const metrics = LayoutMetricsCalculator.calculateMetrics(layout, elements, monitor);
