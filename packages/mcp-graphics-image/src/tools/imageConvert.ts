@@ -104,7 +104,9 @@ export async function imageConvert(input: unknown): Promise<ImageConvertResponse
     // Calculate compression metrics
     const originalBase64 = image.data.replace(/^data:image\/[a-z]+;base64,/, '');
     const originalSize = Buffer.from(originalBase64, 'base64').length;
-    const compressionRatio = result.metadata.fileSize! / originalSize;
+    // sharpToOutput sets metadata.fileSize and processingMetadata.outputSize from the same buffer length
+    const newSize = result.metadata.fileSize ?? result.processingMetadata.outputSize;
+    const compressionRatio = newSize / originalSize;
     
     // Estimate quality loss (simplified heuristic)
     let qualityLoss: number | undefined = undefined;
@@ -124,7 +126,7 @@ export async function imageConvert(input: unknown): Promise<ImageConvertResponse
         dimensions: result.dimensions,
         originalFormat: image.format,
         originalSize,
-        newSize: result.metadata.fileSize!,
+        newSize,
         compressionRatio: Math.round(compressionRatio * 1000) / 1000,
         ...(qualityLoss !== undefined && { qualityLoss })
       },
