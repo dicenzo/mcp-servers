@@ -137,7 +137,7 @@ describe('Image Processing Tools - Working Tests', () => {
   });
 
   describe('imageComposite', () => {
-    it('should handle composite requests (may fail due to blend mode issues)', async () => {
+    it('should composite with the normal blend mode', async () => {
       const result = await imageComposite({
         config: {
           width: 10,
@@ -152,14 +152,35 @@ describe('Image Processing Tools - Working Tests', () => {
         }
       });
 
-      // Composite has implementation issues with blend modes, so we test the interface
+      expect(result.success).toBe(true);
       if (result.success) {
-        expect((result as any).result.layerCount).toBe(1);
-        expect((result as any).result.processingMetadata).toBeTruthy();
-      } else {
-        // Error is expected due to blend mode implementation issues
-        expect(result.success).toBe(false);
+        expect(result.result?.layerCount).toBe(1);
+        expect(result.result?.processingMetadata).toBeTruthy();
       }
+    });
+
+    it('should composite when blend is omitted (defaults to normal)', async () => {
+      const result = await imageComposite({
+        config: {
+          width: 10,
+          height: 10,
+          layers: [{ image: testInput, x: 0, y: 0 }]
+        }
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should composite with a non-default blend mode', async () => {
+      const result = await imageComposite({
+        config: {
+          width: 10,
+          height: 10,
+          layers: [{ image: testInput, x: 0, y: 0, blend: 'multiply' }]
+        }
+      });
+
+      expect(result.success).toBe(true);
     });
   });
 });

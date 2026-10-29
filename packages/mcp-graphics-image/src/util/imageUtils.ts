@@ -7,6 +7,7 @@ import {
   ImageMetadata,
   ProcessingMetadata,
   ImageFormat,
+  BlendMode,
   Dimensions,
   Rectangle,
   FilterConfig,
@@ -27,6 +28,14 @@ import {
 
 /** Options object accepted by sharp's toFormat() */
 type SharpFormatOptions = NonNullable<Parameters<sharp.Sharp['toFormat']>[1]>;
+
+/**
+ * Map our BlendMode to sharp's blend name. sharp has no 'normal'; plain
+ * source-over compositing is 'over'. Every other mode shares sharp's name.
+ */
+function toSharpBlend(blend: BlendMode): sharp.Blend {
+  return blend === 'normal' ? 'over' : blend;
+}
 
 /**
  * Map our ImageFormat to sharp's output format key.
@@ -743,7 +752,7 @@ export class ImageUtils {
           input: layerBuffer,
           left: layer.x,
           top: layer.y,
-          blend: layer.blend as sharp.Blend
+          blend: toSharpBlend(layer.blend)
         });
       }
 
