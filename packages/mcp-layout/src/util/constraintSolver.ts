@@ -245,25 +245,25 @@ export class ConstraintSolver {
     const targetBound = constraint.target ? elementBounds.get(constraint.target) || null : null;
 
     switch (constraint.type) {
-      case 'position':
-        this.applyPositionConstraint(constraint, elementBound, targetBound, containerBounds);
-        break;
-      case 'size':
-        this.applySizeConstraint(constraint, elementBound, targetBound, containerBounds);
-        break;
-      case 'spacing':
-        this.applySpacingConstraint(
-          constraint,
-          elementBound,
-          targetBound,
-          containerBounds,
-          initialBounds.get(constraint.element) ?? elementBound,
-          (constraint.target && initialBounds.get(constraint.target)) || targetBound
-        );
-        break;
-      case 'alignment':
-        this.applyAlignmentConstraint(constraint, elementBound, targetBound, containerBounds);
-        break;
+    case 'position':
+      this.applyPositionConstraint(constraint, elementBound, targetBound, containerBounds);
+      break;
+    case 'size':
+      this.applySizeConstraint(constraint, elementBound, targetBound, containerBounds);
+      break;
+    case 'spacing':
+      this.applySpacingConstraint(
+        constraint,
+        elementBound,
+        targetBound,
+        containerBounds,
+        initialBounds.get(constraint.element) ?? elementBound,
+        (constraint.target && initialBounds.get(constraint.target)) || targetBound
+      );
+      break;
+    case 'alignment':
+      this.applyAlignmentConstraint(constraint, elementBound, targetBound, containerBounds);
+      break;
     }
   }
 
@@ -279,105 +279,105 @@ export class ConstraintSolver {
     const value = typeof constraint.value === 'number' ? constraint.value : parseFloat(String(constraint.value));
     
     switch (constraint.property) {
-      case 'x':
-      case 'left':
-        if (targetBound) {
-          switch (constraint.relation) {
-            case 'equal':
-              elementBound.x = targetBound.x + value;
-              break;
-            case 'greater':
-              elementBound.x = Math.max(elementBound.x, targetBound.x + value);
-              break;
-            case 'less':
-              elementBound.x = Math.min(elementBound.x, targetBound.x + value);
-              break;
-          }
-        } else {
-          const absolute = containerBounds.x + value;
-          switch (constraint.relation) {
-            case 'greater':
-              elementBound.x = Math.max(elementBound.x, absolute);
-              break;
-            case 'less':
-              elementBound.x = Math.min(elementBound.x, absolute);
-              break;
-            default:
-              elementBound.x = absolute;
-          }
+    case 'x':
+    case 'left':
+      if (targetBound) {
+        switch (constraint.relation) {
+        case 'equal':
+          elementBound.x = targetBound.x + value;
+          break;
+        case 'greater':
+          elementBound.x = Math.max(elementBound.x, targetBound.x + value);
+          break;
+        case 'less':
+          elementBound.x = Math.min(elementBound.x, targetBound.x + value);
+          break;
         }
-        break;
+      } else {
+        const absolute = containerBounds.x + value;
+        switch (constraint.relation) {
+        case 'greater':
+          elementBound.x = Math.max(elementBound.x, absolute);
+          break;
+        case 'less':
+          elementBound.x = Math.min(elementBound.x, absolute);
+          break;
+        default:
+          elementBound.x = absolute;
+        }
+      }
+      break;
 
-      case 'y':
-      case 'top':
-        if (targetBound) {
-          switch (constraint.relation) {
-            case 'equal':
-              elementBound.y = targetBound.y + value;
-              break;
-            case 'greater':
-              elementBound.y = Math.max(elementBound.y, targetBound.y + value);
-              break;
-            case 'less':
-              elementBound.y = Math.min(elementBound.y, targetBound.y + value);
-              break;
-          }
-        } else {
-          const absolute = containerBounds.y + value;
-          switch (constraint.relation) {
-            case 'greater':
-              elementBound.y = Math.max(elementBound.y, absolute);
-              break;
-            case 'less':
-              elementBound.y = Math.min(elementBound.y, absolute);
-              break;
-            default:
-              elementBound.y = absolute;
-          }
+    case 'y':
+    case 'top':
+      if (targetBound) {
+        switch (constraint.relation) {
+        case 'equal':
+          elementBound.y = targetBound.y + value;
+          break;
+        case 'greater':
+          elementBound.y = Math.max(elementBound.y, targetBound.y + value);
+          break;
+        case 'less':
+          elementBound.y = Math.min(elementBound.y, targetBound.y + value);
+          break;
         }
-        break;
+      } else {
+        const absolute = containerBounds.y + value;
+        switch (constraint.relation) {
+        case 'greater':
+          elementBound.y = Math.max(elementBound.y, absolute);
+          break;
+        case 'less':
+          elementBound.y = Math.min(elementBound.y, absolute);
+          break;
+        default:
+          elementBound.y = absolute;
+        }
+      }
+      break;
 
-      case 'right':
-        if (targetBound) {
-          const targetRight = targetBound.x + targetBound.width;
-          elementBound.x = targetRight + value;
-        } else {
-          const containerRight = containerBounds.x + containerBounds.width;
-          // value is the distance from the container's right edge
-          const atDistance = containerRight - elementBound.width - value;
-          switch (constraint.relation) {
-            case 'greater':
-              elementBound.x = Math.min(elementBound.x, atDistance);
-              break;
-            case 'less':
-              elementBound.x = Math.max(elementBound.x, atDistance);
-              break;
-            default:
-              elementBound.x = atDistance;
-          }
+    case 'right':
+      if (targetBound) {
+        const targetRight = targetBound.x + targetBound.width;
+        elementBound.x = targetRight + value;
+      } else {
+        const containerRight = containerBounds.x + containerBounds.width;
+        // value is the distance from the container's right edge
+        const atDistance = containerRight - elementBound.width - value;
+        switch (constraint.relation) {
+        case 'greater':
+          elementBound.x = Math.min(elementBound.x, atDistance);
+          break;
+        case 'less':
+          elementBound.x = Math.max(elementBound.x, atDistance);
+          break;
+        default:
+          elementBound.x = atDistance;
         }
-        break;
+      }
+      break;
 
-      case 'bottom':
-        if (targetBound) {
-          const targetBottom = targetBound.y + targetBound.height;
-          elementBound.y = targetBottom + value;
-        } else {
-          const containerBottom = containerBounds.y + containerBounds.height;
-          // value is the distance from the container's bottom edge
-          const atDistance = containerBottom - elementBound.height - value;
-          switch (constraint.relation) {
-            case 'greater':
-              elementBound.y = Math.min(elementBound.y, atDistance);
-              break;
-            case 'less':
-              elementBound.y = Math.max(elementBound.y, atDistance);
-              break;
-            default:
-              elementBound.y = atDistance;
-          }
+    case 'bottom':
+      if (targetBound) {
+        const targetBottom = targetBound.y + targetBound.height;
+        elementBound.y = targetBottom + value;
+      } else {
+        const containerBottom = containerBounds.y + containerBounds.height;
+        // value is the distance from the container's bottom edge
+        const atDistance = containerBottom - elementBound.height - value;
+        switch (constraint.relation) {
+        case 'greater':
+          elementBound.y = Math.min(elementBound.y, atDistance);
+          break;
+        case 'less':
+          elementBound.y = Math.max(elementBound.y, atDistance);
+          break;
+        default:
+          elementBound.y = atDistance;
         }
-        break;
+      }
+      break;
     }
   }
 
@@ -393,61 +393,61 @@ export class ConstraintSolver {
     const value = typeof constraint.value === 'number' ? constraint.value : parseFloat(String(constraint.value));
     
     switch (constraint.property) {
-      case 'width':
-        if (targetBound) {
-          switch (constraint.relation) {
-            case 'equal':
-              elementBound.width = targetBound.width + value;
-              break;
-            case 'greater':
-              elementBound.width = Math.max(elementBound.width, targetBound.width + value);
-              break;
-            case 'less':
-              elementBound.width = Math.min(elementBound.width, targetBound.width + value);
-              break;
-          }
-        } else {
-          switch (constraint.relation) {
-            case 'equal':
-              elementBound.width = value;
-              break;
-            case 'greater':
-              elementBound.width = Math.max(elementBound.width, value);
-              break;
-            case 'less':
-              elementBound.width = Math.min(elementBound.width, value);
-              break;
-          }
+    case 'width':
+      if (targetBound) {
+        switch (constraint.relation) {
+        case 'equal':
+          elementBound.width = targetBound.width + value;
+          break;
+        case 'greater':
+          elementBound.width = Math.max(elementBound.width, targetBound.width + value);
+          break;
+        case 'less':
+          elementBound.width = Math.min(elementBound.width, targetBound.width + value);
+          break;
         }
-        break;
+      } else {
+        switch (constraint.relation) {
+        case 'equal':
+          elementBound.width = value;
+          break;
+        case 'greater':
+          elementBound.width = Math.max(elementBound.width, value);
+          break;
+        case 'less':
+          elementBound.width = Math.min(elementBound.width, value);
+          break;
+        }
+      }
+      break;
 
-      case 'height':
-        if (targetBound) {
-          switch (constraint.relation) {
-            case 'equal':
-              elementBound.height = targetBound.height + value;
-              break;
-            case 'greater':
-              elementBound.height = Math.max(elementBound.height, targetBound.height + value);
-              break;
-            case 'less':
-              elementBound.height = Math.min(elementBound.height, targetBound.height + value);
-              break;
-          }
-        } else {
-          switch (constraint.relation) {
-            case 'equal':
-              elementBound.height = value;
-              break;
-            case 'greater':
-              elementBound.height = Math.max(elementBound.height, value);
-              break;
-            case 'less':
-              elementBound.height = Math.min(elementBound.height, value);
-              break;
-          }
+    case 'height':
+      if (targetBound) {
+        switch (constraint.relation) {
+        case 'equal':
+          elementBound.height = targetBound.height + value;
+          break;
+        case 'greater':
+          elementBound.height = Math.max(elementBound.height, targetBound.height + value);
+          break;
+        case 'less':
+          elementBound.height = Math.min(elementBound.height, targetBound.height + value);
+          break;
         }
-        break;
+      } else {
+        switch (constraint.relation) {
+        case 'equal':
+          elementBound.height = value;
+          break;
+        case 'greater':
+          elementBound.height = Math.max(elementBound.height, value);
+          break;
+        case 'less':
+          elementBound.height = Math.min(elementBound.height, value);
+          break;
+        }
+      }
+      break;
     }
 
     // Ensure non-negative dimensions
@@ -473,30 +473,30 @@ export class ConstraintSolver {
     const value = typeof constraint.value === 'number' ? constraint.value : parseFloat(String(constraint.value));
 
     switch (constraint.property) {
-      case 'horizontal':
-      case 'x-spacing':
-        // Maintain horizontal spacing between elements
-        // Side is decided from the initial arrangement; ties go after the target.
-        if (initialElement.x < initialTarget.x) {
-          // Element is to the left of target
-          elementBound.x = targetBound.x - elementBound.width - value;
-        } else {
-          // Element is to the right of target
-          elementBound.x = targetBound.x + targetBound.width + value;
-        }
-        break;
+    case 'horizontal':
+    case 'x-spacing':
+      // Maintain horizontal spacing between elements
+      // Side is decided from the initial arrangement; ties go after the target.
+      if (initialElement.x < initialTarget.x) {
+        // Element is to the left of target
+        elementBound.x = targetBound.x - elementBound.width - value;
+      } else {
+        // Element is to the right of target
+        elementBound.x = targetBound.x + targetBound.width + value;
+      }
+      break;
 
-      case 'vertical':
-      case 'y-spacing':
-        // Maintain vertical spacing between elements
-        if (initialElement.y < initialTarget.y) {
-          // Element is above target
-          elementBound.y = targetBound.y - elementBound.height - value;
-        } else {
-          // Element is below target
-          elementBound.y = targetBound.y + targetBound.height + value;
-        }
-        break;
+    case 'vertical':
+    case 'y-spacing':
+      // Maintain vertical spacing between elements
+      if (initialElement.y < initialTarget.y) {
+        // Element is above target
+        elementBound.y = targetBound.y - elementBound.height - value;
+      } else {
+        // Element is below target
+        elementBound.y = targetBound.y + targetBound.height + value;
+      }
+      break;
     }
   }
 
@@ -512,38 +512,38 @@ export class ConstraintSolver {
     const referenceRect = targetBound || containerBounds;
 
     switch (constraint.property) {
-      case 'center-x':
-      case 'horizontal-center':
-        const referenceCenterX = referenceRect.x + referenceRect.width / 2;
-        elementBound.x = referenceCenterX - elementBound.width / 2;
-        break;
+    case 'center-x':
+    case 'horizontal-center':
+      const referenceCenterX = referenceRect.x + referenceRect.width / 2;
+      elementBound.x = referenceCenterX - elementBound.width / 2;
+      break;
 
-      case 'center-y':
-      case 'vertical-center':
-        const referenceCenterY = referenceRect.y + referenceRect.height / 2;
-        elementBound.y = referenceCenterY - elementBound.height / 2;
-        break;
+    case 'center-y':
+    case 'vertical-center':
+      const referenceCenterY = referenceRect.y + referenceRect.height / 2;
+      elementBound.y = referenceCenterY - elementBound.height / 2;
+      break;
 
-      case 'left':
-        elementBound.x = referenceRect.x;
-        break;
+    case 'left':
+      elementBound.x = referenceRect.x;
+      break;
 
-      case 'right':
-        elementBound.x = referenceRect.x + referenceRect.width - elementBound.width;
-        break;
+    case 'right':
+      elementBound.x = referenceRect.x + referenceRect.width - elementBound.width;
+      break;
 
-      case 'top':
-        elementBound.y = referenceRect.y;
-        break;
+    case 'top':
+      elementBound.y = referenceRect.y;
+      break;
 
-      case 'bottom':
-        elementBound.y = referenceRect.y + referenceRect.height - elementBound.height;
-        break;
+    case 'bottom':
+      elementBound.y = referenceRect.y + referenceRect.height - elementBound.height;
+      break;
 
-      case 'baseline':
-        // Simplified baseline alignment
-        elementBound.y = referenceRect.y + referenceRect.height * 0.8;
-        break;
+    case 'baseline':
+      // Simplified baseline alignment
+      elementBound.y = referenceRect.y + referenceRect.height * 0.8;
+      break;
     }
   }
 
