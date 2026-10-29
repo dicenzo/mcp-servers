@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { z } from 'zod';
 import { ColorUtils } from '../util/colorUtils.js';
 import {
   ColorBrandLintInputSchema,
@@ -138,7 +137,7 @@ export async function colorLintBrand(input: unknown): Promise<ColorLintBrandResp
           success: false,
           error: colorError
         };
-      } catch (parseError) {
+      } catch {
         // Handle unstructured errors
         return {
           success: false,
@@ -178,9 +177,9 @@ async function lintContrastRules(
   colors: Color[],
   minContrast: number,
   issues: BrandLintReport['issues'],
-  context?: ColorBrandLintInput['context']
+  _context?: ColorBrandLintInput['context']
 ): Promise<void> {
-  const useCases = context?.useCases || ['text', 'background'];
+  // _context.useCases is not applied yet: every color pair is checked for contrast
   
   // Check all color pairs for contrast
   for (let i = 0; i < colors.length; i++) {
@@ -288,7 +287,7 @@ async function lintAccessibilityRules(
   colors: Color[],
   accessibility: AccessibilityContext,
   issues: BrandLintReport['issues'],
-  context?: ColorBrandLintInput['context']
+  _context?: ColorBrandLintInput['context']
 ): Promise<void> {
   const { textSize, level } = accessibility;
   const requiredRatio = getRequiredContrastRatio(textSize, level);

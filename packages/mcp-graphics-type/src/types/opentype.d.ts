@@ -3,7 +3,16 @@
 declare module 'opentype.js' {
   export function parse(buffer: ArrayBuffer): Font;
   
-  export interface Font {
+  export class Font {
+    constructor(options: {
+      familyName: string;
+      styleName: string;
+      unitsPerEm: number;
+      ascender: number;
+      descender: number;
+      glyphs: Glyph[];
+    });
+
     names: {
       fontFamily?: { en: string };
       fontSubfamily?: { en: string };
@@ -80,18 +89,5 @@ declare module 'opentype.js' {
       x2: number;
       y2: number;
     };
-  }
-  
-  export class Font {
-    constructor(options: {
-      familyName: string;
-      styleName: string;
-      unitsPerEm: number;
-      ascender: number;
-      descender: number;
-      glyphs: Glyph[];
-    });
-    
-    toArrayBuffer(): ArrayBuffer;
   }
 }

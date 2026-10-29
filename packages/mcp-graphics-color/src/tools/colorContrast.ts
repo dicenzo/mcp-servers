@@ -1,13 +1,10 @@
 #!/usr/bin/env node
 
-import { z } from 'zod';
 import { ColorUtils } from '../util/colorUtils.js';
 import {
   ColorContrastInputSchema,
-  ColorContrastInput,
   ContrastReport,
   ColorErrorCode,
-  AccessibilityContext
 } from '../types/color.js';
 
 /**
@@ -124,7 +121,7 @@ export async function colorContrast(input: unknown): Promise<ColorContrastRespon
           success: false,
           error: colorError
         };
-      } catch (parseError) {
+      } catch {
         // Handle unstructured errors
         return {
           success: false,
@@ -161,8 +158,8 @@ export async function colorContrast(input: unknown): Promise<ColorContrastRespon
  */
 function calculateWCAGCompliance(
   ratio: number,
-  textSize: 'normal' | 'large',
-  level: 'AA' | 'AAA'
+  _textSize: 'normal' | 'large',
+  _level: 'AA' | 'AAA'
 ): ContrastReport['score'] {
   const thresholds = {
     AA: {

@@ -109,6 +109,8 @@ export class TypographyValidator {
     }
 
     // Check for potentially problematic characters
+    // Matching control characters is the point of this check
+    // eslint-disable-next-line no-control-regex
     const controlChars = text.match(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g);
     if (controlChars) {
       console.warn(`[Typography Validator] Text contains control characters: ${controlChars.map(c => c.charCodeAt(0).toString(16)).join(', ')}`);

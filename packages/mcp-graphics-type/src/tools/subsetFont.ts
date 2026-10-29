@@ -256,7 +256,7 @@ async function createFontSubset(
       const glyphCounts = await getGlyphCounts(fontBuffer, subsetBuffer);
       glyphsIncluded = glyphCounts.subset;
       totalGlyphs = glyphCounts.total;
-    } catch (fonttoolsError) {
+    } catch {
       console.warn('[Font Subset] Fonttools not available, using fallback method');
       
       // Fallback to opentype.js based subsetting
@@ -519,7 +519,7 @@ async function getGlyphCounts(originalBuffer: Buffer, subsetBuffer: Buffer): Pro
       total: originalFont.numGlyphs,
       subset: subsetFont.numGlyphs
     };
-  } catch (error) {
+  } catch {
     // Return estimates if parsing fails
     return {
       total: Math.floor(originalBuffer.length / 100), // Rough estimate

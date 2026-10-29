@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { z } from 'zod';
 import { ColorUtils } from '../util/colorUtils.js';
 import {
   ColorPaletteInputSchema,
@@ -128,7 +127,7 @@ export async function colorGeneratePalette(input: unknown): Promise<ColorGenerat
           success: false,
           error: colorError
         };
-      } catch (parseError) {
+      } catch {
         // Handle unstructured errors
         return {
           success: false,
@@ -167,7 +166,7 @@ export async function colorGeneratePalette(input: unknown): Promise<ColorGenerat
 async function applyPaletteOptions(
   colors: Color[],
   options: NonNullable<ColorPaletteInput['options']>,
-  space: string
+  _space: string
 ): Promise<Color[]> {
   const { saturationRange, lightnessRange, hueShift } = options;
   

@@ -61,6 +61,8 @@ export const scenarioTool: Tool = {
     }, 
     required: ['base', 'knobs'] 
   },
+  // The tool contract is a generator (index.ts reads one next()); this tool returns its single result
+  // eslint-disable-next-line require-yield
   async *invoke(input: z.infer<typeof Input>) {
     try {
       const { base, knobs, metrics } = Input.parse(input);
@@ -154,8 +156,7 @@ function calculateScenarioOutputs(scenario: Record<string, number>, metrics: str
     churnMonthlyPct = 0.05,
     grossMarginPct = 0.8,
     customers = 1000,
-    arpuMonthly = price,
-    months = 12
+    arpuMonthly = price
   } = scenario;
   
   // Calculate standard business metrics
@@ -209,7 +210,7 @@ function calculateScenarioOutputs(scenario: Record<string, number>, metrics: str
 function calculateSensitivity(
   base: Record<string, number>, 
   scenario: Record<string, number>, 
-  outputs: Record<string, number>
+  _outputs: Record<string, number>
 ): Record<string, number> {
   const sensitivity: Record<string, number> = {};
   
@@ -250,7 +251,6 @@ function generateSensitivityMatrix(
     
     // Find a test value (preferably 20% higher, or use max value)
     const testValue = values.find(v => v > baseValue) || Math.max(...values);
-    const percentChange = ((testValue - baseValue) / baseValue) * 100;
     
     // Calculate outputs with this variable changed
     const testScenario = { ...base, [variable]: testValue };
@@ -327,7 +327,7 @@ function generateSummary(
 function generateScenarioRecommendations(
   scenarios: ScenarioResult[],
   sensitivityMatrix: Array<{ variable: string; impact_on_revenue: number; rank: number }>,
-  base: Record<string, number>
+  _base: Record<string, number>
 ): string[] {
   const recommendations: string[] = [];
   

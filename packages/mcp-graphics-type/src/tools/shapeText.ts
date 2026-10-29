@@ -1,6 +1,6 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { TypographyValidator, PerformanceValidator } from '../util/validation.js';
-import { PerformanceMonitor, FontCache } from '../util/performance.js';
+import { TypographyValidator } from '../util/validation.js';
+import { PerformanceMonitor } from '../util/performance.js';
 import { 
   ShapeTextInputSchema, 
   ShapeTextInput, 
@@ -263,7 +263,7 @@ async function performBasicShaping(
     const glyphs: GlyphInfo[] = [];
     const clusters: number[] = [];
     let totalAdvanceX = 0;
-    let totalAdvanceY = 0;
+    const totalAdvanceY = 0;
     
     // Basic character-to-glyph mapping
     for (let i = 0; i < text.length; i++) {
@@ -331,31 +331,6 @@ async function performBasicShaping(
         'Verify the text contains supported characters'
       ]
     }));
-  }
-}
-
-/**
- * Applies additional letter and word spacing to shaped glyphs
- */
-function applySpacing(
-  glyphs: GlyphInfo[], 
-  text: string, 
-  letterSpacing: number, 
-  wordSpacing: number
-): void {
-  for (let i = 0; i < glyphs.length; i++) {
-    const glyph = glyphs[i];
-    const char = text[glyph.cluster];
-    
-    // Apply letter spacing to all glyphs
-    if (letterSpacing !== 0) {
-      glyph.advance.x += letterSpacing;
-    }
-    
-    // Apply word spacing to space characters
-    if (wordSpacing !== 0 && char === ' ') {
-      glyph.advance.x += wordSpacing;
-    }
   }
 }
 

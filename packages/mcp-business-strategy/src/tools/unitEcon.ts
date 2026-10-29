@@ -68,6 +68,8 @@ export const unitEconTool: Tool = {
     },
     required: ['price', 'grossMarginPct', 'cac', 'churnMonthlyPct']
   },
+  // The tool contract is a generator (index.ts reads one next()); this tool returns its single result
+  // eslint-disable-next-line require-yield
   async *invoke(input: z.infer<typeof Input>) {
     try {
       const validated = Input.parse(input);

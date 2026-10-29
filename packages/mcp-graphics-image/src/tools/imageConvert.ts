@@ -3,7 +3,6 @@
 import { z } from 'zod';
 import { ImageUtils } from '../util/imageUtils.js';
 import {
-  ImageInput,
   ImageInputSchema,
   SupportedImageFormats,
   ImageFormat,
@@ -67,7 +66,8 @@ export async function imageConvert(input: unknown): Promise<ImageConvertResponse
   try {
     // Validate input
     const validated = ImageConvertInputSchema.parse(input);
-    const { image, format, quality, preserveMetadata } = validated;
+    // preserveMetadata is accepted but not applied yet; sharp strips metadata by default
+    const { image, format, quality } = validated;
     
     // Check if conversion is needed
     if (image.format === format && quality === undefined) {
@@ -146,7 +146,7 @@ export async function imageConvert(input: unknown): Promise<ImageConvertResponse
           success: false,
           error: imageError
         };
-      } catch (parseError) {
+      } catch {
         // Handle unstructured errors
         return {
           success: false,

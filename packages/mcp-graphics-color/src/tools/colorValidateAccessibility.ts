@@ -3,11 +3,9 @@
 import { z } from 'zod';
 import { ColorUtils } from '../util/colorUtils.js';
 import {
-  ColorInput,
   ColorInputSchema,
   Color,
   ColorErrorCode,
-  AccessibilityContext
 } from '../types/color.js';
 
 /**
@@ -120,7 +118,7 @@ export async function colorValidateAccessibility(input: unknown): Promise<ColorV
     let wcagAAAPassed = 0;
     
     for (const context of contexts) {
-      const { name, foreground, background, textSize, level, description } = context;
+      const { name, foreground, background, textSize, level } = context;
       
       // Validate color indices
       if (foreground >= parsedColors.length || background >= parsedColors.length) {
@@ -221,7 +219,7 @@ export async function colorValidateAccessibility(input: unknown): Promise<ColorV
           success: false,
           error: colorError
         };
-      } catch (parseError) {
+      } catch {
         // Handle unstructured errors
         return {
           success: false,
