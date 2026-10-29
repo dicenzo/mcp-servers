@@ -375,15 +375,42 @@ export const TemplateSchema = z.object({
   partials: z.record(z.any()).optional()
 });
 
+/** Max export width / height in px */
+export const MAX_EXPORT_DIMENSION = 8192;
+
+/** Max template layout width / height in px */
+export const MAX_LAYOUT_DIMENSION = 10000;
+
+/** Max length of caller-supplied rendered SVG / HTML (matches the engine's output limit) */
+export const MAX_RENDERED_CONTENT_LENGTH = 5_000_000;
+
 export const ExportOptionsSchema = z.object({
   format: z.nativeEnum(ExportFormat),
   quality: z.number().min(0).max(100).optional(),
-  width: z.number().min(1).optional(),
-  height: z.number().min(1).optional(),
+  width: z.number().min(1).max(MAX_EXPORT_DIMENSION).optional(),
+  height: z.number().min(1).max(MAX_EXPORT_DIMENSION).optional(),
   scale: z.number().min(0.1).max(10).optional(),
   background: z.string().optional(),
   pageSize: z.enum(['A4', 'A3', 'Letter', 'Legal']).optional(),
   margin: z.number().optional()
+});
+
+/** Schema for caller-supplied, already-rendered templates passed to template.export */
+export const RenderedTemplateSchema = z.object({
+  id: z.string().min(1).max(200),
+  templateId: z.string().min(1).max(200),
+  variables: z.record(z.any()).default({}),
+  content: z.object({
+    svg: z.string().max(MAX_RENDERED_CONTENT_LENGTH).optional(),
+    html: z.string().max(MAX_RENDERED_CONTENT_LENGTH).optional(),
+    metadata: z.object({
+      width: z.number().min(1).max(MAX_LAYOUT_DIMENSION),
+      height: z.number().min(1).max(MAX_LAYOUT_DIMENSION),
+      renderTime: z.number().min(0),
+      componentCount: z.number().int().min(0)
+    })
+  }),
+  generatedAt: z.string().max(100)
 });
 
 // ==================== Tool Input Types ====================

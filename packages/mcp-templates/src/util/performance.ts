@@ -10,6 +10,11 @@ interface PerformanceMetric {
   metadata?: Record<string, unknown>;
 }
 
+/** Completed metrics kept per operation name (oldest dropped first) */
+export const MAX_METRICS_PER_OPERATION = 1000;
+/** Max in-flight operations tracked; operations never ended are evicted oldest first */
+export const MAX_ACTIVE_OPERATIONS = 1000;
+
 export class PerformanceMonitor {
   private static instance: PerformanceMonitor;
   private metrics: Map<string, PerformanceMetric[]> = new Map();
@@ -40,6 +45,10 @@ export class PerformanceMonitor {
     };
     
     this.activeOperations.set(operationId, metric);
+    if (this.activeOperations.size > MAX_ACTIVE_OPERATIONS) {
+      const oldest = this.activeOperations.keys().next().value;
+      if (oldest !== undefined) this.activeOperations.delete(oldest);
+    }
   }
 
   endOperation(operationId: string): number | null {
@@ -55,6 +64,9 @@ export class PerformanceMonitor {
     // Store completed metric
     const existingMetrics = this.metrics.get(metric.name) || [];
     existingMetrics.push(metric);
+    if (existingMetrics.length > MAX_METRICS_PER_OPERATION) {
+      existingMetrics.splice(0, existingMetrics.length - MAX_METRICS_PER_OPERATION);
+    }
     this.metrics.set(metric.name, existingMetrics);
     
     // Remove from active operations
@@ -200,7 +212,8 @@ export async function timeOperation<T>(
     const duration = monitor.endOperation(operationId);
     
     if (duration !== null) {
-      console.log(`[Performance] ${name} completed in ${duration.toFixed(2)}ms`);
+      // stdout is the MCP stdio channel; diagnostics go to stderr
+      console.error(`[Performance] ${name} completed in ${duration.toFixed(2)}ms`);
     }
     
     return result;

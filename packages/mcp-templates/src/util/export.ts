@@ -10,11 +10,91 @@ import {
 } from '../types/template.js';
 import { timeOperation } from './performance.js';
 
+/** Max pixel area of a raster export (width * scale * height * scale) */
+export const MAX_OUTPUT_PIXELS = 50_000_000;
+
+/** Max pixel area sharp may decode from the source SVG (its intrinsic size) */
+export const MAX_INPUT_PIXELS = 50_000_000;
+
+/** Max Chrome pages rendering PDFs at once; further exports wait their turn */
+export const MAX_CONCURRENT_PDF_PAGES = 2;
+
+/** Default timeout for Puppeteer page operations during PDF export */
+export const PDF_PAGE_TIMEOUT_MS = 30_000;
+
+/**
+ * Minimal counting semaphore for bounding concurrent work
+ */
+class Semaphore {
+  private active = 0;
+  private waiting: (() => void)[] = [];
+
+  constructor(private readonly capacity: number) {}
+
+  async acquire(): Promise<void> {
+    if (this.active < this.capacity) {
+      this.active++;
+      return;
+    }
+    await new Promise<void>(resolve => this.waiting.push(resolve));
+  }
+
+  release(): void {
+    const next = this.waiting.shift();
+    if (next) {
+      // Hand the slot directly to the next waiter
+      next();
+    } else {
+      this.active--;
+    }
+  }
+}
+
 /**
  * Export utilities for converting templates to various formats
  */
 export class TemplateExporter {
   private static browserInstance: Browser | null = null;
+  private static pdfPages = new Semaphore(MAX_CONCURRENT_PDF_PAGES);
+
+  /**
+   * Resolve the raster output size, refusing requests over MAX_OUTPUT_PIXELS
+   */
+  private static resolveRasterSize(
+    renderedTemplate: RenderedTemplate,
+    options: ExportOptions
+  ): { width: number; height: number } {
+    const scale = options.scale || 1;
+    const width = Math.round((options.width || renderedTemplate.content.metadata.width) * scale);
+    const height = Math.round((options.height || renderedTemplate.content.metadata.height) * scale);
+
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1) {
+      throw new Error('Export dimensions must be positive numbers');
+    }
+    if (width * height > MAX_OUTPUT_PIXELS) {
+      throw new Error(
+        `Requested output of ${width}x${height} pixels exceeds the limit of ${MAX_OUTPUT_PIXELS} pixels; ` +
+        'reduce width, height or scale'
+      );
+    }
+    return { width, height };
+  }
+
+  /**
+   * Create a sharp pipeline for SVG input, resized to the target when it differs
+   * from the template size. limitInputPixels bounds the decoded SVG itself.
+   */
+  private static createRasterPipeline(
+    svgContent: string,
+    renderedTemplate: RenderedTemplate,
+    target: { width: number; height: number }
+  ): ReturnType<typeof sharp> {
+    let sharpInstance = sharp(Buffer.from(svgContent), { limitInputPixels: MAX_INPUT_PIXELS });
+    if (target.width !== renderedTemplate.content.metadata.width || target.height !== renderedTemplate.content.metadata.height) {
+      sharpInstance = sharpInstance.resize(target.width, target.height);
+    }
+    return sharpInstance;
+  }
   
   /**
    * Export rendered template to specified format
@@ -139,16 +219,8 @@ export class TemplateExporter {
       throw new Error('No SVG content available for PNG export');
     }
     
-    const width = options.width || renderedTemplate.content.metadata.width;
-    const height = options.height || renderedTemplate.content.metadata.height;
-    const scale = options.scale || 1;
-    
-    let sharpInstance = sharp(Buffer.from(svgContent));
-    
-    // Resize if needed
-    if (width !== renderedTemplate.content.metadata.width || height !== renderedTemplate.content.metadata.height) {
-      sharpInstance = sharpInstance.resize(Math.round(width * scale), Math.round(height * scale));
-    }
+    const target = this.resolveRasterSize(renderedTemplate, options);
+    let sharpInstance = this.createRasterPipeline(svgContent, renderedTemplate, target);
     
     // Add background if specified
     if (options.background) {
@@ -163,8 +235,8 @@ export class TemplateExporter {
       data,
       format: ExportFormat.PNG,
       size: {
-        width: Math.round(width * scale),
-        height: Math.round(height * scale),
+        width: target.width,
+        height: target.height,
         bytes: buffer.length
       },
       metadata: {
@@ -188,17 +260,9 @@ export class TemplateExporter {
       throw new Error('No SVG content available for JPEG export');
     }
     
-    const width = options.width || renderedTemplate.content.metadata.width;
-    const height = options.height || renderedTemplate.content.metadata.height;
-    const scale = options.scale || 1;
+    const target = this.resolveRasterSize(renderedTemplate, options);
     const quality = options.quality || 80;
-    
-    let sharpInstance = sharp(Buffer.from(svgContent));
-    
-    // Resize if needed
-    if (width !== renderedTemplate.content.metadata.width || height !== renderedTemplate.content.metadata.height) {
-      sharpInstance = sharpInstance.resize(Math.round(width * scale), Math.round(height * scale));
-    }
+    let sharpInstance = this.createRasterPipeline(svgContent, renderedTemplate, target);
     
     // JPEG requires background (no transparency)
     const background = options.background || '#ffffff';
@@ -212,8 +276,8 @@ export class TemplateExporter {
       data,
       format: ExportFormat.JPEG,
       size: {
-        width: Math.round(width * scale),
-        height: Math.round(height * scale),
+        width: target.width,
+        height: target.height,
         bytes: buffer.length
       },
       metadata: {
@@ -237,17 +301,9 @@ export class TemplateExporter {
       throw new Error('No SVG content available for WebP export');
     }
     
-    const width = options.width || renderedTemplate.content.metadata.width;
-    const height = options.height || renderedTemplate.content.metadata.height;
-    const scale = options.scale || 1;
+    const target = this.resolveRasterSize(renderedTemplate, options);
     const quality = options.quality || 80;
-    
-    let sharpInstance = sharp(Buffer.from(svgContent));
-    
-    // Resize if needed
-    if (width !== renderedTemplate.content.metadata.width || height !== renderedTemplate.content.metadata.height) {
-      sharpInstance = sharpInstance.resize(Math.round(width * scale), Math.round(height * scale));
-    }
+    let sharpInstance = this.createRasterPipeline(svgContent, renderedTemplate, target);
     
     // Add background if specified
     if (options.background) {
@@ -262,8 +318,8 @@ export class TemplateExporter {
       data,
       format: ExportFormat.WEBP,
       size: {
-        width: Math.round(width * scale),
-        height: Math.round(height * scale),
+        width: target.width,
+        height: target.height,
         bytes: buffer.length
       },
       metadata: {
@@ -287,10 +343,27 @@ export class TemplateExporter {
       throw new Error('No HTML content available for PDF export');
     }
     
+    await this.pdfPages.acquire();
+    try {
+      return await this.renderPDF(htmlContent, renderedTemplate, options, startTime);
+    } finally {
+      this.pdfPages.release();
+    }
+  }
+
+  private static async renderPDF(
+    htmlContent: string,
+    renderedTemplate: RenderedTemplate,
+    options: ExportOptions,
+    startTime: number
+  ): Promise<ExportResult> {
     const browser = await this.getBrowser();
     const page = await browser.newPage();
     
     try {
+      page.setDefaultTimeout(PDF_PAGE_TIMEOUT_MS);
+      page.setDefaultNavigationTimeout(PDF_PAGE_TIMEOUT_MS);
+
       // Template HTML can carry caller-supplied content, so render it as a static
       // document: no scripts, and no network or file requests (inline data: URIs only).
       await page.setJavaScriptEnabled(false);

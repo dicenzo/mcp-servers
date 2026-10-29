@@ -15,8 +15,56 @@ import {
   ComponentType,
   TemplateError,
   TemplateErrorCode,
-  ValidationRule
+  MAX_LAYOUT_DIMENSION,
+  MAX_RENDERED_CONTENT_LENGTH
 } from '../types/template.js';
+import { evaluateValidationRules } from '../util/validationRules.js';
+
+/**
+ * Hard limits on rendering work. Enforced inside the engine (not only by optional
+ * validation) so caller-supplied templates and variables can't blow up memory.
+ */
+export interface RenderLimits {
+  /** Max items a single `repeat` or `{{#each}}` may iterate */
+  maxRepeatItems: number;
+  /** Max group nesting depth */
+  maxNestingDepth: number;
+  /** Max components emitted by one render, across repeats and groups */
+  maxRenderedComponents: number;
+  /** Max characters of Handlebars output per render, and of the final SVG / HTML */
+  maxOutputLength: number;
+  /** Max layout width / height in px */
+  maxLayoutDimension: number;
+}
+
+export const RENDER_LIMITS: Readonly<RenderLimits> = {
+  maxRepeatItems: 1000,
+  maxNestingDepth: 16,
+  maxRenderedComponents: 10000,
+  maxOutputLength: MAX_RENDERED_CONTENT_LENGTH,
+  maxLayoutDimension: MAX_LAYOUT_DIMENSION
+};
+
+export class RenderLimitError extends Error {
+  constructor(message: string) {
+    super(`Render limit exceeded: ${message}`);
+    this.name = 'RenderLimitError';
+  }
+}
+
+/** Mutable counters shared by every component in one renderTemplate call */
+interface RenderState {
+  componentCount: number;
+  outputLength: number;
+}
+
+const HEX_COLOR = /^#[0-9a-f]{3,8}$/i;
+const FUNCTIONAL_COLOR = /^(rgb|rgba|hsl|hsla)\(\s*[-+0-9.%,\s/]+\)$/i;
+const NAMED_COLOR = /^[a-z]{1,30}$/i;
+const FONT_FAMILY = /^[A-Za-z0-9 ,'"_-]{1,200}$/;
+const DATA_IMAGE_URI = /^data:image\/[a-z0-9.+-]+(;[a-z0-9=.+-]+)*;base64,[A-Za-z0-9+/]*={0,2}$/i;
+const RELATIVE_PATH = /^[A-Za-z0-9._~-][A-Za-z0-9._~\-/]*(\?[A-Za-z0-9._~\-=&%]*)?$/;
+const IMAGE_FITS = ['contain', 'cover', 'fill', 'scale-down'];
 
 /**
  * Template Engine - Core template processing and variable substitution
@@ -25,8 +73,10 @@ export class TemplateEngine {
   private handlebars: typeof Handlebars;
   private templateCache: Map<string, Template> = new Map();
   private libraryComponents: Map<string, TemplateComponent> = new Map();
+  private readonly limits: RenderLimits;
 
-  constructor() {
+  constructor(limits: Partial<RenderLimits> = {}) {
+    this.limits = { ...RENDER_LIMITS, ...limits };
     // Initialize Handlebars with custom helpers
     this.handlebars = Handlebars.create();
     this.registerHelpers();
@@ -45,12 +95,19 @@ export class TemplateEngine {
       }
     });
 
-    // Each loop helper
+    // Each loop helper (bounded: nested {{#each}} would otherwise multiply output)
+    const limits = this.limits;
     this.handlebars.registerHelper('each', function(context, options) {
       let ret = '';
       if (Array.isArray(context)) {
+        if (context.length > limits.maxRepeatItems) {
+          throw new RenderLimitError(`{{#each}} over ${context.length} items (max ${limits.maxRepeatItems})`);
+        }
         for (let i = 0; i < context.length; i++) {
           ret += options.fn({ ...context[i], '@index': i, '@first': i === 0, '@last': i === context.length - 1 });
+          if (ret.length > limits.maxOutputLength) {
+            throw new RenderLimitError(`{{#each}} output exceeds ${limits.maxOutputLength} characters`);
+          }
         }
       }
       return ret;
@@ -131,7 +188,7 @@ export class TemplateEngine {
 
       // Custom validation rules
       if (def.validation) {
-        const validationErrors = this.validateRules(def.name, value, def.validation);
+        const validationErrors = evaluateValidationRules(def.name, value, def.validation);
         errors.push(...validationErrors);
       }
     }
@@ -236,79 +293,6 @@ export class TemplateEngine {
   }
 
   /**
-   * Validate variable against custom rules
-   */
-  private validateRules(
-    name: string, 
-    value: unknown, 
-    rules: ValidationRule[]
-  ): TemplateError[] {
-    const errors: TemplateError[] = [];
-
-    for (const rule of rules) {
-      switch (rule.type) {
-        case 'min':
-          if (typeof value === 'number' && value < Number(rule.value)) {
-            errors.push({
-              code: TemplateErrorCode.INVALID_VARIABLE,
-              message: rule.message || `Variable '${name}' must be at least ${rule.value}`,
-              variableName: name
-            });
-          } else if (typeof value === 'string' && value.length < Number(rule.value)) {
-            errors.push({
-              code: TemplateErrorCode.INVALID_VARIABLE,
-              message: rule.message || `Variable '${name}' must be at least ${rule.value} characters long`,
-              variableName: name
-            });
-          }
-          break;
-
-        case 'max':
-          if (typeof value === 'number' && value > Number(rule.value)) {
-            errors.push({
-              code: TemplateErrorCode.INVALID_VARIABLE,
-              message: rule.message || `Variable '${name}' must be at most ${rule.value}`,
-              variableName: name
-            });
-          } else if (typeof value === 'string' && value.length > Number(rule.value)) {
-            errors.push({
-              code: TemplateErrorCode.INVALID_VARIABLE,
-              message: rule.message || `Variable '${name}' must be at most ${rule.value} characters long`,
-              variableName: name
-            });
-          }
-          break;
-
-        case 'pattern':
-          if (typeof value === 'string') {
-            const regex = new RegExp(String(rule.value ?? ''));
-            if (!regex.test(value)) {
-              errors.push({
-                code: TemplateErrorCode.INVALID_VARIABLE,
-                message: rule.message || `Variable '${name}' does not match required pattern`,
-                variableName: name
-              });
-            }
-          }
-          break;
-
-        case 'enum':
-          if (Array.isArray(rule.value) && !rule.value.includes(value)) {
-            errors.push({
-              code: TemplateErrorCode.INVALID_VARIABLE,
-              message: rule.message || `Variable '${name}' must be one of: ${rule.value.join(', ')}`,
-              variableName: name,
-              suggestions: rule.value.map(v => `Use "${v}"`)
-            });
-          }
-          break;
-      }
-    }
-
-    return errors;
-  }
-
-  /**
    * Render a template with provided variables
    */
   public async renderTemplate(
@@ -330,19 +314,27 @@ export class TemplateEngine {
       // Process template inheritance
       const processedTemplate = await this.processInheritance(template);
 
+      const { width, height } = processedTemplate.layout;
+      for (const dimension of [width, height]) {
+        if (!Number.isFinite(dimension) || dimension < 1 || dimension > this.limits.maxLayoutDimension) {
+          throw new Error(`Template layout dimensions must be between 1 and ${this.limits.maxLayoutDimension}px`);
+        }
+      }
+
       // Render components
       // Repeating components render to arrays; flatten so each item is emitted.
+      const state: RenderState = { componentCount: 0, outputLength: 0 };
       const renderedComponents = (await Promise.all(
         processedTemplate.components.map(component => 
-          this.renderComponent(component, mergedVariables)
+          this.renderComponent(component, mergedVariables, state, 0)
         )
       )).flat();
 
       // Generate SVG content
-      const svgContent = this.generateSVG(processedTemplate, renderedComponents);
+      const svgContent = this.checkOutputLength(this.generateSVG(processedTemplate, renderedComponents), 'SVG');
 
       // Generate HTML content (for web display)
-      const htmlContent = this.generateHTML(processedTemplate, renderedComponents);
+      const htmlContent = this.checkOutputLength(this.generateHTML(processedTemplate, renderedComponents), 'HTML');
 
       const renderTime = Date.now() - startTime;
 
@@ -405,9 +397,15 @@ export class TemplateEngine {
    */
   private async renderComponent(
     component: TemplateComponent, 
-    variables: VariableMap
+    variables: VariableMap,
+    state: RenderState,
+    depth: number
   ): Promise<TemplateComponent | TemplateComponent[] | null> {
     try {
+      if (depth > this.limits.maxNestingDepth) {
+        throw new RenderLimitError(`group nesting depth exceeds ${this.limits.maxNestingDepth}`);
+      }
+
       // Check conditional rendering
       if (component.conditional) {
         const shouldRender = this.evaluateCondition(component.conditional, variables);
@@ -418,123 +416,139 @@ export class TemplateEngine {
 
       // Handle repeating components
       if (component.repeat) {
-        return this.renderRepeatingComponent(component, variables);
+        return this.renderRepeatingComponent(component, variables, state, depth);
+      }
+
+      state.componentCount++;
+      if (state.componentCount > this.limits.maxRenderedComponents) {
+        throw new RenderLimitError(`more than ${this.limits.maxRenderedComponents} rendered components`);
       }
 
       // Process component based on type
       switch (component.type) {
         case ComponentType.TEXT:
-          return this.renderTextComponent(component, variables);
+          return this.renderTextComponent(component, variables, state);
         
         case ComponentType.IMAGE:
-          return this.renderImageComponent(component, variables);
+          return this.renderImageComponent(component, variables, state);
           
         case ComponentType.SHAPE:
-          return this.renderShapeComponent(component, variables);
+          return this.renderShapeComponent(component, variables, state);
           
         case ComponentType.GROUP:
-          return this.renderGroupComponent(component, variables);
+          return this.renderGroupComponent(component, variables, state, depth);
           
         case ComponentType.SVG:
-          return this.renderSvgComponent(component, variables);
+          return this.renderSvgComponent(component, variables, state);
           
         case ComponentType.HTML:
-          return this.renderHtmlComponent(component, variables);
+          return this.renderHtmlComponent(component, variables, state);
           
         default:
           throw new Error(`Unsupported component type: ${(component as { type: string }).type}`);
       }
     } catch (error) {
+      // Limit errors propagate unwrapped so nested groups don't repeat the prefix
+      if (error instanceof RenderLimitError) throw error;
       throw new Error(`Component rendering failed for ${component.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   /**
+   * Compile and run a Handlebars template string, charging its output to the render budget
+   */
+  private renderString(source: string, variables: VariableMap, state: RenderState): string {
+    const output = this.handlebars.compile(source)(variables);
+    state.outputLength += output.length;
+    if (state.outputLength > this.limits.maxOutputLength) {
+      throw new RenderLimitError(`rendered output exceeds ${this.limits.maxOutputLength} characters`);
+    }
+    return output;
+  }
+
+  /**
    * Render text component with variable substitution
    */
-  private renderTextComponent(component: TextComponent, variables: VariableMap): TextComponent {
-    const template = this.handlebars.compile(component.content);
-    const renderedContent = template(variables);
-
+  private renderTextComponent(component: TextComponent, variables: VariableMap, state: RenderState): TextComponent {
     return {
       ...component,
-      content: renderedContent,
-      style: this.processStyle(component.style, variables)
+      content: this.renderString(component.content, variables, state),
+      style: this.processStyle(component.style, variables, state)
     };
   }
 
   /**
    * Render image component
    */
-  private renderImageComponent(component: ImageComponent, variables: VariableMap): ImageComponent {
+  private renderImageComponent(component: ImageComponent, variables: VariableMap, state: RenderState): ImageComponent {
     let imageSource = component.source;
     
-    // If source is a variable reference, resolve it
+    // If source is a variable reference, resolve it (an unset variable renders no image)
     if (imageSource.startsWith('{{') && imageSource.endsWith('}}')) {
       const varName = imageSource.slice(2, -2).trim();
-      imageSource = String(variables[varName] || component.source);
+      const resolved = variables[varName];
+      imageSource = resolved === undefined || resolved === null ? '' : String(resolved);
     }
 
     return {
       ...component,
-      source: imageSource,
-      style: this.processStyle(component.style, variables)
+      source: imageSource === '' ? '' : this.sanitizeImageSource(imageSource, component.id),
+      style: this.processStyle(component.style, variables, state)
     };
   }
 
   /**
    * Render shape component
    */
-  private renderShapeComponent(component: ShapeComponent, variables: VariableMap): ShapeComponent {
+  private renderShapeComponent(component: ShapeComponent, variables: VariableMap, state: RenderState): ShapeComponent {
     return {
       ...component,
-      shapeData: this.processObjectWithVariables(component.shapeData, variables),
-      style: this.processStyle(component.style, variables)
+      shapeData: this.processObjectWithVariables(component.shapeData, variables, state),
+      style: this.processStyle(component.style, variables, state)
     };
   }
 
   /**
    * Render group component recursively
    */
-  private async renderGroupComponent(component: GroupComponent, variables: VariableMap): Promise<GroupComponent> {
+  private async renderGroupComponent(
+    component: GroupComponent,
+    variables: VariableMap,
+    state: RenderState,
+    depth: number
+  ): Promise<GroupComponent> {
     const renderedChildren = await Promise.all(
       component.children.map((child: TemplateComponent) => 
-        this.renderComponent(child, variables)
+        this.renderComponent(child, variables, state, depth + 1)
       )
     );
 
     return {
       ...component,
       children: renderedChildren.flat().filter((child): child is TemplateComponent => child !== null),
-      style: this.processStyle(component.style, variables)
+      style: this.processStyle(component.style, variables, state)
     };
   }
 
   /**
    * Render SVG component with variable substitution
    */
-  private renderSvgComponent(component: SvgComponent, variables: VariableMap): SvgComponent {
-    const template = this.handlebars.compile(component.svgContent);
-    const renderedSvg = template(variables);
-
+  private renderSvgComponent(component: SvgComponent, variables: VariableMap, state: RenderState): SvgComponent {
     return {
       ...component,
-      svgContent: renderedSvg,
-      style: this.processStyle(component.style, variables)
+      svgContent: this.renderString(component.svgContent, variables, state),
+      style: this.processStyle(component.style, variables, state)
     };
   }
 
   /**
    * Render HTML component with variable substitution
    */
-  private renderHtmlComponent(component: HtmlComponent, variables: VariableMap): HtmlComponent {
-    const template = this.handlebars.compile(component.htmlContent);
-    const renderedHtml = template(variables);
-
+  private renderHtmlComponent(component: HtmlComponent, variables: VariableMap, state: RenderState): HtmlComponent {
     return {
       ...component,
-      htmlContent: renderedHtml,
-      style: this.processStyle(component.style, variables)
+      htmlContent: this.renderString(component.htmlContent, variables, state),
+      style: this.processStyle(component.style, variables, state)
     };
   }
 
@@ -543,7 +557,9 @@ export class TemplateEngine {
    */
   private async renderRepeatingComponent(
     component: TemplateComponent, 
-    variables: VariableMap
+    variables: VariableMap,
+    state: RenderState,
+    depth: number
   ): Promise<TemplateComponent[]> {
     // Parse repeat expression (e.g., "item in items")
     const repeatMatch = component.repeat?.match(/(\w+)\s+in\s+(\w+)/);
@@ -559,6 +575,10 @@ export class TemplateEngine {
       throw new Error(`Repeat variable '${arrayVar}' must be an array`);
     }
 
+    if (items.length > this.limits.maxRepeatItems) {
+      throw new RenderLimitError(`repeat over ${items.length} items (max ${this.limits.maxRepeatItems})`);
+    }
+
     const renderedItems: TemplateComponent[] = [];
     for (let i = 0; i < items.length; i++) {
       const itemVariables = {
@@ -571,7 +591,7 @@ export class TemplateEngine {
 
       // Create a copy of the component without the repeat directive
       const itemComponent = { ...component, repeat: undefined };
-      const rendered = await this.renderComponent(itemComponent, itemVariables);
+      const rendered = await this.renderComponent(itemComponent, itemVariables, state, depth);
       if (rendered) {
         renderedItems.push(...(Array.isArray(rendered) ? rendered : [rendered]));
       }
@@ -589,7 +609,8 @@ export class TemplateEngine {
       const template = this.handlebars.compile(`{{#if ${condition}}}true{{else}}false{{/if}}`);
       const result = template(variables);
       return result === 'true';
-    } catch {
+    } catch (error) {
+      if (error instanceof RenderLimitError) throw error;
       console.warn(`Failed to evaluate condition: ${condition}`);
       return true; // Default to showing component if condition fails
     }
@@ -598,34 +619,34 @@ export class TemplateEngine {
   /**
    * Process style object with variable substitution
    */
-  private processStyle<T>(style: T, variables: VariableMap): T {
+  private processStyle<T>(style: T, variables: VariableMap, state: RenderState): T {
     if (!style) return style;
 
-    return this.processObjectWithVariables(style, variables);
+    return this.processObjectWithVariables(style, variables, state);
   }
 
   /**
    * Process any object with variable substitution
    */
-  private processObjectWithVariables<T>(obj: T, variables: VariableMap): T {
+  private processObjectWithVariables<T>(obj: T, variables: VariableMap, state: RenderState): T {
     if (typeof obj === 'string') {
       // Process string with Handlebars
       try {
-        const template = this.handlebars.compile(obj);
-        return template(variables) as T;
-      } catch {
+        return this.renderString(obj, variables, state) as T;
+      } catch (error) {
+        if (error instanceof RenderLimitError) throw error;
         return obj; // Return original if template processing fails
       }
     }
     
     if (Array.isArray(obj)) {
-      return obj.map(item => this.processObjectWithVariables(item, variables)) as T;
+      return obj.map(item => this.processObjectWithVariables(item, variables, state)) as T;
     }
     
     if (typeof obj === 'object' && obj !== null) {
       const processed: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(obj)) {
-        processed[key] = this.processObjectWithVariables(value, variables);
+        processed[key] = this.processObjectWithVariables(value, variables, state);
       }
       return processed as T;
     }
@@ -634,16 +655,28 @@ export class TemplateEngine {
   }
 
   /**
+   * Reject final SVG / HTML output that exceeds the size limit
+   */
+  private checkOutputLength(output: string, kind: string): string {
+    if (output.length > this.limits.maxOutputLength) {
+      throw new RenderLimitError(`${kind} output exceeds ${this.limits.maxOutputLength} characters`);
+    }
+    return output;
+  }
+
+  /**
    * Generate SVG content from rendered components
    */
   private generateSVG(template: Template, components: (TemplateComponent | null)[]): string {
-    const { width, height, background } = template.layout;
+    const width = this.toNumber(template.layout.width, 0);
+    const height = this.toNumber(template.layout.height, 0);
+    const { background } = template.layout;
     
     let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">\n`;
     
     // Add background if specified
     if (background) {
-      svg += `  <rect width="100%" height="100%" fill="${background}"/>\n`;
+      svg += `  <rect width="100%" height="100%" fill="${this.safeColor(background, 'layout background')}"/>\n`;
     }
     
     // Add components
@@ -661,11 +694,13 @@ export class TemplateEngine {
    * Generate HTML content from rendered components
    */
   private generateHTML(template: Template, components: (TemplateComponent | null)[]): string {
-    const { width, height, background } = template.layout;
+    const width = this.toNumber(template.layout.width, 0);
+    const height = this.toNumber(template.layout.height, 0);
+    const { background } = template.layout;
     
     let html = `<div style="width: ${width}px; height: ${height}px; position: relative;`;
     if (background) {
-      html += ` background: ${background};`;
+      html += ` background: ${this.safeColor(background, 'layout background')};`;
     }
     html += '">\n';
     
@@ -681,34 +716,38 @@ export class TemplateEngine {
   }
 
   /**
-   * Convert component to SVG markup
+   * Convert component to SVG markup.
+   * Every interpolated attribute value is a finite number or a validated, escaped string.
    */
   private componentToSVG(component: TemplateComponent): string {
-    const { position, style = {} } = component;
+    const { style = {} } = component;
+    const position = this.safePosition(component);
     
     switch (component.type) {
-      case ComponentType.TEXT:
-        return `  <text x="${position.x}" y="${position.y + (style.fontSize || 12)}" ` +
-               `font-family="${style.fontFamily || 'Arial'}" font-size="${style.fontSize || 12}" ` +
-               `fill="${style.fill || '#000000'}">${this.escapeXML(component.content)}</text>\n`;
+      case ComponentType.TEXT: {
+        const fontSize = this.toNumber(style.fontSize, 12) || 12;
+        return `  <text x="${position.x}" y="${position.y + fontSize}" ` +
+               `font-family="${this.safeFontFamily(style.fontFamily)}" font-size="${fontSize}" ` +
+               `fill="${this.safeColor(style.fill || '#000000', 'fill')}">${this.escapeXML(component.content)}</text>\n`;
+      }
       
-      case ComponentType.SHAPE:
+      case ComponentType.SHAPE: {
+        const paint = `fill="${this.safeColor(style.fill || 'transparent', 'fill')}" ` +
+                      `stroke="${this.safeColor(style.stroke || 'none', 'stroke')}" ` +
+                      `stroke-width="${this.toNumber(style.strokeWidth, 0)}"/>\n`;
         if (component.shape === 'rect') {
-          return `  <rect x="${position.x}" y="${position.y}" width="${position.width}" height="${position.height}" ` +
-                 `fill="${style.fill || 'transparent'}" stroke="${style.stroke || 'none'}" ` +
-                 `stroke-width="${style.strokeWidth || 0}"/>\n`;
+          return `  <rect x="${position.x}" y="${position.y}" width="${position.width}" height="${position.height}" ` + paint;
         } else if (component.shape === 'circle') {
           const radius = Math.min(position.width, position.height) / 2;
           const cx = position.x + position.width / 2;
           const cy = position.y + position.height / 2;
-          return `  <circle cx="${cx}" cy="${cy}" r="${radius}" ` +
-                 `fill="${style.fill || 'transparent'}" stroke="${style.stroke || 'none'}" ` +
-                 `stroke-width="${style.strokeWidth || 0}"/>\n`;
+          return `  <circle cx="${cx}" cy="${cy}" r="${radius}" ` + paint;
         }
         break;
+      }
       
       case ComponentType.SVG:
-        // Wrap in group with position
+        // Wrap in group with position (svgContent is author-supplied markup by design)
         return `  <g transform="translate(${position.x}, ${position.y})">\n${component.svgContent}\n  </g>\n`;
       
       case ComponentType.GROUP: {
@@ -721,37 +760,49 @@ export class TemplateEngine {
       }
 
       case ComponentType.IMAGE:
+        if (!component.source) return '';
         return `  <image x="${position.x}" y="${position.y}" width="${position.width}" ` +
-               `height="${position.height}" href="${component.source}"/>\n`;
+               `height="${position.height}" href="${this.escapeXML(component.source)}"/>\n`;
     }
     
     return '';
   }
 
   /**
-   * Convert component to HTML markup
+   * Convert component to HTML markup.
+   * Style values are validated before they reach the style attribute (no CSS injection).
    */
   private componentToHTML(component: TemplateComponent): string {
-    const { position, style = {} } = component;
+    const { style = {} } = component;
+    const position = this.safePosition(component);
     const positionStyle = `position: absolute; left: ${position.x}px; top: ${position.y}px; width: ${position.width}px; height: ${position.height}px;`;
     
     switch (component.type) {
       case ComponentType.TEXT: {
-        const textStyle = `font-family: ${style.fontFamily || 'Arial'}; font-size: ${style.fontSize || 12}px; color: ${style.fill || '#000000'};`;
+        const fontSize = this.toNumber(style.fontSize, 12) || 12;
+        const textStyle = `font-family: ${this.safeFontFamily(style.fontFamily)}; font-size: ${fontSize}px; ` +
+                          `color: ${this.safeColor(style.fill || '#000000', 'fill')};`;
         return `  <div style="${positionStyle} ${textStyle}">${component.content}</div>\n`;
       }
 
-      case ComponentType.IMAGE:
-        return `  <img src="${component.source}" style="${positionStyle} object-fit: ${component.fit || 'cover'};" alt="${component.alt || ''}"/>\n`;
+      case ComponentType.IMAGE: {
+        if (!component.source) return '';
+        const fit = IMAGE_FITS.includes(String(component.fit)) ? component.fit : 'cover';
+        return `  <img src="${this.escapeXML(component.source)}" style="${positionStyle} object-fit: ${fit};" ` +
+               `alt="${this.escapeXML(String(component.alt ?? ''))}"/>\n`;
+      }
       
       case ComponentType.SHAPE: {
-        const bgColor = style.fill || 'transparent';
-        const border = style.stroke ? `border: ${style.strokeWidth || 1}px solid ${style.stroke};` : '';
+        const bgColor = this.safeColor(style.fill || 'transparent', 'fill');
+        const border = style.stroke
+          ? `border: ${this.toNumber(style.strokeWidth, 1) || 1}px solid ${this.safeColor(style.stroke, 'stroke')};`
+          : '';
         const borderRadius = component.shape === 'circle' ? '50%' : '0';
         return `  <div style="${positionStyle} background: ${bgColor}; ${border} border-radius: ${borderRadius};"></div>\n`;
       }
 
       case ComponentType.HTML:
+        // htmlContent is author-supplied markup by design
         return `  <div style="${positionStyle}">${component.htmlContent}</div>\n`;
       
       case ComponentType.GROUP: {
@@ -765,6 +816,69 @@ export class TemplateEngine {
     }
     
     return '';
+  }
+
+  /**
+   * Coerce a value to a finite number, or return the fallback
+   */
+  private toNumber(value: unknown, fallback: number): number {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  private safePosition(component: TemplateComponent): { x: number; y: number; width: number; height: number } {
+    const position = component.position ?? { x: 0, y: 0, width: 0, height: 0 };
+    return {
+      x: this.toNumber(position.x, 0),
+      y: this.toNumber(position.y, 0),
+      width: this.toNumber(position.width, 0),
+      height: this.toNumber(position.height, 0)
+    };
+  }
+
+  /**
+   * Allow hex, rgb[a]() / hsl[a]() and named colors only; reject anything that could
+   * break out of an attribute or CSS declaration.
+   */
+  private safeColor(value: unknown, field: string): string {
+    const color = String(value).trim();
+    if (HEX_COLOR.test(color) || FUNCTIONAL_COLOR.test(color) || NAMED_COLOR.test(color)) {
+      return this.escapeXML(color);
+    }
+    throw new Error(`Invalid color value for ${field}: use hex, rgb(), rgba(), hsl(), hsla() or a named color`);
+  }
+
+  private safeFontFamily(value: unknown): string {
+    if (value === undefined || value === null || value === '') return 'Arial';
+    const font = String(value);
+    if (FONT_FAMILY.test(font)) {
+      return this.escapeXML(font);
+    }
+    throw new Error('Invalid font family: use letters, digits, spaces, commas, quotes, hyphens and underscores only');
+  }
+
+  /**
+   * Allow only data:image/* URIs, https: URLs and plain relative paths as image sources
+   */
+  private sanitizeImageSource(source: string, componentId: string): string {
+    const trimmed = source.trim();
+    if (DATA_IMAGE_URI.test(trimmed)) {
+      return trimmed;
+    }
+    if (/^https:/i.test(trimmed)) {
+      try {
+        const url = new URL(trimmed);
+        if (url.protocol === 'https:') return url.href;
+      } catch {
+        // fall through to rejection
+      }
+    }
+    if (RELATIVE_PATH.test(trimmed) && !trimmed.startsWith('//')) {
+      return trimmed;
+    }
+    throw new Error(
+      `Unsafe image source for component ${componentId}: only data:image/*, https: URLs and relative paths are allowed`
+    );
   }
 
   /**

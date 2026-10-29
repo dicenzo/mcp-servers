@@ -16,6 +16,7 @@ import {
   ComponentType,
   VariableType
 } from '../types/template.js';
+import { evaluateValidationRules } from './validationRules.js';
 
 /**
  * Template validation utilities
@@ -475,9 +476,8 @@ export class TemplateValidator {
     return errors;
   }
 
-  private static validateCustomRules(_name: string, _value: unknown, _rules: ValidationRule[]): TemplateError[] {
-    // Implementation similar to template engine validation
-    return [];
+  private static validateCustomRules(name: string, value: unknown, rules: ValidationRule[]): TemplateError[] {
+    return evaluateValidationRules(name, value, rules);
   }
 
   /**

@@ -166,7 +166,7 @@ class MCPTemplatesServer {
 
     // Graceful shutdown handlers
     const shutdownHandler = async (signal: string) => {
-      console.log(`[MCP Templates] Received ${signal}, shutting down gracefully...`);
+      console.error(`[MCP Templates] Received ${signal}, shutting down gracefully...`);
       
       try {
         // Close browser instance for PDF exports
@@ -175,13 +175,13 @@ class MCPTemplatesServer {
         // Generate performance report
         const report = this.performanceMonitor.generateReport();
         if (report) {
-          console.log('[MCP Templates] Performance Report:\n', report);
+          console.error('[MCP Templates] Performance Report:\n', report);
         }
         
         // Close server
         await this.server.close();
         
-        console.log('[MCP Templates] Server shutdown completed');
+        console.error('[MCP Templates] Server shutdown completed');
         process.exit(0);
         
       } catch (error) {
