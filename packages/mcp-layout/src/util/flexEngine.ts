@@ -65,16 +65,16 @@ export class FlexEngine {
     reversed: boolean;
   } {
     switch (direction) {
-      case 'row':
-        return { main: 'horizontal', cross: 'vertical', reversed: false };
-      case 'row-reverse':
-        return { main: 'horizontal', cross: 'vertical', reversed: true };
-      case 'column':
-        return { main: 'vertical', cross: 'horizontal', reversed: false };
-      case 'column-reverse':
-        return { main: 'vertical', cross: 'horizontal', reversed: true };
-      default:
-        return { main: 'horizontal', cross: 'vertical', reversed: false };
+    case 'row':
+      return { main: 'horizontal', cross: 'vertical', reversed: false };
+    case 'row-reverse':
+      return { main: 'horizontal', cross: 'vertical', reversed: true };
+    case 'column':
+      return { main: 'vertical', cross: 'horizontal', reversed: false };
+    case 'column-reverse':
+      return { main: 'vertical', cross: 'horizontal', reversed: true };
+    default:
+      return { main: 'horizontal', cross: 'vertical', reversed: false };
     }
   }
 
@@ -730,65 +730,65 @@ export class FlexEngine {
     let currentPosition = 0;
 
     switch (config.justifyContent) {
-      case 'flex-start':
+    case 'flex-start':
+      line.forEach((item, index) => {
+        positions.push(currentPosition);
+        currentPosition += item.mainSize + (index < line.length - 1 ? mainGap : 0);
+      });
+      break;
+
+    case 'flex-end':
+      currentPosition = freeSpace;
+      line.forEach((item, index) => {
+        positions.push(currentPosition);
+        currentPosition += item.mainSize + (index < line.length - 1 ? mainGap : 0);
+      });
+      break;
+
+    case 'center':
+      currentPosition = freeSpace / 2;
+      line.forEach((item, index) => {
+        positions.push(currentPosition);
+        currentPosition += item.mainSize + (index < line.length - 1 ? mainGap : 0);
+      });
+      break;
+
+    case 'space-between':
+      if (line.length === 1) {
+        positions.push(0);
+      } else {
+        const spaceBetween = freeSpace / (line.length - 1);
         line.forEach((item, index) => {
           positions.push(currentPosition);
-          currentPosition += item.mainSize + (index < line.length - 1 ? mainGap : 0);
+          currentPosition += item.mainSize + spaceBetween;
         });
-        break;
+      }
+      break;
 
-      case 'flex-end':
-        currentPosition = freeSpace;
-        line.forEach((item, index) => {
-          positions.push(currentPosition);
-          currentPosition += item.mainSize + (index < line.length - 1 ? mainGap : 0);
-        });
-        break;
+    case 'space-around':
+      const spaceAround = freeSpace / line.length;
+      currentPosition = spaceAround / 2;
+      line.forEach(item => {
+        positions.push(currentPosition);
+        currentPosition += item.mainSize + spaceAround;
+      });
+      break;
 
-      case 'center':
-        currentPosition = freeSpace / 2;
-        line.forEach((item, index) => {
-          positions.push(currentPosition);
-          currentPosition += item.mainSize + (index < line.length - 1 ? mainGap : 0);
-        });
-        break;
+    case 'space-evenly':
+      const spaceEvenly = freeSpace / (line.length + 1);
+      currentPosition = spaceEvenly;
+      line.forEach(item => {
+        positions.push(currentPosition);
+        currentPosition += item.mainSize + spaceEvenly;
+      });
+      break;
 
-      case 'space-between':
-        if (line.length === 1) {
-          positions.push(0);
-        } else {
-          const spaceBetween = freeSpace / (line.length - 1);
-          line.forEach((item, index) => {
-            positions.push(currentPosition);
-            currentPosition += item.mainSize + spaceBetween;
-          });
-        }
-        break;
-
-      case 'space-around':
-        const spaceAround = freeSpace / line.length;
-        currentPosition = spaceAround / 2;
-        line.forEach(item => {
-          positions.push(currentPosition);
-          currentPosition += item.mainSize + spaceAround;
-        });
-        break;
-
-      case 'space-evenly':
-        const spaceEvenly = freeSpace / (line.length + 1);
-        currentPosition = spaceEvenly;
-        line.forEach(item => {
-          positions.push(currentPosition);
-          currentPosition += item.mainSize + spaceEvenly;
-        });
-        break;
-
-      default:
-        // Fallback to flex-start
-        line.forEach((item, index) => {
-          positions.push(currentPosition);
-          currentPosition += item.mainSize + (index < line.length - 1 ? mainGap : 0);
-        });
+    default:
+      // Fallback to flex-start
+      line.forEach((item, index) => {
+        positions.push(currentPosition);
+        currentPosition += item.mainSize + (index < line.length - 1 ? mainGap : 0);
+      });
     }
 
     return positions;
@@ -807,19 +807,19 @@ export class FlexEngine {
     const alignment = item.element.alignSelf || config.alignItems;
 
     switch (alignment) {
-      case 'flex-start':
-        return lineStart;
-      case 'flex-end':
-        return lineStart + lineCrossSize - item.crossSize;
-      case 'center':
-        return lineStart + (lineCrossSize - item.crossSize) / 2;
-      case 'stretch':
-        return lineStart;
-      case 'baseline':
-        // Simplified baseline alignment
-        return lineStart;
-      default:
-        return lineStart;
+    case 'flex-start':
+      return lineStart;
+    case 'flex-end':
+      return lineStart + lineCrossSize - item.crossSize;
+    case 'center':
+      return lineStart + (lineCrossSize - item.crossSize) / 2;
+    case 'stretch':
+      return lineStart;
+    case 'baseline':
+      // Simplified baseline alignment
+      return lineStart;
+    default:
+      return lineStart;
     }
   }
 
@@ -866,7 +866,7 @@ export class FlexEngine {
     const flexShrinkTotal = layout.elements.reduce((sum, el) => sum + el.flexShrink, 0);
 
     let averageElementSize = 0;
-    let lineCount = 1; // Simplified - would need to analyze computed layout
+    const lineCount = 1; // Simplified - would need to analyze computed layout
 
     if (layout.computedFlex?.elementPositions.length) {
       const sizes = layout.computedFlex.elementPositions.map(pos => 

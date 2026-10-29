@@ -114,7 +114,7 @@ export const measureTool: ExecutableTool = {
       // Calculate basic metrics
       const metrics = LayoutMetricsCalculator.calculateMetrics(layout, elements, monitor);
 
-      let result: any = {
+      const result: any = {
         success: true,
         metrics,
         layoutType: layout.type,

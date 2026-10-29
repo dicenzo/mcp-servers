@@ -109,12 +109,12 @@ export class ResponsiveEngine {
 
     try {
       switch (baseLayout.type) {
-        case 'grid':
-          return this.adaptGridLayout(baseLayout, elements, breakpoint, bounds, monitor);
-        case 'flex':
-          return this.adaptFlexLayout(baseLayout, elements, breakpoint, bounds, monitor);
-        default:
-          throw new Error(`Unsupported layout type for responsive adaptation: ${(baseLayout as any).type}`);
+      case 'grid':
+        return this.adaptGridLayout(baseLayout, elements, breakpoint, bounds, monitor);
+      case 'flex':
+        return this.adaptFlexLayout(baseLayout, elements, breakpoint, bounds, monitor);
+      default:
+        throw new Error(`Unsupported layout type for responsive adaptation: ${(baseLayout as any).type}`);
       }
     } finally {
       monitor?.recordIteration();
@@ -466,21 +466,21 @@ export class ResponsiveEngine {
       let css = '';
       
       if (layout.type === 'grid' && layout.computedGrid) {
-        css += `.container {\n`;
-        css += `  display: grid;\n`;
+        css += '.container {\n';
+        css += '  display: grid;\n';
         css += `  grid-template-columns: ${layout.config.columns};\n`;
         css += `  grid-template-rows: ${layout.config.rows};\n`;
         css += `  gap: ${layout.config.gap};\n`;
-        css += `}\n`;
+        css += '}\n';
       } else if (layout.type === 'flex') {
-        css += `.container {\n`;
-        css += `  display: flex;\n`;
+        css += '.container {\n';
+        css += '  display: flex;\n';
         css += `  flex-direction: ${layout.config.direction};\n`;
         css += `  flex-wrap: ${layout.config.wrap};\n`;
         css += `  justify-content: ${layout.config.justifyContent};\n`;
         css += `  align-items: ${layout.config.alignItems};\n`;
         css += `  gap: ${layout.config.gap};\n`;
-        css += `}\n`;
+        css += '}\n';
       }
 
       mediaQueries[breakpoint.name] = `@media ${condition} {\n${css}}`;

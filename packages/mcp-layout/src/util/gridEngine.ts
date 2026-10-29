@@ -135,7 +135,7 @@ export class GridEngine {
     const remainingSpace = Math.max(0, availableSpace - usedSpace);
     const frUnit = totalFr > 0 ? remainingSpace / totalFr : 0;
     
-    let positionAdjustment = 0;
+    const positionAdjustment = 0;
     frTracks.forEach(({ index, fr }) => {
       const track = tracks[index];
       track.size = fr * frUnit;
