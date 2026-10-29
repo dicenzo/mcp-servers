@@ -75,6 +75,21 @@ describe('File System Utilities', () => {
       await expect(readTemplate(templateName)).rejects.toThrow('File not found');
     });
 
+    it('should report a missing template by name without exposing its path', async () => {
+      const templatesDir = path.resolve(process.cwd(), '..', 'templates');
+      const enoent = Object.assign(
+        new Error(`ENOENT: no such file or directory, open '${templatesDir}/missing.md'`),
+        { code: 'ENOENT' }
+      );
+      mockFs.readFile.mockRejectedValue(enoent);
+
+      const error = await readTemplate('missing').catch((e: Error) => e);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe('Template "missing" not found');
+      expect((error as Error).message).not.toContain(templatesDir);
+    });
+
     it('should handle special characters in template name', async () => {
       const templateName = 'template-with-special-chars_123';
       const mockContent = 'Template content';

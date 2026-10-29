@@ -21,5 +21,13 @@ export async function readTemplate(name: string): Promise<string> {
   if (path.dirname(p) !== TEMPLATES_DIR) {
     throw new Error('Invalid template name');
   }
-  return fs.readFile(p, 'utf8');
+  try {
+    return await fs.readFile(p, 'utf8');
+  } catch (error) {
+    // The raw ENOENT message carries the absolute path; report the missing template by name instead
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`Template "${name}" not found`);
+    }
+    throw error;
+  }
 }

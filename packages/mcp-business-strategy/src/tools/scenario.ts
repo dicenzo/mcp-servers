@@ -1,10 +1,38 @@
 import { ExecutableTool } from './types.js';
 import { z } from 'zod';
 
-const Input = z.object({ 
-  base: z.record(z.number()), 
-  knobs: z.record(z.array(z.number())),
-  metrics: z.array(z.string()).optional().default(['revenue', 'ltv', 'payback'])
+// Scenarios are the cartesian product of the knob values, built synchronously (so the index.ts
+// timeout can't interrupt it). These caps keep a single call's work and output bounded.
+const MAX_BASE_VARIABLES = 50;
+const MAX_KNOBS = 10;
+const MAX_VALUES_PER_KNOB = 100;
+const MAX_SCENARIOS = 1000;
+const MAX_NAME_LENGTH = 64;
+const MAX_METRICS = 10;
+const MAX_METRIC_LENGTH = 32;
+
+const VariableName = z.string().max(MAX_NAME_LENGTH, `Variable names must be at most ${MAX_NAME_LENGTH} characters`);
+
+const Input = z.object({
+  base: z.record(VariableName, z.number().finite())
+    .refine(base => Object.keys(base).length <= MAX_BASE_VARIABLES, {
+      message: `Provide at most ${MAX_BASE_VARIABLES} base variables`
+    }),
+  knobs: z.record(VariableName, z.array(z.number().finite()).max(MAX_VALUES_PER_KNOB))
+    .refine(knobs => Object.keys(knobs).length <= MAX_KNOBS, {
+      message: `Provide at most ${MAX_KNOBS} knobs`
+    })
+    .superRefine((knobs, ctx) => {
+      // Check the product before generating anything; an empty knob makes it 0
+      const combinations = Object.values(knobs).reduce((product, values) => product * values.length, 1);
+      if (combinations > MAX_SCENARIOS) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Knob values combine into ${combinations} scenarios; the maximum is ${MAX_SCENARIOS}. Test fewer knobs or fewer values per knob.`
+        });
+      }
+    }),
+  metrics: z.array(z.string().max(MAX_METRIC_LENGTH)).max(MAX_METRICS).optional().default(['revenue', 'ltv', 'payback'])
 });
 
 interface ScenarioResult {
@@ -40,22 +68,26 @@ export const scenarioTool: ExecutableTool = {
   inputSchema: { 
     type: 'object', 
     properties: { 
-      base: { 
-        type: 'object', 
-        description: 'Base case scenario with numeric values',
+      base: {
+        type: 'object',
+        description: `Base case scenario with numeric values (at most ${MAX_BASE_VARIABLES} variables)`,
+        maxProperties: MAX_BASE_VARIABLES,
         additionalProperties: { type: 'number' }
-      }, 
-      knobs: { 
-        type: 'object', 
-        description: 'Variables to test with array of values for each',
-        additionalProperties: { 
+      },
+      knobs: {
+        type: 'object',
+        description: `Variables to test with array of values for each (at most ${MAX_KNOBS} knobs, ${MAX_VALUES_PER_KNOB} values each, ${MAX_SCENARIOS} combinations in total)`,
+        maxProperties: MAX_KNOBS,
+        additionalProperties: {
           type: 'array',
-          items: { type: 'number' }
+          items: { type: 'number' },
+          maxItems: MAX_VALUES_PER_KNOB
         }
       },
       metrics: {
         type: 'array',
-        items: { type: 'string' },
+        items: { type: 'string', maxLength: MAX_METRIC_LENGTH },
+        maxItems: MAX_METRICS,
         description: 'Metrics to calculate for each scenario'
       }
     }, 

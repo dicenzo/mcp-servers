@@ -7,7 +7,7 @@ export type ToolTextResult = {
 }
 
 /**
- * The SDK's Tool type (1.17.4) describes only the tool's metadata. Our tools also carry an
+ * The SDK's Tool type (1.32.2) describes only the tool's metadata. Our tools also carry an
  * `invoke` generator: src/index.ts calls it and reads the result from a single `next()`.
  */
 export interface ExecutableTool extends Tool {

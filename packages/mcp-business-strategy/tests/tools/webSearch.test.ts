@@ -42,6 +42,13 @@ describe('Web Search Tool', () => {
       await expect(generator.next()).rejects.toThrow('Query cannot be empty');
     });
 
+    it('should reject an overlong query', async () => {
+      const generator = tool.invoke({ query: 'x'.repeat(1001) });
+
+      await expect(generator.next()).rejects.toThrow(/at most 1000 character/);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it('should validate k parameter bounds', async () => {
       const generator = tool.invoke({ query: 'test', k: 25 });
 
@@ -178,9 +185,10 @@ describe('Web Search Tool', () => {
       
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockFetch).toHaveBeenNthCalledWith(1, 'https://api.tavily.com/search', expect.any(Object));
-      // SerpAPI takes its key in the query string, so the request has no init options
+      // SerpAPI takes its key in the query string; the init options carry only the timeout signal
       expect(mockFetch).toHaveBeenLastCalledWith(
-        expect.stringContaining('serpapi.com/search')
+        expect.stringContaining('serpapi.com/search'),
+        { signal: expect.any(AbortSignal) }
       );
       expect(mockFetch.mock.lastCall?.[0]).toContain('api_key=test-serpapi-key');
 
@@ -276,6 +284,39 @@ describe('Web Search Tool', () => {
       
       const response = JSON.parse(result.value.text);
       expect(response.source).toBe('mock_data');
+    });
+
+    it('should give every provider request a timeout signal', async () => {
+      process.env.TAVILY_API_KEY = 'test-tavily-key';
+      process.env.SERPAPI_KEY = 'test-serpapi-key';
+      process.env.BRAVE_API_KEY = 'test-brave-key';
+      mockFetch.mockResolvedValue({ ok: false, status: 500 } as any);
+
+      await tool.invoke({ query: 'test query', k: 1 }).next();
+
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      for (const [, init] of mockFetch.mock.calls) {
+        expect(init).toEqual(expect.objectContaining({ signal: expect.any(AbortSignal) }));
+      }
+    });
+
+    it('should not log the SerpAPI key when its request fails', async () => {
+      process.env.SERPAPI_KEY = 'secret-serp-key';
+      // node-fetch puts the request URL, query string included, in its error messages
+      mockFetch.mockRejectedValue(Object.assign(
+        new Error('request to https://serpapi.com/search?engine=google&q=x&api_key=secret-serp-key&num=1 failed, reason: ECONNRESET'),
+        { name: 'FetchError', code: 'ECONNRESET' }
+      ));
+      const consoleError = console.error as jest.Mock;
+      consoleError.mockClear();
+
+      await tool.invoke({ query: 'test query', k: 1 }).next();
+
+      const logged = consoleError.mock.calls.flat().map(arg =>
+        arg instanceof Error ? `${arg.message} ${arg.stack}` : String(arg)
+      ).join('\n');
+      expect(logged).toContain('SerpAPI search failed');
+      expect(logged).not.toContain('secret-serp-key');
     });
 
     it('should handle malformed API responses', async () => {
