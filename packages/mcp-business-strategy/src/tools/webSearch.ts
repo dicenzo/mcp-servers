@@ -79,7 +79,8 @@ export const webSearchTool: ExecutableTool = {
       }
       
       // Fallback: Enhanced mock data with business-relevant results
-      if (results.length === 0) {
+      const usedMockData = results.length === 0;
+      if (usedMockData) {
         console.error('[MCP Tool] All search APIs failed, using enhanced mock data');
         results = generateBusinessMockData(query, k);
       }
@@ -93,7 +94,7 @@ export const webSearchTool: ExecutableTool = {
         text: JSON.stringify({
           query,
           results: filteredResults,
-          source: results.length > 0 ? 'live_search' : 'mock_data',
+          source: usedMockData ? 'mock_data' : 'live_search',
           timestamp: new Date().toISOString()
         }, null, 2)
       };

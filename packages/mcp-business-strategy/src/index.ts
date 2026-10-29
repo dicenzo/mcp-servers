@@ -70,11 +70,14 @@ server.setRequestHandler(
         return result.value;
       })();
       
+      let timeoutHandle: NodeJS.Timeout | undefined;
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error(`Tool '${name}' timed out after ${timeoutMs}ms`)), timeoutMs);
+        timeoutHandle = setTimeout(() => reject(new Error(`Tool '${name}' timed out after ${timeoutMs}ms`)), timeoutMs);
       });
       
-      const result = await Promise.race([toolPromise, timeoutPromise]) as ToolTextResult;
+      // Clear the timer either way so a finished call doesn't leave it pending for 60s
+      const result = await Promise.race([toolPromise, timeoutPromise])
+        .finally(() => clearTimeout(timeoutHandle)) as ToolTextResult;
 
       const duration = Date.now() - startTime;
       console.error(`[MCP] Tool '${name}' completed in ${duration}ms`);
