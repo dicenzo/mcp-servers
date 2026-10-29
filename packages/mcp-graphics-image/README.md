@@ -17,7 +17,7 @@ It runs over stdio and works with any MCP client, including Claude Code and Clau
 
 ## Requirements
 
-- Node.js 18 or later
+- Node.js 20.9 or later (required by sharp 0.35)
 - Yarn 4 (run `corepack enable` once to get it from Node)
 
 ## Install, build, test
@@ -63,10 +63,11 @@ This server reads no environment variables.
 ## Notes
 
 - sharp ships native binaries. If install fails on your platform, see the sharp installation docs.
+- Input limits: images are rejected above 8192 px on either side, 10 MB decoded (about 14 MB of base64), or when the declared `format` does not match the actual encoding (`jpg` and `jpeg` are interchangeable). `image.composite` accepts at most 10 layers on a canvas of at most 8192x8192.
 
 ## Known issues
 
-- Last verified test run: build passes; 27 of 27 tests pass (3 suites).
+- Last verified test run: build passes; 54 of 54 tests pass (5 suites).
 - Five older test files are disabled with a `.disabled` suffix in `tests/` and do not run.
 
 ## License

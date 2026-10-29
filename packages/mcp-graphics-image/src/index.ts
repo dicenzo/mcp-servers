@@ -130,7 +130,7 @@ class McpGraphicsImageServer {
         throw new McpError(
           ErrorCode.InternalError,
           `Image processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          { tool: name, args }
+          { tool: name }
         );
       }
     });

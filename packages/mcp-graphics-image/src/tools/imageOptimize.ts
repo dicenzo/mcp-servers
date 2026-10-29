@@ -40,7 +40,7 @@ export async function imageOptimize(input: unknown) {
           error: {
             code: ImageErrorCode.OPTIMIZATION_FAILED,
             message: error.message || 'Image optimization failed',
-            details: { input, processingTime: Math.round((performance.now() - startTime) * 100) / 100 }
+            details: { processingTime: Math.round((performance.now() - startTime) * 100) / 100 }
           }
         };
       }

@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 
-import sharp from 'sharp';
+import sharp, {
+  type Blend,
+  type FormatEnum,
+  type KernelEnum,
+  type OverlayOptions,
+  type ResizeOptions,
+  type Sharp
+} from 'sharp';
 import {
   ImageInput,
   ImageOutput,
@@ -26,22 +33,78 @@ import {
   validateCompositionConfig
 } from '../types/image.js';
 
+/**
+ * Constructor options applied to every sharp instance. Caps decoded pixels at
+ * MAX_DIMENSION x MAX_DIMENSION (well below sharp's ~268 MP default) so a
+ * small, highly-compressed file cannot expand into gigabytes of memory.
+ */
+export const SHARP_INPUT_OPTIONS = {
+  limitInputPixels: MEMORY_LIMITS.MAX_DIMENSION * MEMORY_LIMITS.MAX_DIMENSION
+} as const;
+
 /** Options object accepted by sharp's toFormat() */
-type SharpFormatOptions = NonNullable<Parameters<sharp.Sharp['toFormat']>[1]>;
+type SharpFormatOptions = NonNullable<Parameters<Sharp['toFormat']>[1]>;
 
 /**
  * Map our BlendMode to sharp's blend name. sharp has no 'normal'; plain
  * source-over compositing is 'over'. Every other mode shares sharp's name.
  */
-function toSharpBlend(blend: BlendMode): sharp.Blend {
+function toSharpBlend(blend: BlendMode): Blend {
   return blend === 'normal' ? 'over' : blend;
 }
 
 /**
- * Map our ImageFormat to sharp's output format key (every ImageFormat is one).
+ * Map our ImageFormat to sharp's output format key. sharp's typings key JPEG
+ * as 'jpeg' only and list 'avif' separately from FormatEnum.
  */
-function toSharpFormat(format: ImageFormat): keyof sharp.FormatEnum {
-  return format;
+function toSharpFormat(format: ImageFormat): keyof FormatEnum | 'avif' {
+  return format === 'jpg' ? 'jpeg' : format;
+}
+
+/**
+ * Error whose message is a JSON-encoded { code, message, ... } payload, the
+ * convention every tool's catch block parses.
+ */
+class StructuredImageError extends Error {
+  constructor(payload: { code: ImageErrorCode; message: string; suggestions?: string[] }) {
+    super(JSON.stringify(payload));
+  }
+}
+
+/**
+ * True when the error message is a structured JSON error that should be
+ * re-thrown as-is rather than wrapped in a generic one.
+ */
+function isStructuredImageError(error: unknown): error is Error {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  try {
+    const parsed: unknown = JSON.parse(error.message);
+    return typeof parsed === 'object' && parsed !== null && 'code' in parsed;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Compare a declared ImageFormat with the format sharp detected from the
+ * bytes. jpg/jpeg are equivalent, and sharp reports AVIF as AV1-compressed heif.
+ */
+function matchesDeclaredFormat(
+  declared: ImageFormat,
+  detected: string | undefined,
+  compression: string | undefined
+): boolean {
+  switch (declared) {
+    case 'jpg':
+    case 'jpeg':
+      return detected === 'jpeg';
+    case 'avif':
+      return detected === 'heif' && compression === 'av1';
+    default:
+      return detected === declared;
+  }
 }
 
 /**
@@ -64,8 +127,8 @@ export class ImageUtils {
   /**
    * Convert Sharp instance to base64 string
    */
-  static async sharpToBase64(sharpInstance: sharp.Sharp, format: string = 'png'): Promise<string> {
-    const buffer = await sharpInstance.toFormat(format as keyof sharp.FormatEnum).toBuffer();
+  static async sharpToBase64(sharpInstance: Sharp, format: string = 'png'): Promise<string> {
+    const buffer = await sharpInstance.toFormat(format as keyof FormatEnum).toBuffer();
     return buffer.toString('base64');
   }
 
@@ -112,7 +175,7 @@ export class ImageUtils {
   /**
    * Extract metadata from Sharp instance
    */
-  static async extractMetadata(sharpInstance: sharp.Sharp): Promise<ImageMetadata> {
+  static async extractMetadata(sharpInstance: Sharp): Promise<ImageMetadata> {
     try {
       const metadata = await sharpInstance.metadata();
       
@@ -138,27 +201,59 @@ export class ImageUtils {
   }
 
   /**
-   * Create Sharp instance from base64 image data
+   * Create Sharp instance from base64 image data.
+   *
+   * Reads the header (no pixel decode) and rejects inputs whose detected
+   * format differs from the declared one or whose dimensions exceed
+   * MAX_DIMENSION, so bombs and smuggled formats (e.g. SVG labelled png)
+   * never reach a full decode.
    */
-  static createSharpFromInput(imageInput: ImageInput): sharp.Sharp {
+  static async createSharpFromInput(imageInput: ImageInput): Promise<Sharp> {
+    let sharpInstance: Sharp;
+    let detectedFormat: string | undefined;
+    let detectedCompression: string | undefined;
+    let width: number | undefined;
+    let height: number | undefined;
+
     try {
       // Remove data URL prefix if present
       const base64Data = imageInput.data.replace(/^data:image\/[a-z]+;base64,/, '');
+      if (base64Data.length > MEMORY_LIMITS.MAX_BASE64_LENGTH) {
+        throw new StructuredImageError({
+          code: ImageErrorCode.FILE_TOO_LARGE,
+          message: `Image data too large: ${base64Data.length} base64 characters (max: ${MEMORY_LIMITS.MAX_BASE64_LENGTH})`,
+          suggestions: ['Reduce image file size before processing']
+        });
+      }
       const buffer = Buffer.from(base64Data, 'base64');
       
       // Validate file size
       if (buffer.length > MEMORY_LIMITS.MAX_IMAGE_SIZE) {
-        throw new Error(JSON.stringify({
+        throw new StructuredImageError({
           code: ImageErrorCode.FILE_TOO_LARGE,
           message: `Image file too large: ${buffer.length} bytes (max: ${MEMORY_LIMITS.MAX_IMAGE_SIZE} bytes)`,
           suggestions: ['Reduce image file size before processing']
-        }));
+        });
       }
       
-      return sharp(buffer);
+      sharpInstance = sharp(buffer, SHARP_INPUT_OPTIONS);
+      ({
+        format: detectedFormat,
+        compression: detectedCompression,
+        width,
+        height
+      } = await sharpInstance.metadata());
     } catch (error) {
-      if (error instanceof Error && error.message.includes('JSON')) {
+      if (isStructuredImageError(error)) {
         throw error; // Re-throw structured errors
+      }
+      // sharp refuses to read the header of an input over limitInputPixels
+      if (error instanceof Error && error.message.includes('exceeds pixel limit')) {
+        throw new StructuredImageError({
+          code: ImageErrorCode.DIMENSION_TOO_LARGE,
+          message: `Image exceeds the maximum of ${MEMORY_LIMITS.MAX_DIMENSION}x${MEMORY_LIMITS.MAX_DIMENSION} pixels`,
+          suggestions: ['Downscale the image before processing']
+        });
       }
       throw new Error(JSON.stringify({
         code: ImageErrorCode.DECODE_ERROR,
@@ -171,13 +266,32 @@ export class ImageUtils {
         ]
       }));
     }
+
+    if (!matchesDeclaredFormat(imageInput.format, detectedFormat, detectedCompression)) {
+      throw new StructuredImageError({
+        code: ImageErrorCode.UNSUPPORTED_FORMAT,
+        message: `Declared format '${imageInput.format}' does not match detected format '${detectedFormat ?? 'unknown'}'`,
+        suggestions: ['Set format to the actual encoding of the image data']
+      });
+    }
+
+    const maxDimension = MEMORY_LIMITS.MAX_DIMENSION;
+    if (!width || !height || width > maxDimension || height > maxDimension) {
+      throw new StructuredImageError({
+        code: ImageErrorCode.DIMENSION_TOO_LARGE,
+        message: `Image dimensions ${width ?? 0}x${height ?? 0} exceed the maximum of ${maxDimension}x${maxDimension}`,
+        suggestions: ['Downscale the image before processing']
+      });
+    }
+
+    return sharpInstance;
   }
 
   /**
    * Convert Sharp instance to base64 output
    */
   static async sharpToOutput(
-    sharpInstance: sharp.Sharp,
+    sharpInstance: Sharp,
     format: ImageFormat,
     operation: string,
     startTime: number,
@@ -193,7 +307,7 @@ export class ImageUtils {
       const base64Data = outputBuffer.toString('base64');
       
       // Extract metadata
-      const metadata = await ImageUtils.extractMetadata(sharp(outputBuffer));
+      const metadata = await ImageUtils.extractMetadata(sharp(outputBuffer, SHARP_INPUT_OPTIONS));
       
       // Calculate processing metrics
       const endTime = performance.now();
@@ -263,7 +377,7 @@ export class ImageUtils {
     
     try {
       const parsedInput = ImageUtils.parseImageInput(imageInput);
-      const sharpInstance = ImageUtils.createSharpFromInput(parsedInput);
+      const sharpInstance = await ImageUtils.createSharpFromInput(parsedInput);
       
       // Apply quality if specified
       if (quality !== undefined) {
@@ -289,7 +403,7 @@ export class ImageUtils {
 
       return result;
     } catch (error) {
-      if (error instanceof Error && error.message.includes('JSON')) {
+      if (isStructuredImageError(error)) {
         throw error; // Re-throw structured errors
       }
       throw new Error(JSON.stringify({
@@ -304,10 +418,10 @@ export class ImageUtils {
    * Resize Sharp instance (for testing)
    */
   static async resizeImage(
-    sharpInstance: sharp.Sharp,
+    sharpInstance: Sharp,
     dimensions: Dimensions,
     method?: ResizeMethod
-  ): Promise<sharp.Sharp>;
+  ): Promise<Sharp>;
   
   /**
    * Resize image with quality preservation
@@ -320,29 +434,29 @@ export class ImageUtils {
   ): Promise<ImageOutput>;
   
   static async resizeImage(
-    imageInputOrSharp: ImageInput | sharp.Sharp,
+    imageInputOrSharp: ImageInput | Sharp,
     dimensions: Dimensions,
     method: ResizeMethod = 'lanczos',
     preserveAspectRatio: boolean = true
-  ): Promise<ImageOutput | sharp.Sharp> {
+  ): Promise<ImageOutput | Sharp> {
     const startTime = performance.now();
     
     try {
       // Check if input is a Sharp instance (for testing overload)
       const isSharpInstance = imageInputOrSharp && typeof imageInputOrSharp === 'object' && 'metadata' in imageInputOrSharp;
       
-      let sharpInstance: sharp.Sharp;
+      let sharpInstance: Sharp;
       if (isSharpInstance) {
-        sharpInstance = imageInputOrSharp as sharp.Sharp;
+        sharpInstance = imageInputOrSharp as Sharp;
       } else {
         const parsedInput = ImageUtils.parseImageInput(imageInputOrSharp as ImageInput);
-        sharpInstance = ImageUtils.createSharpFromInput(parsedInput);
+        sharpInstance = await ImageUtils.createSharpFromInput(parsedInput);
       }
       
       const validDimensions = validateDimensions(dimensions);
       
       // Map resize method to Sharp kernel
-      const kernelMap: Record<ResizeMethod, keyof sharp.KernelEnum> = {
+      const kernelMap: Record<ResizeMethod, keyof KernelEnum> = {
         nearest: 'nearest',
         linear: 'cubic', // Sharp doesn't have linear, use cubic
         cubic: 'cubic',
@@ -350,7 +464,7 @@ export class ImageUtils {
         mitchell: 'mitchell'
       };
       
-      const resizeOptions: sharp.ResizeOptions = {
+      const resizeOptions: ResizeOptions = {
         width: validDimensions.width,
         height: validDimensions.height,
         kernel: kernelMap[method],
@@ -385,7 +499,7 @@ export class ImageUtils {
 
       return result;
     } catch (error) {
-      if (error instanceof Error && error.message.includes('JSON')) {
+      if (isStructuredImageError(error)) {
         throw error;
       }
       throw new Error(JSON.stringify({
@@ -400,9 +514,9 @@ export class ImageUtils {
    * Crop Sharp instance (for testing)
    */
   static async cropImage(
-    sharpInstance: sharp.Sharp,
+    sharpInstance: Sharp,
     bounds: Rectangle
-  ): Promise<sharp.Sharp>;
+  ): Promise<Sharp>;
   
   /**
    * Crop image to specified rectangle
@@ -413,21 +527,21 @@ export class ImageUtils {
   ): Promise<ImageOutput>;
   
   static async cropImage(
-    imageInputOrSharp: ImageInput | sharp.Sharp,
+    imageInputOrSharp: ImageInput | Sharp,
     bounds: Rectangle
-  ): Promise<ImageOutput | sharp.Sharp> {
+  ): Promise<ImageOutput | Sharp> {
     const startTime = performance.now();
     
     try {
       // Check if input is a Sharp instance (for testing overload)
       const isSharpInstance = imageInputOrSharp && typeof imageInputOrSharp === 'object' && 'metadata' in imageInputOrSharp;
       
-      let sharpInstance: sharp.Sharp;
+      let sharpInstance: Sharp;
       if (isSharpInstance) {
-        sharpInstance = imageInputOrSharp as sharp.Sharp;
+        sharpInstance = imageInputOrSharp as Sharp;
       } else {
         const parsedInput = ImageUtils.parseImageInput(imageInputOrSharp as ImageInput);
-        sharpInstance = ImageUtils.createSharpFromInput(parsedInput);
+        sharpInstance = await ImageUtils.createSharpFromInput(parsedInput);
       }
       
       const validBounds = validateRectangle(bounds);
@@ -470,7 +584,7 @@ export class ImageUtils {
 
       return result;
     } catch (error) {
-      if (error instanceof Error && error.message.includes('JSON')) {
+      if (isStructuredImageError(error)) {
         throw error;
       }
       throw new Error(JSON.stringify({
@@ -492,7 +606,7 @@ export class ImageUtils {
     
     try {
       const parsedInput = ImageUtils.parseImageInput(imageInput);
-      let sharpInstance = ImageUtils.createSharpFromInput(parsedInput);
+      let sharpInstance = await ImageUtils.createSharpFromInput(parsedInput);
       
       // Apply each filter in sequence
       for (const filter of filters) {
@@ -519,7 +633,7 @@ export class ImageUtils {
 
       return result;
     } catch (error) {
-      if (error instanceof Error && error.message.includes('JSON')) {
+      if (isStructuredImageError(error)) {
         throw error;
       }
       throw new Error(JSON.stringify({
@@ -533,18 +647,18 @@ export class ImageUtils {
   /**
    * Apply single filter to Sharp instance
    */
-  static applyFilter(sharpInstance: sharp.Sharp, filter: FilterConfig): sharp.Sharp {
+  static applyFilter(sharpInstance: Sharp, filter: FilterConfig): Sharp {
     const intensity = filter.intensity / 100; // Convert to 0-1 range
     
     switch (filter.type) {
       case 'blur':
         return sharpInstance.blur(Math.max(0.3, filter.radius || Math.abs(intensity * 10)));
       case 'sharpen':
-        return sharpInstance.sharpen(
-          filter.radius || Math.abs(intensity * 3),
-          1,
-          2
-        );
+        return sharpInstance.sharpen({
+          sigma: filter.radius || Math.abs(intensity * 3),
+          m1: 1,
+          m2: 2
+        });
       case 'brightness':
         return sharpInstance.modulate({ brightness: 1 + intensity });
       case 'contrast':
@@ -574,7 +688,7 @@ export class ImageUtils {
     try {
       const parsedInput = ImageUtils.parseImageInput(imageInput);
       const validOptions = validateOptimizationOptions(options);
-      let sharpInstance = ImageUtils.createSharpFromInput(parsedInput);
+      let sharpInstance = await ImageUtils.createSharpFromInput(parsedInput);
       
       // Apply target-specific optimizations
       const optimizationSettings = ImageUtils.getOptimizationSettings(validOptions);
@@ -622,7 +736,7 @@ export class ImageUtils {
 
       return result;
     } catch (error) {
-      if (error instanceof Error && error.message.includes('JSON')) {
+      if (isStructuredImageError(error)) {
         throw error;
       }
       throw new Error(JSON.stringify({
@@ -677,7 +791,7 @@ export class ImageUtils {
     let result: ImageOutput;
     
     do {
-      const sharpInstance = ImageUtils.createSharpFromInput(imageInput);
+      const sharpInstance = await ImageUtils.createSharpFromInput(imageInput);
       const formatOptions = { 
         ...ImageUtils.getFormatOptions(imageInput.format), 
         quality 
@@ -702,6 +816,7 @@ export class ImageUtils {
       
       // Create base canvas
       let baseSharp = sharp({
+        ...SHARP_INPUT_OPTIONS,
         create: {
           width: validConfig.width,
           height: validConfig.height,
@@ -711,11 +826,11 @@ export class ImageUtils {
       });
 
       // Prepare composite operations
-      const compositeOps: sharp.OverlayOptions[] = [];
+      const compositeOps: OverlayOptions[] = [];
       let totalInputSize = 0;
 
       for (const layer of validConfig.layers) {
-        const layerSharp = ImageUtils.createSharpFromInput(layer.image);
+        const layerSharp = await ImageUtils.createSharpFromInput(layer.image);
         
         // Calculate input size
         const base64Data = layer.image.data.replace(/^data:image\/[a-z]+;base64,/, '');
@@ -736,8 +851,9 @@ export class ImageUtils {
               data[i] = Math.round((data[i] || 0) * layer.opacity);
             }
             
-            layerBuffer = await sharp(data, { 
-              raw: { width: info.width, height: info.height, channels: 4 } 
+            layerBuffer = await sharp(data, {
+              ...SHARP_INPUT_OPTIONS,
+              raw: { width: info.width, height: info.height, channels: 4 }
             }).png().toBuffer();
           } else {
             layerBuffer = await layerSharp.toBuffer();
@@ -747,6 +863,7 @@ export class ImageUtils {
         }
 
         compositeOps.push({
+          ...SHARP_INPUT_OPTIONS,
           input: layerBuffer,
           left: layer.x,
           top: layer.y,
@@ -772,7 +889,7 @@ export class ImageUtils {
 
       return result;
     } catch (error) {
-      if (error instanceof Error && error.message.includes('JSON')) {
+      if (isStructuredImageError(error)) {
         throw error;
       }
       throw new Error(JSON.stringify({

@@ -50,7 +50,7 @@ export async function imageCrop(input: unknown): Promise<ImageCropResponse> {
     const validated = ImageCropInputSchema.parse(input);
     const { image, bounds } = validated;
     
-    const sharpInstance = ImageUtils.createSharpFromInput(image);
+    const sharpInstance = await ImageUtils.createSharpFromInput(image);
     const metadata = await sharpInstance.metadata();
     const originalDimensions = {
       width: metadata.width || 0,
@@ -86,7 +86,7 @@ export async function imageCrop(input: unknown): Promise<ImageCropResponse> {
           error: {
             code: ImageErrorCode.PROCESSING_FAILED,
             message: error.message || 'Image crop failed',
-            details: { input, processingTime: Math.round((performance.now() - startTime) * 100) / 100 },
+            details: { processingTime: Math.round((performance.now() - startTime) * 100) / 100 },
             suggestions: [
               'Verify crop bounds are within image dimensions',
               'Ensure crop bounds have positive width and height',
@@ -101,8 +101,7 @@ export async function imageCrop(input: unknown): Promise<ImageCropResponse> {
       success: false,
       error: {
         code: ImageErrorCode.PROCESSING_FAILED,
-        message: 'Unknown error during image crop',
-        details: { input }
+        message: 'Unknown error during image crop'
       }
     };
   }

@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import { ImageUtils } from '../util/imageUtils.js';
-import { CompositionConfigSchema, ImageErrorCode } from '../types/image.js';
+import { CompositionConfigSchema, ImageErrorCode, MEMORY_LIMITS } from '../types/image.js';
 
 export const ImageCompositeInputSchema = z.object({
   config: CompositionConfigSchema
@@ -39,7 +39,7 @@ export async function imageComposite(input: unknown) {
           error: {
             code: ImageErrorCode.COMPOSITE_FAILED,
             message: error.message || 'Image composite failed',
-            details: { input, processingTime: Math.round((performance.now() - startTime) * 100) / 100 }
+            details: { processingTime: Math.round((performance.now() - startTime) * 100) / 100 }
           }
         };
       }
@@ -83,7 +83,8 @@ export const imageCompositeTool = {
               },
               required: ['image']
             },
-            minItems: 1
+            minItems: 1,
+            maxItems: MEMORY_LIMITS.MAX_COMPOSITE_LAYERS
           }
         },
         required: ['width', 'height', 'layers']

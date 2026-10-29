@@ -39,7 +39,7 @@ export async function imageFilter(input: unknown) {
           error: {
             code: ImageErrorCode.INVALID_FILTER_PARAMS,
             message: error.message || 'Image filter failed',
-            details: { input, processingTime: Math.round((performance.now() - startTime) * 100) / 100 }
+            details: { processingTime: Math.round((performance.now() - startTime) * 100) / 100 }
           }
         };
       }
