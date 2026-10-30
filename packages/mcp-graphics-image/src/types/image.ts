@@ -31,7 +31,7 @@ export const ImageInputSchema = z.object({
   format: z.enum(SupportedImageFormats),
   width: z.number().int().positive().max(MEMORY_LIMITS.MAX_DIMENSION).optional(),
   height: z.number().int().positive().max(MEMORY_LIMITS.MAX_DIMENSION).optional(),
-  metadata: z.record(z.unknown()).optional()
+  metadata: z.record(z.string(), z.unknown()).optional()
 });
 
 export type ImageInput = z.infer<typeof ImageInputSchema>;
