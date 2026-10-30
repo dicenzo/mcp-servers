@@ -1,10 +1,10 @@
 # mcp-graphics-svg
 
-An MCP server for creating and editing SVG, and for turning text diagrams (Mermaid, ASCII art, ASCII wireframes) into SVG. Uses @svgdotjs/svg.js, svgo, jsdom, and mermaid.
+An MCP server for creating and editing SVG, and for turning text diagrams (ASCII art, ASCII wireframes) into SVG. Uses @svgdotjs/svg.js, svgo, and jsdom.
 
 It runs over stdio and works with any MCP client, including Claude Code and Claude Desktop.
 
-## Tools (8)
+## Tools (6)
 
 | Tool | What it does |
 | --- | --- |
@@ -13,9 +13,7 @@ It runs over stdio and works with any MCP client, including Claude Code and Clau
 | `svg.transform` | Apply translate, rotate, scale, or skew to SVG elements. |
 | `svg.path.operations` | Combine SVG paths with union, intersect, subtract, or exclude. See the note below. |
 | `wireframe.to.svg` | Convert an ASCII wireframe (for example from a Markdown file) to SVG. |
-| `mermaid.to.svg` | Render Mermaid diagram code to SVG with a selectable theme. |
 | `svgbob.to.svg` | Convert ASCII-art diagrams to SVG in the style of svgbob (a TypeScript implementation, not the svgbob binary). |
-| `fabric.wireframe` | Convert an ASCII wireframe into a Fabric.js-style canvas description with interactive elements, exported as SVG, JSON, or HTML. It does not import the fabric package. |
 
 ## Requirements
 
@@ -69,10 +67,8 @@ This server reads no environment variables.
 
 ## Known issues
 
-- Last verified test run: build passes; 181 of 185 tests pass, 3 fail, 1 skipped (5 of 10 suites fail).
-- `tests/util/performance.test.ts`, `tests/tools/fabricWireframe.test.ts`, and `tests/tools/mermaidToSvg.test.ts` do not compile under ts-jest (test arguments no longer match the tool input types).
-- Two `validation` tests fail on assertions.
-- One `wireframe.to.svg` test fails because the jsdom-backed SVG document has no `getBBox`, which svg.js needs to position text. Wireframes that contain text may fail at runtime for the same reason.
+- Last verified test run: build passes; all 268 tests in 8 suites pass.
+- The `mermaid.to.svg` and `fabric.wireframe` tools were removed. Mermaid never loaded under the test runner, `fabric.wireframe` only returned a placeholder, and their dependencies (mermaid, fabric, canvas) carried most of the package's audit findings.
 
 ## License
 

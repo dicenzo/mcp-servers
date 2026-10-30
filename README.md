@@ -10,7 +10,7 @@ Each server lives in its own folder under `packages/`, has its own `package.json
 | --- | --- | --- |
 | [mcp-graphics-color](packages/mcp-graphics-color) | Color space conversion, WCAG contrast checks, palette generation, brand palette matching and linting. | 6 |
 | [mcp-graphics-image](packages/mcp-graphics-image) | Raster image resize, convert, crop, filter, composite, and optimize, using sharp. | 6 |
-| [mcp-graphics-svg](packages/mcp-graphics-svg) | SVG creation, optimization, and transforms, plus Mermaid, ASCII art, and ASCII wireframe conversion to SVG. | 8 |
+| [mcp-graphics-svg](packages/mcp-graphics-svg) | SVG creation, optimization, and transforms, plus ASCII art and ASCII wireframe conversion to SVG. | 6 |
 | [mcp-graphics-type](packages/mcp-graphics-type) | Font loading and metadata, text shaping and measurement, font subsetting, fallback stacks, font validation. | 6 |
 | [mcp-layout](packages/mcp-layout) | CSS Grid, Flexbox, constraint-based, automatic, and responsive layout computation. | 6 |
 | [mcp-templates](packages/mcp-templates) | Design templates: create, render to SVG or HTML, validate, export (including PNG and PDF), and compose from a component library. | 6 |
