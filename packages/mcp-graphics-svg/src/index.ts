@@ -12,9 +12,7 @@ import { svgOptimizeTool } from './tools/svgOptimize.js';
 import { svgTransformTool } from './tools/svgTransform.js';
 import { svgPathOperationsTool } from './tools/svgPathOperations.js';
 import { wireframeToSvgTool } from './tools/wireframeToSvg.js';
-import { mermaidToSvgTool } from './tools/mermaidToSvg.js';
 import { svgbobToSvgTool } from './tools/svgbobToSvg.js';
-import { fabricWireframeTool } from './tools/fabricWireframe.js';
 
 /**
  * MCP Server for SVG graphics operations
@@ -49,9 +47,7 @@ class SVGGraphicsServer {
         svgTransformTool,
         svgPathOperationsTool,
         wireframeToSvgTool,
-        mermaidToSvgTool,
         svgbobToSvgTool,
-        fabricWireframeTool,
       ],
     }));
 
@@ -71,12 +67,8 @@ class SVGGraphicsServer {
             return await (svgPathOperationsTool as any).invoke(args);
           case 'wireframe.to.svg':
             return await (wireframeToSvgTool as any).invoke(args);
-          case 'mermaid.to.svg':
-            return await (mermaidToSvgTool as any).invoke(args);
           case 'svgbob.to.svg':
             return await (svgbobToSvgTool as any).invoke(args);
-          case 'fabric.wireframe':
-            return await (fabricWireframeTool as any).invoke(args);
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
