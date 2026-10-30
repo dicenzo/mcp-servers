@@ -134,7 +134,7 @@ type SVGElementInput = z.input<SVGLeafElementSchema> | (SVGGroupBaseInput & { el
 export const SVGGroupSchema = SVGBasicPropertiesSchema.extend({
   type: z.literal('group'),
   elements: z
-    .array(z.lazy((): z.ZodType<SVGElement, z.ZodTypeDef, SVGElementInput> => SVGElementSchema))
+    .array(z.lazy((): z.ZodType<SVGElement, SVGElementInput> => SVGElementSchema))
     .max(SVG_LIMITS.MAX_ELEMENTS)
 });
 

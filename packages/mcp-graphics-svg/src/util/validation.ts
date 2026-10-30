@@ -15,6 +15,18 @@ type DOMNode = JSDOM['window']['Node']['prototype'];
 type DOMElement = JSDOM['window']['Element']['prototype'];
 
 /**
+ * Zod 3's name for the type of a value, as used in its `received` field.
+ * Zod 4 issues carry only the raw input (with `reportInput`), so this keeps
+ * error details reporting a type name, never the value itself.
+ */
+function receivedType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  if (typeof value === 'number' && Number.isNaN(value)) return 'nan';
+  return typeof value;
+}
+
+/**
  * Enhanced validation utility for SVG operations with comprehensive error handling
  */
 export class SVGValidator {
@@ -23,17 +35,17 @@ export class SVGValidator {
    */
   static validateInput<T>(schema: z.ZodSchema<T>, input: unknown): T {
     try {
-      return schema.parse(input);
+      return schema.parse(input, { reportInput: true });
     } catch (error) {
       if (error instanceof z.ZodError) {
         const validationError: SVGError = {
           code: SVGErrorCode.INVALID_INPUT,
           message: 'Input validation failed',
           details: {
-            errors: error.errors.map(err => ({
+            errors: error.issues.map(err => ({
               path: err.path.join('.'),
               message: err.message,
-              received: (err as any).received || 'unknown'
+              received: err.code === 'invalid_type' ? receivedType(err.input) : 'unknown'
             }))
           },
           suggestions: this.generateValidationSuggestions(error)
@@ -226,10 +238,10 @@ export class SVGValidator {
   private static generateValidationSuggestions(error: z.ZodError): string[] {
     const suggestions: string[] = [];
     
-    for (const issue of error.errors) {
+    for (const issue of error.issues) {
       switch (issue.code) {
         case 'invalid_type':
-          suggestions.push(`Expected ${issue.expected} for ${issue.path.join('.')}, received ${issue.received}`);
+          suggestions.push(`Expected ${issue.expected} for ${issue.path.join('.')}, received ${receivedType(issue.input)}`);
           break;
         case 'too_small':
           suggestions.push(`Value for ${issue.path.join('.')} must be at least ${issue.minimum}`);
@@ -237,8 +249,8 @@ export class SVGValidator {
         case 'too_big':
           suggestions.push(`Value for ${issue.path.join('.')} must be at most ${issue.maximum}`);
           break;
-        case 'invalid_enum_value':
-          suggestions.push(`Valid options for ${issue.path.join('.')} are: ${issue.options?.join(', ')}`);
+        case 'invalid_value':
+          suggestions.push(`Valid options for ${issue.path.join('.')} are: ${issue.values.map(String).join(', ')}`);
           break;
         default:
           suggestions.push(`Fix validation error for ${issue.path.join('.')}: ${issue.message}`);
