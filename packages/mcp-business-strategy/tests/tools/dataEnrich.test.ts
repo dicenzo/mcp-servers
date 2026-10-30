@@ -285,7 +285,7 @@ describe('Data Enrich Tool', () => {
     it('should handle invalid input gracefully', async () => {
       const generator = tool.invoke({ topic: null } as any);
 
-      await expect(generator.next()).rejects.toThrow('Expected string, received null');
+      await expect(generator.next()).rejects.toThrow('expected string, received null');
     });
 
     it('should handle very long topic names', async () => {

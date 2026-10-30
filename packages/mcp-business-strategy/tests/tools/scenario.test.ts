@@ -35,7 +35,7 @@ describe('Scenario Analysis Tool', () => {
         knobs: { price: 'invalid' }
       } as any);
 
-      await expect(generator.next()).rejects.toThrow('Expected array, received string');
+      await expect(generator.next()).rejects.toThrow('expected array, received string');
     });
 
     it('should accept valid input', async () => {
@@ -449,7 +449,7 @@ describe('Scenario Analysis Tool', () => {
     it('should reject too many values for one knob', async () => {
       const generator = tool.invoke({ base: { price: 100 }, knobs: knobsOf(1, 101) });
 
-      await expect(generator.next()).rejects.toThrow(/at most 100/);
+      await expect(generator.next()).rejects.toThrow(/<=100 items/);
     });
 
     it('should reject too many base variables', async () => {
@@ -468,10 +468,10 @@ describe('Scenario Analysis Tool', () => {
     it('should reject non-finite numbers', async () => {
       // JSON.parse('1e999') is Infinity, so a client can send one
       const inKnob = tool.invoke({ base: { price: 100 }, knobs: { price: [Infinity] } });
-      await expect(inKnob.next()).rejects.toThrow(/finite/);
+      await expect(inKnob.next()).rejects.toThrow(/received Infinity/);
 
       const inBase = tool.invoke({ base: { price: -Infinity }, knobs: { price: [100] } });
-      await expect(inBase.next()).rejects.toThrow(/finite/);
+      await expect(inBase.next()).rejects.toThrow(/received -Infinity/);
     });
 
     it('should reject too many or overlong metrics', async () => {
@@ -480,10 +480,10 @@ describe('Scenario Analysis Tool', () => {
         knobs: { price: [100] },
         metrics: Array.from({ length: 11 }, () => 'revenue')
       });
-      await expect(tooMany.next()).rejects.toThrow(/at most 10/);
+      await expect(tooMany.next()).rejects.toThrow(/<=10 items/);
 
       const tooLong = tool.invoke({ base: { price: 100 }, knobs: { price: [100] }, metrics: ['x'.repeat(33)] });
-      await expect(tooLong.next()).rejects.toThrow(/at most 32 character/);
+      await expect(tooLong.next()).rejects.toThrow(/<=32 characters/);
     });
   });
 });
