@@ -70,7 +70,7 @@ export const GridElementSchema = z.object({
   gridRowEnd: z.union([z.number(), identifier()]).optional(),
   justifySelf: z.enum(['start', 'end', 'center', 'stretch']).optional(),
   alignSelf: z.enum(['start', 'end', 'center', 'stretch']).optional(),
-  content: z.record(z.any()).optional(),
+  content: z.record(z.string(), z.any()).optional(),
   minWidth: z.number().optional(),
   minHeight: z.number().optional(),
   maxWidth: z.number().optional(),
@@ -96,7 +96,7 @@ export const FlexElementSchema = z.object({
   flexBasis: z.union([z.number(), cssValue()]).default('auto'),
   alignSelf: z.enum(['auto', 'flex-start', 'flex-end', 'center', 'stretch', 'baseline']).optional(),
   order: z.number().optional(),
-  content: z.record(z.any()).optional(),
+  content: z.record(z.string(), z.any()).optional(),
   minWidth: z.number().optional(),
   minHeight: z.number().optional(),
   maxWidth: z.number().optional(),
@@ -108,7 +108,7 @@ export const LayoutElementSchema = z.object({
   id: identifier(),
   type: z.enum(['div', 'span', 'text', 'image', 'svg']).default('div'),
   bounds: RectangleSchema.optional(),
-  content: z.record(z.any()).optional(),
+  content: z.record(z.string(), z.any()).optional(),
   styles: z.record(identifier(), z.string().max(MAX_STYLE_VALUE_LENGTH)).optional(),
   children: z.array(identifier()).max(MAX_ELEMENTS).optional(),
   constraints: z.array(LayoutConstraintSchema).max(MAX_ELEMENT_CONSTRAINTS).optional()
@@ -140,7 +140,7 @@ export const GridLayoutSchema = z.object({
         size: z.number()
       })).max(MAX_GRID_TRACKS)
     }),
-    areas: z.record(RectangleSchema).optional()
+    areas: z.record(z.string(), RectangleSchema).optional()
   }).optional()
 });
 
@@ -168,7 +168,7 @@ export const LayoutSchema = z.union([GridLayoutSchema, FlexLayoutSchema]);
 
 export const ResponsiveLayoutSchema = z.object({
   breakpoints: z.array(BreakpointSchema).max(MAX_BREAKPOINTS),
-  layouts: z.record(LayoutSchema) // keyed by breakpoint name
+  layouts: z.record(z.string(), LayoutSchema) // keyed by breakpoint name
 });
 
 // Layout metrics
