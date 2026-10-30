@@ -32,14 +32,14 @@ describe('Templates Tool', () => {
     it('should validate required name parameter', async () => {
       const generator = tool.invoke({} as any);
 
-      await expect(generator.next()).rejects.toThrow(/"name"[\s\S]*Required/);
+      await expect(generator.next()).rejects.toThrow(/"name"[\s\S]*expected string, received undefined/);
       expect(mockReadTemplate).not.toHaveBeenCalled();
     });
 
     it('should validate name is a string', async () => {
       const generator = tool.invoke({ name: 123 } as any);
 
-      await expect(generator.next()).rejects.toThrow('Expected string, received number');
+      await expect(generator.next()).rejects.toThrow('expected string, received number');
       expect(mockReadTemplate).not.toHaveBeenCalled();
     });
 

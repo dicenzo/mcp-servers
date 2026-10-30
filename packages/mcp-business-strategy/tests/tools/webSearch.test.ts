@@ -52,7 +52,7 @@ describe('Web Search Tool', () => {
     it('should validate k parameter bounds', async () => {
       const generator = tool.invoke({ query: 'test', k: 25 });
 
-      await expect(generator.next()).rejects.toThrow('less than or equal to 20');
+      await expect(generator.next()).rejects.toThrow('<=20');
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
