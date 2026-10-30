@@ -27,7 +27,7 @@ Tool counts come from each server's `ListTools` handler. Each package README lis
 
 ## Requirements
 
-- Node.js 18 or later (verified with Node 22)
+- Node.js 18 or later (verified with Node 22). mcp-graphics-image needs 20.9 or later and mcp-templates needs 22.12 or later.
 - Yarn 4. Run `corepack enable` once and Node provides it.
 
 ## Build and test

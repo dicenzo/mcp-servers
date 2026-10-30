@@ -18,6 +18,8 @@ export default {
   },
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    // puppeteer 25 is ESM-only and cannot load under ts-jest's CommonJS output; see the stub
+    '^puppeteer$': '<rootDir>/tests/stubs/puppeteer.ts',
   },
   collectCoverageFrom: [
     'src/**/*.ts',

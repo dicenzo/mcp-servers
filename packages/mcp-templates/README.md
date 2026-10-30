@@ -17,7 +17,7 @@ It runs over stdio and works with any MCP client, including Claude Code and Clau
 
 ## Requirements
 
-- Node.js 20.9 or later (required by sharp 0.35)
+- Node.js 22.12 or later (required by Puppeteer 25)
 - Yarn 4 (run `corepack enable` once to get it from Node)
 
 ## Install, build, test

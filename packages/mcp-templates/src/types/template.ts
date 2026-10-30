@@ -57,7 +57,7 @@ export const VariableDefinitionSchema: z.ZodType<VariableDefinition> = z.lazy(()
     description: z.string().optional(),
     validation: z.array(ValidationRuleSchema).optional(),
     items: VariableDefinitionSchema.optional(),
-    properties: z.record(VariableDefinitionSchema).optional()
+    properties: z.record(z.string(), VariableDefinitionSchema).optional()
   })
 );
 
@@ -372,7 +372,7 @@ export const TemplateSchema = z.object({
     background: z.string().optional()
   }),
   extends: z.string().optional(),
-  partials: z.record(z.any()).optional()
+  partials: z.record(z.string(), z.any()).optional()
 });
 
 /** Max export width / height in px */
@@ -399,7 +399,7 @@ export const ExportOptionsSchema = z.object({
 export const RenderedTemplateSchema = z.object({
   id: z.string().min(1).max(200),
   templateId: z.string().min(1).max(200),
-  variables: z.record(z.any()).default({}),
+  variables: z.record(z.string(), z.any()).default({}),
   content: z.object({
     svg: z.string().max(MAX_RENDERED_CONTENT_LENGTH).optional(),
     html: z.string().max(MAX_RENDERED_CONTENT_LENGTH).optional(),
@@ -455,7 +455,7 @@ export const TemplateCreateInputSchema = z.object({
 
 export const TemplateRenderInputSchema = z.object({
   template: z.union([z.string(), TemplateSchema]),
-  variables: z.record(z.any()),
+  variables: z.record(z.string(), z.any()),
   format: z.nativeEnum(ExportFormat).optional(),
   options: z.object({
     includeMetadata: z.boolean().optional(),
@@ -466,13 +466,13 @@ export const TemplateRenderInputSchema = z.object({
 
 export const TemplateExportInputSchema = z.object({
   template: z.union([z.string(), z.any()]),
-  variables: z.record(z.any()).optional(),
+  variables: z.record(z.string(), z.any()).optional(),
   options: ExportOptionsSchema
 });
 
 export const TemplateValidateInputSchema = z.object({
   template: TemplateSchema,
-  variables: z.record(z.any()).optional(),
+  variables: z.record(z.string(), z.any()).optional(),
   options: z.object({
     strict: z.boolean().optional(),
     checkPerformance: z.boolean().optional(),
