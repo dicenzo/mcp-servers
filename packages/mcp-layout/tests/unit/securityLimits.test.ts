@@ -219,19 +219,19 @@ describe('Security limits', () => {
         bounds
       });
       expect(result.success).toBe(false);
-      expect(result.error).toMatch(/at most 1000/);
+      expect(result.error).toMatch(/<=1000 items/);
     });
 
     it('layout.createFlex rejects more than 1000 elements', async () => {
       const result = await invokeTool(createFlexTool, { config: {}, elements: ids(tooMany), bounds });
       expect(result.success).toBe(false);
-      expect(result.error).toMatch(/at most 1000/);
+      expect(result.error).toMatch(/<=1000 items/);
     });
 
     it('layout.addConstraints rejects more than 1000 elements', async () => {
       const result = await invokeTool(addConstraintsTool, { elements: ids(tooMany), bounds });
       expect(result.success).toBe(false);
-      expect(result.error).toMatch(/at most 1000/);
+      expect(result.error).toMatch(/<=1000 items/);
     });
 
     it('layout.addConstraints rejects more than 5000 total constraints', async () => {
@@ -245,7 +245,7 @@ describe('Security limits', () => {
     it('layout.autoLayout rejects more than 1000 elements', async () => {
       const result = await invokeTool(autoLayoutTool, { elements: ids(tooMany), bounds });
       expect(result.success).toBe(false);
-      expect(result.error).toMatch(/at most 1000/);
+      expect(result.error).toMatch(/<=1000 items/);
     });
 
     it('layout.measure rejects more than 1000 elements', async () => {
@@ -254,7 +254,7 @@ describe('Security limits', () => {
         elements: ids(tooMany)
       });
       expect(result.success).toBe(false);
-      expect(result.error).toMatch(/at most 1000/);
+      expect(result.error).toMatch(/<=1000 items/);
     });
 
     it('layout.measure rejects a nested layout with more than 1000 elements', async () => {
@@ -271,7 +271,7 @@ describe('Security limits', () => {
         baseLayout: { type: 'grid', config: { columns: '1fr', rows: 'auto', gap: '0' }, elements: [{ id: 'a' }], bounds }
       });
       expect(result.success).toBe(false);
-      expect(result.error).toMatch(/at most 1000/);
+      expect(result.error).toMatch(/<=1000 items/);
     });
   });
 });
