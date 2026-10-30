@@ -2,6 +2,18 @@ import { z } from 'zod';
 import { TypographyErrorCode, PERFORMANCE_LIMITS } from '../types/typography.js';
 
 /**
+ * Zod 3's name for the type of a value, as used in its `received` field.
+ * Zod 4 issues carry only the raw input (with `reportInput`), so this keeps
+ * error details reporting a type name, never the value itself.
+ */
+function receivedType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  if (typeof value === 'number' && Number.isNaN(value)) return 'nan';
+  return typeof value;
+}
+
+/**
  * Typography Validator - Handles input validation and font validation
  */
 export class TypographyValidator {
@@ -10,13 +22,13 @@ export class TypographyValidator {
    */
   static validateInput<T>(schema: z.ZodSchema<T>, input: unknown): T {
     try {
-      return schema.parse(input);
+      return schema.parse(input, { reportInput: true });
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const details = error.errors.map(err => ({
+        const details = error.issues.map(err => ({
           path: err.path.join('.'),
           message: err.message,
-          received: err.code === 'invalid_type' ? err.received : undefined
+          received: err.code === 'invalid_type' ? receivedType(err.input) : undefined
         }));
         
         const errorMessage = JSON.stringify({
