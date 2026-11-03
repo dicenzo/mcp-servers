@@ -70,6 +70,8 @@ declare module 'opentype.js' {
       glyphs: Glyph[];
     };
     charToGlyph(char: string): Glyph;
+    /** Pair kerning in font units, from GPOS (default script) or the legacy kern table */
+    getKerningValue(left: Glyph | number, right: Glyph | number): number;
     hasChar?(char: string): boolean;
     toArrayBuffer(): ArrayBuffer;
   }

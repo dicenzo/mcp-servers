@@ -11,6 +11,7 @@ import {
   TypographyErrorCode 
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
+import { layoutGlyphRun } from '../util/glyphRun.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<TextToolResult>;
@@ -259,40 +260,24 @@ async function performBasicShaping(
     const font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
     
     const fontSize = options.fontSize || 16;
-    const scale = fontSize / font.unitsPerEm;
     
     const glyphs: GlyphInfo[] = [];
     const clusters: number[] = [];
     let totalAdvanceX = 0;
     const totalAdvanceY = 0;
     
-    // Basic character-to-glyph mapping
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      const codepoint = char.codePointAt(0) || 0;
-      const glyph = font.charToGlyph(char);
-      
-      let advance = glyph.advanceWidth || 0;
-      if (glyph.advanceWidth === undefined && glyph.xMax && glyph.xMin) {
-        advance = glyph.xMax - glyph.xMin;
-      }
-      
-      advance *= scale;
-      
-      // Apply letter spacing
-      if (options.letterSpacing) {
-        advance += options.letterSpacing;
-      }
-      
-      // Apply word spacing for space characters
-      if (options.wordSpacing && char === ' ') {
-        advance += options.wordSpacing;
-      }
-      
+    // Character-to-glyph mapping with pair kerning (off with features: { kern: false })
+    const run = layoutGlyphRun(font, text, {
+      fontSize,
+      kerning: !(options.features && [false, 0].includes(options.features.kern)),
+      letterSpacing: options.letterSpacing,
+      wordSpacing: options.wordSpacing
+    });
+    for (const { glyph, codepoint, cluster, advance } of run) {
       const glyphInfo: GlyphInfo = {
         glyphId: glyph.index || 0,
-        cluster: i,
-        codepoint: codepoint,
+        cluster,
+        codepoint,
         advance: {
           x: advance,
           y: 0
@@ -305,7 +290,7 @@ async function performBasicShaping(
       };
       
       glyphs.push(glyphInfo);
-      clusters.push(i);
+      clusters.push(cluster);
       totalAdvanceX += advance;
     }
     
