@@ -6,6 +6,7 @@ import * as path from 'path';
 import * as opentype from 'opentype.js';
 import { TypographyValidator } from '../util/validation.js';
 import { PerformanceMonitor, FontCache } from '../util/performance.js';
+import { fontLineGap } from '../util/fontMetrics.js';
 import {
   allowedFontRoots,
   resolveAllowedFontPath,
@@ -382,7 +383,7 @@ async function extractFontMetadata(fontBuffer: Buffer, _input: FontInput): Promi
       unitsPerEm: font.unitsPerEm,
       ascender: font.ascender,
       descender: font.descender,
-      lineGap: font.lineGap || 0,
+      lineGap: fontLineGap(font),
       capHeight: font.tables?.os2?.sCapHeight,
       xHeight: font.tables?.os2?.sxHeight,
       bbox: {
