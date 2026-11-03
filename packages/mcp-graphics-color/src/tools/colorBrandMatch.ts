@@ -10,6 +10,7 @@ import {
   ColorErrorCode,
   Color,
   DEFAULT_MAX_DELTA_E,
+  colorInputJsonSchema,
 } from '../types/color.js';
 
 /**
@@ -330,21 +331,6 @@ function determineConfidence(deltaE: number, maxDeltaE: number): ColorMatch['con
 }
 
 // Mirrors ColorInputSchema: a color string or a { space, values } object
-const colorInputJsonSchema = {
-  oneOf: [
-    { type: 'string', minLength: 3, maxLength: 50 },
-    {
-      type: 'object',
-      properties: {
-        space: { enum: ['srgb', 'oklch', 'oklab', 'hsl', 'hsla', 'rgb', 'rgba', 'lab', 'lch'] },
-        values: { type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 4 },
-        alpha: { type: 'number', minimum: 0, maximum: 1 }
-      },
-      required: ['space', 'values']
-    }
-  ]
-};
-
 /**
  * Tool definition for MCP server registration
  */
