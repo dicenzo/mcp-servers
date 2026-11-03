@@ -8,10 +8,10 @@ const opentype = ((opentypeModule as any).default ?? opentypeModule) as any;
  * Builds a small, real font in memory so tests never depend on fonts installed on
  * the machine or on third-party font files. Every glyph is a simple box.
  *
- * Family "Test Font", style "Regular", glyphs for ".notdef", space, A-Z, a-z, 0-9.
+ * Family "Test Font", style "Regular" unless other names are given, glyphs for ".notdef", space, A-Z, a-z, 0-9.
  * opentype.js writes CFF outlines, so the output is an OpenType ("OTTO") font.
  */
-export function buildTestFont(): ArrayBuffer {
+export function buildTestFont(names: { familyName?: string; styleName?: string } = {}): ArrayBuffer {
   const unitsPerEm = 1000;
   const advanceWidth = 600;
 
@@ -45,8 +45,8 @@ export function buildTestFont(): ArrayBuffer {
   }
 
   const font = new opentype.Font({
-    familyName: 'Test Font',
-    styleName: 'Regular',
+    familyName: names.familyName ?? 'Test Font',
+    styleName: names.styleName ?? 'Regular',
     unitsPerEm,
     ascender: 800,
     descender: -200,
@@ -109,4 +109,39 @@ export function kernTable(pairs: Array<[left: number, right: number, value: numb
     table.writeInt16BE(value, pair + 4);
   });
   return table;
+}
+
+/** Packs sfnt fonts into a TrueType Collection (`ttcf` 1.0); tables are not shared. */
+export function buildCollection(fonts: Buffer[]): Buffer {
+  const pad4 = (n: number) => (n + 3) & ~3;
+  const parts: Buffer[] = [];
+  const headerSize = 12 + fonts.length * 4;
+  const directories = fonts.map(font => 12 + font.readUInt16BE(4) * 16);
+  let tableOffset = headerSize + directories.reduce((sum, size) => sum + size, 0);
+
+  const header = Buffer.alloc(headerSize);
+  header.write('ttcf', 0, 'ascii');
+  header.writeUInt32BE(0x00010000, 4);
+  header.writeUInt32BE(fonts.length, 8);
+  parts.push(header);
+
+  const tableData: Buffer[] = [];
+  let directoryOffset = headerSize;
+  fonts.forEach((font, i) => {
+    header.writeUInt32BE(directoryOffset, 12 + i * 4);
+    const directory = Buffer.from(font.subarray(0, directories[i]));
+    for (let t = 0; t < font.readUInt16BE(4); t++) {
+      const record = 12 + t * 16;
+      const offset = font.readUInt32BE(record + 8);
+      const length = font.readUInt32BE(record + 12);
+      directory.writeUInt32BE(tableOffset, record + 8);
+      const table = Buffer.alloc(pad4(length));
+      font.copy(table, 0, offset, offset + length);
+      tableData.push(table);
+      tableOffset += table.length;
+    }
+    parts.push(directory);
+    directoryOffset += directory.length;
+  });
+  return Buffer.concat([...parts, ...tableData]);
 }

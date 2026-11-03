@@ -7,6 +7,7 @@ import * as opentype from 'opentype.js';
 import { TypographyValidator } from '../util/validation.js';
 import { PerformanceMonitor, FontCache } from '../util/performance.js';
 import { fontLineGap } from '../util/fontMetrics.js';
+import { findSystemFont, extractFromCollection } from '../util/systemFonts.js';
 import {
   allowedFontRoots,
   resolveAllowedFontPath,
@@ -43,7 +44,7 @@ export const loadFontTool: ExecutableTool = {
       },
       path: {
         type: 'string',
-        description: 'Path to a .ttf/.otf/.woff/.woff2 file in a system font directory or a directory listed in MCP_FONT_DIRS (for file type)'
+        description: 'Path to a .ttf/.otf/.ttc/.otc/.woff/.woff2 file in a system font directory or a directory listed in MCP_FONT_DIRS (for file type; a collection loads its first font)'
       },
       data: {
         type: 'string',
@@ -55,7 +56,7 @@ export const loadFontTool: ExecutableTool = {
       },
       name: {
         type: 'string',
-        description: 'System font name (for system type)'
+        description: 'Installed font\'s family, full or PostScript name, e.g. "Georgia", "Georgia Bold" or "Georgia-Bold" (for system type). A family name loads its regular style'
       },
       format: {
         type: 'string',
@@ -193,13 +194,14 @@ async function readFontSource(input: FontInput): Promise<Buffer> {
           code: TypographyErrorCode.FONT_LOAD_FAILED,
           message: 'Font file not found or not in an allowed font directory',
           suggestions: [
-            'Use a .ttf, .otf, .woff, or .woff2 file',
+            'Use a .ttf, .otf, .ttc, .otc, .woff, or .woff2 file',
             `Place the font in a system font directory or a directory listed in ${FONT_DIRS_ENV}`,
             'Or pass the font as base64 with type "buffer"'
           ]
         }));
       }
-      return fs.readFileSync(fontPath);
+      // A collection loads its first font
+      return extractFromCollection(fs.readFileSync(fontPath), 0);
     }
 
     case 'buffer': {
@@ -275,40 +277,22 @@ async function readFontSource(input: FontInput): Promise<Buffer> {
     }
 
     case 'system': {
-      // Try to find system font
-      const systemFontPaths = getSystemFontPaths();
-      let fontBuffer: Buffer | null = null;
-
-      for (const fontPath of systemFontPaths) {
-        try {
-          const files = fs.readdirSync(fontPath);
-          const fontFile = files.find(file => 
-            file.toLowerCase().includes(input.name.toLowerCase()) &&
-            (file.endsWith('.ttf') || file.endsWith('.otf'))
-          );
-
-          if (fontFile) {
-            fontBuffer = fs.readFileSync(path.join(fontPath, fontFile));
-            break;
-          }
-        } catch {
-          // Continue searching in other paths
-        }
-      }
-
-      if (!fontBuffer) {
+      const roots = allowedFontRoots(getSystemFontPaths());
+      const match = findSystemFont(input.name, roots);
+      const fontPath = match.found ? resolveAllowedFontPath(match.entry.path, roots) : null;
+      if (!match.found || !fontPath) {
+        const similar = match.found ? [] : match.similar;
         throw new Error(JSON.stringify({
           code: TypographyErrorCode.SYSTEM_FONT_ACCESS_FAILED,
           message: `System font not found: ${input.name}`,
           suggestions: [
-            'Verify the font name is correct',
-            'Check if the font is installed on the system',
-            'Use the full font family name'
+            ...(similar.length > 0 ? [`Installed families with a similar name: ${similar.join(', ')}`] : []),
+            'Use a family name ("Georgia"), a full name ("Georgia Bold") or a PostScript name ("Georgia-Bold")',
+            `Fonts are searched in the system font folders and ${FONT_DIRS_ENV}`
           ]
         }));
       }
-
-      return fontBuffer;
+      return extractFromCollection(fs.readFileSync(fontPath), match.entry.index);
     }
 
     default: {
