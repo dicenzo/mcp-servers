@@ -141,6 +141,7 @@ export interface ImageOutput {
   dimensions: Dimensions;
   metadata: ImageMetadata;
   processingMetadata: ProcessingMetadata;
+  warnings?: string[]; // e.g. an animation flattened to its first frame
 }
 
 // Error codes for image processing

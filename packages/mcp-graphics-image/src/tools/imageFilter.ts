@@ -23,7 +23,8 @@ export async function imageFilter(input: unknown) {
         data: result.data,
         format: result.format,
         appliedFilters: filters,
-        processingMetadata: result.processingMetadata
+        processingMetadata: result.processingMetadata,
+        ...(result.warnings && { warnings: result.warnings })
       }
     };
     

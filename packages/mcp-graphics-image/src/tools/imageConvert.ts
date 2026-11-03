@@ -34,6 +34,7 @@ export interface ImageConvertResult {
     newSize: number;
     compressionRatio: number;
     qualityLoss?: number;
+    warnings?: string[];
   };
   metadata: {
     processingTime: number;
@@ -127,7 +128,8 @@ export async function imageConvert(input: unknown): Promise<ImageConvertResponse
         originalSize,
         newSize,
         compressionRatio: Math.round(compressionRatio * 1000) / 1000,
-        ...(qualityLoss !== undefined && { qualityLoss })
+        ...(qualityLoss !== undefined && { qualityLoss }),
+        ...(result.warnings && { warnings: result.warnings })
       },
       metadata: {
         processingTime,

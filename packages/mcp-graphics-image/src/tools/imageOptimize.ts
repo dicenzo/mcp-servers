@@ -24,7 +24,8 @@ export async function imageOptimize(input: unknown) {
         format: result.format,
         optimizationTarget: options.target,
         compressionRatio: result.processingMetadata.optimizationRatio,
-        processingMetadata: result.processingMetadata
+        processingMetadata: result.processingMetadata,
+        ...(result.warnings && { warnings: result.warnings })
       }
     };
     
