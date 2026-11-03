@@ -7,6 +7,7 @@ import {
   BrandPaletteEntry,
   ColorInput,
   ColorMatch,
+  ColorDifference,
   ColorErrorCode,
   Color,
 } from '../types/color.js';
@@ -52,7 +53,8 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
       targetColor, 
       brandPalette, 
       maxDeltaE = 5,
-      includeAlternatives = true 
+      includeAlternatives = true,
+      maxAlternatives = 3
     } = validated;
     
     // Parse target color
@@ -84,16 +86,37 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
       throw new Error('No valid colors found in brand palette');
     }
     
+    // Drop entries indistinguishable from an earlier one (same CIEDE2000 color
+    // and alpha) so alternatives aren't repeats; the first entry wins
+    const uniqueBrandColors: typeof parsedBrandColors = [];
+    const duplicates: ColorMatch['duplicates'] = [];
+    for (const brandColor of parsedBrandColors) {
+      const original = uniqueBrandColors.find(kept =>
+        alphaDifference(kept.color, brandColor.color) === 0 &&
+        ColorUtils.calculateDeltaE2000(kept.color, brandColor.color) === 0
+      );
+      if (original) {
+        duplicates.push({
+          paletteIndex: brandColor.paletteIndex,
+          ...(brandColor.name !== undefined && { name: brandColor.name }),
+          duplicateOf: original.paletteIndex
+        });
+      } else {
+        uniqueBrandColors.push(brandColor);
+      }
+    }
+    
     // Calculate CIEDE2000 Delta E for each brand color. Delta E ignores
     // transparency, so the alpha difference is reported alongside it.
-    const targetAlpha = alphaOf(parsedTargetColor);
-    const matches = parsedBrandColors.map(brandColor => {
+    const matches = uniqueBrandColors.map(brandColor => {
       const deltaE = ColorUtils.calculateDeltaE2000(parsedTargetColor, brandColor.color);
       return {
         color: brandColor.color,
         deltaE,
+        confidence: determineConfidence(deltaE, maxDeltaE),
         withinThreshold: deltaE <= maxDeltaE,
-        alphaDifference: Math.round(Math.abs(targetAlpha - alphaOf(brandColor.color)) * 100) / 100,
+        alphaDifference: alphaDifference(parsedTargetColor, brandColor.color),
+        difference: describeDifference(parsedTargetColor, brandColor.color),
         paletteIndex: brandColor.paletteIndex,
         ...(brandColor.name !== undefined && { name: brandColor.name })
       };
@@ -105,11 +128,8 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
     // Find best match
     const [bestMatch, ...otherMatches] = matches;
     
-    // Determine confidence level based on Delta E
-    const confidence = determineConfidence(bestMatch.deltaE, maxDeltaE);
-    
     // Get alternatives if requested
-    const alternatives = includeAlternatives ? otherMatches.slice(0, 3) : [];
+    const alternatives = includeAlternatives ? otherMatches.slice(0, maxAlternatives) : [];
     
     const endTime = performance.now();
     const processingTime = Math.round((endTime - startTime) * 100) / 100;
@@ -123,13 +143,15 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
       inputColor: parsedTargetColor,
       bestMatch: bestMatch.color,
       deltaE: bestMatch.deltaE,
-      confidence,
+      confidence: bestMatch.confidence,
       withinThreshold: bestMatch.withinThreshold,
       alphaDifference: bestMatch.alphaDifference,
+      difference: bestMatch.difference,
       paletteIndex: bestMatch.paletteIndex,
       ...(bestMatch.name !== undefined && { name: bestMatch.name }),
       alternatives,
-      skipped
+      skipped,
+      duplicates
     };
     
     return {
@@ -219,7 +241,8 @@ function unpackPaletteEntry(entry: BrandPaletteEntry): { color: ColorInput; name
 
 /**
  * Turn a parse failure into a plain message. ColorUtils throws errors whose
- * message is a serialized ColorError, so unwrap that when present.
+ * message is a serialized ColorError, so unwrap that when present, adding the
+ * specific cause from details.error.
  */
 function describeParseFailure(error: unknown): string {
   if (!(error instanceof Error)) {
@@ -228,7 +251,11 @@ function describeParseFailure(error: unknown): string {
   try {
     const parsed: unknown = JSON.parse(error.message);
     if (parsed && typeof parsed === 'object' && 'message' in parsed && typeof parsed.message === 'string') {
-      return parsed.message;
+      const cause = 'details' in parsed && parsed.details && typeof parsed.details === 'object' &&
+        'error' in parsed.details && typeof parsed.details.error === 'string'
+        ? parsed.details.error
+        : undefined;
+      return cause ? `${parsed.message}: ${cause}` : parsed.message;
     }
   } catch {
     // Not a serialized ColorError; fall through to the raw message
@@ -242,6 +269,65 @@ function describeParseFailure(error: unknown): string {
  */
 function alphaOf(color: Color): number {
   return color.alpha ?? (color.values.length === 4 ? color.values[3] : 1);
+}
+
+function alphaDifference(a: Color, b: Color): number {
+  return round2(Math.abs(alphaOf(a) - alphaOf(b)));
+}
+
+// Below these, a lightness/chroma/hue change isn't worth mentioning
+const MIN_LIGHTNESS_CHANGE = 1;
+const MIN_CHROMA_CHANGE = 1;
+const MIN_HUE_CHANGE = 2;
+// Hue is meaningless below this chroma (greys)
+const MIN_CHROMA_FOR_HUE = 2;
+// Hue angle (LCh degrees) treated as warmest; ~orange
+const WARMEST_HUE = 50;
+
+/**
+ * Break down how `color` differs from `target` and describe it in words
+ */
+function describeDifference(target: Color, color: Color): ColorDifference {
+  const from = ColorUtils.toLch(target);
+  const to = ColorUtils.toLch(color);
+
+  const lightness = to.l - from.l;
+  const chroma = to.c - from.c;
+  const hues = from.h !== undefined && to.h !== undefined &&
+    from.c >= MIN_CHROMA_FOR_HUE && to.c >= MIN_CHROMA_FOR_HUE
+    ? { from: from.h, to: to.h }
+    : undefined;
+  const hue = hues ? ((hues.to - hues.from + 540) % 360) - 180 : 0;
+
+  const parts: string[] = [];
+  if (Math.abs(lightness) >= MIN_LIGHTNESS_CHANGE) {
+    parts.push(qualify(lightness > 0 ? 'lighter' : 'darker', lightness, 5));
+  }
+  if (Math.abs(chroma) >= MIN_CHROMA_CHANGE) {
+    parts.push(qualify(chroma > 0 ? 'more saturated' : 'less saturated', chroma, 5));
+  }
+  if (hues && Math.abs(hue) >= MIN_HUE_CHANGE) {
+    // Warmth peaks at WARMEST_HUE and is lowest opposite it (blue/cyan)
+    const warmth = (h: number) => Math.cos(((h - WARMEST_HUE) * Math.PI) / 180);
+    const warmer = warmth(hues.to) > warmth(hues.from);
+    parts.push(qualify(warmer ? 'warmer' : 'cooler', hue, 10));
+  }
+
+  return {
+    lightness: round2(lightness),
+    chroma: round2(chroma),
+    hue: round2(hue),
+    summary: parts.length > 0 ? parts.join(', ') : 'no visible difference'
+  };
+}
+
+function qualify(word: string, change: number, slightBelow: number): string {
+  return Math.abs(change) < slightBelow ? `slightly ${word}` : word;
+}
+
+// Rounds to 2 decimals; `|| 0` turns -0 into 0 so identical colors read as 0
+function round2(value: number): number {
+  return Math.round(value * 100) / 100 || 0;
 }
 
 /**
@@ -282,7 +368,7 @@ const colorInputJsonSchema = {
  */
 export const colorBrandMatchTool = {
   name: 'color.brandMatch',
-  description: 'Find the best matching color from a brand palette using CIEDE2000 Delta E. Palette entries may be plain colors or { name, color } objects; results report each match\'s palette index, name, whether it falls within maxDeltaE, and its alpha difference (Delta E ignores transparency), plus any entries skipped as unparseable.',
+  description: 'Find the best matching color from a brand palette using CIEDE2000 Delta E. Palette entries may be plain colors or { name, color } objects; results report each match\'s palette index, name, whether it falls within maxDeltaE, its alpha difference (Delta E ignores transparency), and a lightness/chroma/hue breakdown with a plain-language summary. Unparseable entries are listed in skipped; entries identical to an earlier one are listed in duplicates and left out of matching.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -306,7 +392,8 @@ export const colorBrandMatchTool = {
         maxItems: 50
       },
       maxDeltaE: { type: 'number', minimum: 0, maximum: 100, default: 5, description: 'CIEDE2000 distance at or below which a match counts as within threshold (about 1 is just noticeable, 2-3 is close)' },
-      includeAlternatives: { type: 'boolean', default: true }
+      includeAlternatives: { type: 'boolean', default: true },
+      maxAlternatives: { type: 'integer', minimum: 0, maximum: 49, default: 3, description: 'How many runner-up matches to return' }
     },
     required: ['targetColor', 'brandPalette']
   }
