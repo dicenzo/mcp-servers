@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeAll } from '@jest/globals';
 import sharp from 'sharp';
+import { ImageErrorCode } from '../../src/types/image';
 import { imageConvert } from '../../src/tools/imageConvert';
 import { imageResize } from '../../src/tools/imageResize';
 import { imageCrop } from '../../src/tools/imageCrop';
@@ -50,6 +51,18 @@ describe('animated input', () => {
     if (!result.success) throw new Error('resize failed');
     expect(result.result.originalDimensions).toEqual({ width: 20, height: 10 });
     expect(await framesOf(result.result.data)).toEqual({ pages: 3, width: 10, height: 5 });
+  });
+
+  test('image.resize rejects enlarging an animation past the pixel limit', async () => {
+    const result = await imageResize({
+      image: image(),
+      dimensions: { width: 8192, height: 4096 },
+      allowEnlargement: true
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(ImageErrorCode.MEMORY_EXCEEDED);
+    }
   });
 
   test('image.crop crops every frame within the frame bounds', async () => {
