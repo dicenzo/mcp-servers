@@ -44,6 +44,14 @@ describe('WOFF2 fonts are decompressed before parsing', () => {
     expect(fallback.error).toBeUndefined();
   });
 
+  test('a WOFF2 file that claims to decompress past the size limit is rejected before decompressing', async () => {
+    const bomb = Buffer.from(woff2);
+    bomb.writeUInt32BE(0xffffffff, 16); // totalSfntSize
+    const response = await loadFontTool.invoke(asInput(bomb)) as ToolResult;
+    expect(response.isError).toBe(true);
+    expect(resultOf(response).message).toMatch(/decompress to more than/);
+  });
+
   test('a corrupt WOFF2 file is reported as an error', async () => {
     const corrupt = Buffer.concat([Buffer.from('wOF2'), Buffer.alloc(200, 7)]);
     const response = await loadFontTool.invoke(asInput(corrupt)) as ToolResult;
