@@ -242,6 +242,31 @@ describe('ColorUtils', () => {
     });
   });
 
+  describe('calculateDeltaE2000', () => {
+    test('calculates zero for identical colors', () => {
+      const color = ColorUtils.parseColorInput('#3357ff');
+      expect(ColorUtils.calculateDeltaE2000(color, color)).toBe(0);
+    });
+
+    test('matches the CIEDE2000 value for a known pair', () => {
+      const red = ColorUtils.parseColorInput('#ff0000');
+      const darkRed = ColorUtils.parseColorInput('#e00000');
+      expect(ColorUtils.calculateDeltaE2000(red, darkRed)).toBeCloseTo(6.7, 1);
+    });
+
+    test('is symmetric', () => {
+      const a = ColorUtils.parseColorInput('#ff5733');
+      const b = ColorUtils.parseColorInput('#3357ff');
+      expect(ColorUtils.calculateDeltaE2000(a, b)).toBe(ColorUtils.calculateDeltaE2000(b, a));
+    });
+
+    test('compresses large differences relative to CIE76', () => {
+      const red = ColorUtils.parseColorInput('#ff0000');
+      const blue = ColorUtils.parseColorInput('#0000ff');
+      expect(ColorUtils.calculateDeltaE2000(red, blue)).toBeLessThan(ColorUtils.calculateDeltaE(red, blue));
+    });
+  });
+
   describe('calculateDeltaE', () => {
     test('calculates zero Delta E for identical colors', () => {
       const color: Color = { space: 'rgb', values: [0.5, 0.3, 0.8] };
