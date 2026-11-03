@@ -10,7 +10,8 @@ import {
   Color,
   ColorInput,
   BrandRules,
-  AccessibilityContext
+  AccessibilityContext,
+  DEFAULT_MAX_DELTA_E
 } from '../types/color.js';
 
 /**
@@ -72,13 +73,13 @@ export async function colorLintBrand(input: unknown): Promise<ColorLintBrandResp
     }
     
     if (rules.allowedColors) {
-      await lintAllowedColors(parsedColors, rules.allowedColors, rules.maxDeltaE || 5, issues);
+      await lintAllowedColors(parsedColors, rules.allowedColors, rules.maxDeltaE ?? DEFAULT_MAX_DELTA_E, issues);
       rulesApplied.push('allowed-colors');
       totalScore -= issues.filter(i => i.type === 'off-brand').length * 20;
     }
     
     if (rules.forbiddenColors) {
-      await lintForbiddenColors(parsedColors, rules.forbiddenColors, rules.maxDeltaE || 5, issues);
+      await lintForbiddenColors(parsedColors, rules.forbiddenColors, rules.maxDeltaE ?? DEFAULT_MAX_DELTA_E, issues);
       rulesApplied.push('forbidden-colors');
       totalScore -= issues.filter(i => i.type === 'forbidden').length * 25;
     }
@@ -241,7 +242,7 @@ async function lintAllowedColors(
     
     for (const allowedColor of parsedAllowedColors) {
       try {
-        const deltaE = ColorUtils.calculateDeltaE(color, allowedColor);
+        const deltaE = ColorUtils.calculateDeltaE2000(color, allowedColor);
         closestDeltaE = Math.min(closestDeltaE, deltaE);
         
         if (deltaE <= maxDeltaE) {
@@ -281,7 +282,7 @@ async function lintForbiddenColors(
   for (const color of colors) {
     for (const forbiddenColor of parsedForbiddenColors) {
       try {
-        const deltaE = ColorUtils.calculateDeltaE(color, forbiddenColor);
+        const deltaE = ColorUtils.calculateDeltaE2000(color, forbiddenColor);
         
         if (deltaE <= maxDeltaE) {
           issues.push({
@@ -346,9 +347,9 @@ async function lintDuplicates(
   for (let i = 0; i < colors.length; i++) {
     for (let j = i + 1; j < colors.length; j++) {
       try {
-        const deltaE = ColorUtils.calculateDeltaE(colors[i], colors[j]);
+        const deltaE = ColorUtils.calculateDeltaE2000(colors[i], colors[j]);
         
-        if (deltaE < 1) { // Essentially the same color
+        if (deltaE < 1) { // Below CIEDE2000's just-noticeable difference
           duplicates.add(j);
           duplicateCount++;
           issues.push({
@@ -409,7 +410,7 @@ export const colorLintBrandTool = {
         type: 'object',
         properties: {
           minContrast: { type: 'number', minimum: 1, maximum: 21 },
-          maxDeltaE: { type: 'number', minimum: 0, maximum: 100, default: 5 }
+          maxDeltaE: { type: 'number', minimum: 0, maximum: 100, default: DEFAULT_MAX_DELTA_E, description: 'CIEDE2000 tolerance for allowed/forbidden color matching' }
         }
       }
     },

@@ -10,6 +10,7 @@ import {
   ColorDifference,
   ColorErrorCode,
   Color,
+  DEFAULT_MAX_DELTA_E,
 } from '../types/color.js';
 
 /**
@@ -52,7 +53,7 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
     const { 
       targetColor, 
       brandPalette, 
-      maxDeltaE = 5,
+      maxDeltaE = DEFAULT_MAX_DELTA_E,
       includeAlternatives = true,
       maxAlternatives = 3
     } = validated;
@@ -391,7 +392,7 @@ export const colorBrandMatchTool = {
         minItems: 1,
         maxItems: 50
       },
-      maxDeltaE: { type: 'number', minimum: 0, maximum: 100, default: 5, description: 'CIEDE2000 distance at or below which a match counts as within threshold (about 1 is just noticeable, 2-3 is close)' },
+      maxDeltaE: { type: 'number', minimum: 0, maximum: 100, default: DEFAULT_MAX_DELTA_E, description: 'CIEDE2000 distance at or below which a match counts as within threshold (about 1 is just noticeable, 2-3 is close)' },
       includeAlternatives: { type: 'boolean', default: true },
       maxAlternatives: { type: 'integer', minimum: 0, maximum: 49, default: 3, description: 'How many runner-up matches to return' }
     },

@@ -517,4 +517,43 @@ describe('colorLintBrand', () => {
       }
     });
   });
+  describe('CIEDE2000 matching', () => {
+    test('accepts a color within maxDeltaE on the CIEDE2000 scale', async () => {
+      const result = await colorLintBrand({
+        palette: ['#E00000'], // CIEDE2000 ~6.70 from #FF0000 (CIE76 ~11.93)
+        rules: { allowedColors: ['#FF0000'], maxDeltaE: 8 }
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.issues.filter(i => i.type === 'off-brand')).toHaveLength(0);
+      }
+    });
+
+    test('defaults maxDeltaE to 3', async () => {
+      const result = await colorLintBrand({
+        palette: ['#F00000'], // CIEDE2000 ~3.19 from #FF0000
+        rules: { allowedColors: ['#FF0000'] }
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const issues = result.result.issues.filter(i => i.type === 'off-brand');
+        expect(issues).toHaveLength(1);
+        expect(issues[0].message).toContain('ΔE=3.19');
+      }
+    });
+
+    test('flags near-identical palette colors on the CIEDE2000 scale', async () => {
+      const result = await colorLintBrand({
+        palette: ['#FF5733', '#FF5C38'], // CIEDE2000 ~0.87 (CIE76 ~2.59)
+        rules: { minContrast: 1 }
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.issues.some(i => i.message.includes('similar'))).toBe(true);
+      }
+    });
+  });
 });
