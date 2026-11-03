@@ -615,4 +615,225 @@ describe('colorBrandMatch', () => {
       }
     });
   });
+  describe('difference breakdown', () => {
+    test('describes a darker, less saturated palette color', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF0000',
+        brandPalette: ['#E00000'] // same hue, lower L and C
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const { difference } = result.result;
+        expect(difference.lightness).toBeLessThan(-5);
+        expect(difference.chroma).toBeLessThan(-5);
+        expect(Math.abs(difference.hue)).toBeLessThan(2);
+        expect(difference.summary).toBe('darker, less saturated');
+      }
+    });
+
+    test('says there is no visible difference for identical colors', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#3357FF',
+        brandPalette: ['#3357FF']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.difference).toEqual({
+          lightness: 0,
+          chroma: 0,
+          hue: 0,
+          summary: 'no visible difference'
+        });
+      }
+    });
+
+    test('describes a hue move toward orange as warmer', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF0040', // pinkish red
+        brandPalette: ['#FF2000'] // orange-leaning red
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.difference.summary).toContain('warmer');
+      }
+    });
+
+    test('describes a hue move toward blue as cooler', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF2000',
+        brandPalette: ['#FF0040']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.difference.summary).toContain('cooler');
+      }
+    });
+
+    test('ignores hue for near-grey colors', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#808080',
+        brandPalette: ['#A0A0A0']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.difference.hue).toBe(0);
+        expect(result.result.difference.summary).toBe('lighter');
+      }
+    });
+
+    test('includes a breakdown on each alternative', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF0000',
+        brandPalette: ['#FF0000', '#E00000']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.alternatives[0].difference.summary).toBe('darker, less saturated');
+      }
+    });
+  });
+
+  describe('maxAlternatives', () => {
+    const palette = ['#FF5733', '#FF6040', '#F05030', '#C00000', '#3357FF', '#33FF57'];
+
+    test('defaults to 3 alternatives', async () => {
+      const result = await colorBrandMatch({ targetColor: '#FF5733', brandPalette: palette });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.alternatives).toHaveLength(3);
+      }
+    });
+
+    test('returns the requested number of alternatives', async () => {
+      const result = await colorBrandMatch({ targetColor: '#FF5733', brandPalette: palette, maxAlternatives: 5 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.alternatives).toHaveLength(5);
+      }
+    });
+
+    test('returns no alternatives when maxAlternatives is 0', async () => {
+      const result = await colorBrandMatch({ targetColor: '#FF5733', brandPalette: palette, maxAlternatives: 0 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.alternatives).toEqual([]);
+      }
+    });
+
+    test('includeAlternatives false still wins over maxAlternatives', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF5733',
+        brandPalette: palette,
+        includeAlternatives: false,
+        maxAlternatives: 5
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.alternatives).toEqual([]);
+      }
+    });
+
+    test('rejects a non-integer or out-of-range maxAlternatives', async () => {
+      for (const maxAlternatives of [-1, 1.5, 50]) {
+        const result = await colorBrandMatch({ targetColor: '#FF5733', brandPalette: palette, maxAlternatives });
+        expect(result.success).toBe(false);
+      }
+    });
+
+    test('gives each alternative its own confidence', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF5733',
+        brandPalette: ['#FF5733', '#FF6040', '#3357FF'], // CIEDE2000 0, ~1.98, large
+        maxDeltaE: 10
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.alternatives.map(alt => alt.confidence)).toEqual(['high', 'low']);
+      }
+    });
+
+    test('advertises maxAlternatives in the MCP input schema', () => {
+      expect(colorBrandMatchTool.inputSchema.properties.maxAlternatives).toEqual(
+        expect.objectContaining({ type: 'integer', minimum: 0, maximum: 49, default: 3 })
+      );
+    });
+  });
+
+  describe('duplicate palette colors', () => {
+    test('keeps the first of several equivalent colors and reports the rest', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF0000',
+        brandPalette: [
+          { name: 'Brand Red', color: '#ff0000' },
+          'rgb(255,0,0)',
+          { name: 'Alert', color: 'hsl(0,100%,50%)' },
+          '#00ff00'
+        ]
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.name).toBe('Brand Red');
+        expect(result.result.alternatives.map(alt => alt.paletteIndex)).toEqual([3]);
+        expect(result.result.duplicates).toEqual([
+          { paletteIndex: 1, duplicateOf: 0 },
+          { paletteIndex: 2, name: 'Alert', duplicateOf: 0 }
+        ]);
+        expect(result.metadata.brandPaletteSize).toBe(4);
+      }
+    });
+
+    test('treats colors that differ only in alpha as distinct', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF0000',
+        brandPalette: ['#FF0000', 'rgba(255,0,0,0.5)']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.duplicates).toEqual([]);
+        expect(result.result.alternatives).toHaveLength(1);
+      }
+    });
+
+    test('returns an empty duplicates list when all colors differ', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF5733',
+        brandPalette: ['#FF5733', '#33FF57']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.duplicates).toEqual([]);
+      }
+    });
+  });
+
+  describe('skip reasons', () => {
+    test('includes the specific parse failure', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF5733',
+        brandPalette: ['not-a-color', { space: 'srgb', values: [2, 0, 0] }, '#FF5733']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.skipped.map(entry => entry.reason)).toEqual([
+          'Failed to parse color input: Invalid color string format',
+          'Failed to parse color input: Invalid color values for space srgb'
+        ]);
+      }
+    });
+  });
 });

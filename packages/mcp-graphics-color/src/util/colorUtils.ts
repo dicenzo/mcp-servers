@@ -417,6 +417,24 @@ export class ColorUtils {
   }
 
   /**
+   * Convert a color to CIE LCh (D65), the space CIEDE2000 works in. Hue is
+   * undefined for achromatic colors.
+   */
+  static toLch(color: Color): { l: number; c: number; h?: number } {
+    const culoriColor = this.colorToCulori(color);
+    const lch = culoriColor ? culori.converter('lch65')(culoriColor) : undefined;
+    if (!lch) {
+      throw new Error(JSON.stringify({
+        code: ColorErrorCode.PROCESSING_FAILED,
+        message: 'Failed to convert color to LCh',
+        details: { color },
+        suggestions: ['Ensure the color is valid']
+      } satisfies ColorError));
+    }
+    return { l: lch.l, c: lch.c, ...(lch.h !== undefined && { h: lch.h }) };
+  }
+
+  /**
    * Generate harmonious color palette from base color
    */
   static generateHarmonyPalette(

@@ -81,6 +81,19 @@ export interface AccessibilityContext {
 /**
  * Brand color matching
  */
+/**
+ * How a palette color differs from the target, in CIE LCh (D65). Each value
+ * is palette minus target; hue is the signed shortest angle in degrees and is
+ * 0 when either color is too grey for hue to mean anything.
+ */
+export interface ColorDifference {
+  lightness: number;
+  chroma: number;
+  hue: number;
+  /** Plain-language description, e.g. "slightly darker, warmer" */
+  summary: string;
+}
+
 export interface ColorMatch {
   inputColor: Color;
   bestMatch: Color;
@@ -90,14 +103,17 @@ export interface ColorMatch {
   withinThreshold: boolean;
   /** Absolute alpha difference (0-1); deltaE ignores transparency */
   alphaDifference: number;
+  difference: ColorDifference;
   /** Position of the match in the original brandPalette input */
   paletteIndex: number;
   name?: string;
   alternatives: Array<{
     color: Color;
     deltaE: number;
+    confidence: 'exact' | 'high' | 'medium' | 'low';
     withinThreshold: boolean;
     alphaDifference: number;
+    difference: ColorDifference;
     paletteIndex: number;
     name?: string;
   }>;
@@ -107,6 +123,13 @@ export interface ColorMatch {
     input: ColorInput;
     name?: string;
     reason: string;
+  }>;
+  /** Palette entries identical to an earlier entry, left out of matching */
+  duplicates: Array<{
+    paletteIndex: number;
+    name?: string;
+    /** paletteIndex of the earlier entry that was kept */
+    duplicateOf: number;
   }>;
 }
 
@@ -219,7 +242,8 @@ export const ColorBrandMatchInputSchema = z.object({
   targetColor: ColorInputSchema,
   brandPalette: z.array(BrandPaletteEntrySchema).min(1).max(50),
   maxDeltaE: z.number().min(0).max(100).default(5).optional(),
-  includeAlternatives: z.boolean().default(true).optional()
+  includeAlternatives: z.boolean().default(true).optional(),
+  maxAlternatives: z.number().int().min(0).max(49).default(3).optional()
 });
 
 export type ColorBrandMatchInput = z.infer<typeof ColorBrandMatchInputSchema>;
