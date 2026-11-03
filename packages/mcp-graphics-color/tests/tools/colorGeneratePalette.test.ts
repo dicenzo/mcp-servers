@@ -1,6 +1,9 @@
-import { colorGeneratePalette } from '../../src/tools/colorGeneratePalette.js';
+import { colorGeneratePalette, colorGeneratePaletteTool } from '../../src/tools/colorGeneratePalette.js';
+import { ColorUtils } from '../../src/util/colorUtils.js';
 import { ColorErrorCode } from '../../src/types/color.js';
 import { describe, test, expect } from '@jest/globals';
+
+const hexes = (colors: { hex?: string }[]) => colors.map(color => color.hex);
 
 describe('colorGeneratePalette', () => {
   describe('valid palette generation', () => {
@@ -109,8 +112,8 @@ describe('colorGeneratePalette', () => {
         harmony: 'analogous',
         count: 3,
         options: {
-          saturationRange: [0.3, 0.9],
-          lightnessRange: [0.2, 0.8],
+          saturationRange: [30, 90],
+          lightnessRange: [20, 80],
           hueShift: 30
         }
       });
@@ -231,18 +234,30 @@ describe('colorGeneratePalette', () => {
       }
     });
 
-    test('handles malformed options', async () => {
+    test('rejects ranges outside 0-100 percent', async () => {
       const result = await colorGeneratePalette({
         baseColor: '#ff0000',
         harmony: 'monochromatic',
         count: 5,
         options: {
-          saturationRange: [1.5, 2.0], // Invalid range
+          saturationRange: [150, 200],
         }
       });
 
-      // Should still succeed but potentially ignore invalid options
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe(ColorErrorCode.PALETTE_GENERATION_FAILED);
+      }
+    });
+
+    test('rejects a fractional count', async () => {
+      const result = await colorGeneratePalette({
+        baseColor: '#ff0000',
+        harmony: 'analogous',
+        count: 4.5
+      });
+
+      expect(result.success).toBe(false);
     });
   });
 
@@ -285,8 +300,8 @@ describe('colorGeneratePalette', () => {
         harmony: 'split-complementary',
         count: 8,
         options: {
-          saturationRange: [0.1, 0.9],
-          lightnessRange: [0.2, 0.9],
+          saturationRange: [10, 90],
+          lightnessRange: [20, 90],
           hueShift: 45
         }
       });
@@ -352,6 +367,142 @@ describe('colorGeneratePalette', () => {
         const baseColor = result.result.metadata?.baseColor;
         expect(baseColor?.alpha).toBe(0.7);
       }
+    });
+  });
+
+  describe('harmony correctness', () => {
+    const harmonies = ['monochromatic', 'analogous', 'complementary', 'triadic', 'tetradic', 'split-complementary'] as const;
+
+    test.each(harmonies)('%s includes the base color and never repeats a color, for every count', async (harmony) => {
+      for (const baseColor of ['#3366cc', '#ff0000', '#7a5c3e', '#ffd6e0']) {
+        for (let count = 2; count <= 20; count++) {
+          const result = await colorGeneratePalette({ baseColor, harmony, count });
+
+          expect(result.success).toBe(true);
+          if (result.success) {
+            const generated = hexes(result.result.colors);
+            expect(generated).toHaveLength(count);
+            expect(generated).toContain(baseColor);
+            expect(new Set(generated).size).toBe(count);
+            expect(result.warnings).toBeUndefined();
+          }
+        }
+      }
+    });
+
+    test('analogous with an odd count keeps the base color in the middle', async () => {
+      const result = await colorGeneratePalette({ baseColor: '#3366cc', harmony: 'analogous', count: 5 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.colors[2].hex).toBe('#3366cc');
+      }
+    });
+
+    test('monochromatic runs from dark to light', async () => {
+      const result = await colorGeneratePalette({ baseColor: '#3366cc', harmony: 'monochromatic', count: 8 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const lightness = result.result.colors.map(color => ColorUtils.convertColor(color, 'oklch').values[0]);
+        expect(lightness).toEqual([...lightness].sort((a, b) => a - b));
+      }
+    });
+
+    test('oklch harmonies keep the base perceptual lightness', async () => {
+      const result = await colorGeneratePalette({ baseColor: '#3366cc', harmony: 'triadic', count: 3 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const [base, ...others] = result.result.colors.map(color => ColorUtils.convertColor(color, 'oklch').values[0]);
+        others.forEach(lightness => expect(lightness).toBeCloseTo(base, 2));
+      }
+    });
+
+    test('space changes the result', async () => {
+      const bySpace = await Promise.all((['oklch', 'lab', 'hsl'] as const).map(space =>
+        colorGeneratePalette({ baseColor: '#3366cc', harmony: 'triadic', count: 3, space })
+      ));
+
+      const palettes = bySpace.map(result => (result.success ? hexes(result.result.colors).join() : ''));
+      expect(new Set(palettes).size).toBe(3);
+      expect(palettes[2]).toBe('#3366cc,#cc3366,#66cc33'); // classic HSL triad
+    });
+
+    test.each(['#808080', '#000000', '#ffffff'])('grey base %s falls back to a monochromatic ramp with a warning', async (baseColor) => {
+      const result = await colorGeneratePalette({ baseColor, harmony: 'complementary', count: 4 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const generated = hexes(result.result.colors);
+        expect(generated).toContain(baseColor);
+        expect(new Set(generated).size).toBe(4);
+        expect(result.warnings?.[0]).toMatch(/monochromatic ramp/);
+      }
+    });
+  });
+
+  describe('options', () => {
+    test('lightnessRange is in percent and spreads from first to last color', async () => {
+      const result = await colorGeneratePalette({
+        baseColor: '#3366cc',
+        harmony: 'analogous',
+        count: 5,
+        options: { lightnessRange: [20, 80] }
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const lightness = result.result.colors.map(color => ColorUtils.convertColor(color, 'oklch').values[0]);
+        expect(lightness[0]).toBeCloseTo(0.2, 2);
+        expect(lightness[2]).toBeCloseTo(0.5, 2);
+        expect(lightness[4]).toBeCloseTo(0.8, 2);
+        expect(new Set(hexes(result.result.colors)).size).toBe(5);
+      }
+    });
+
+    test('saturationRange is a percent of the space maximum chroma', async () => {
+      const result = await colorGeneratePalette({
+        baseColor: '#3366cc',
+        harmony: 'monochromatic',
+        count: 2,
+        space: 'hsl',
+        options: { saturationRange: [0, 100] }
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const saturation = result.result.colors.map(color => ColorUtils.convertColor(color, 'hsl').values[1]);
+        expect(saturation[0]).toBeCloseTo(0, 2);
+        expect(saturation[1]).toBeCloseTo(1, 2);
+      }
+    });
+
+    test('hueShift accepts negative rotations', async () => {
+      const shifted = await colorGeneratePalette({
+        baseColor: '#3366cc',
+        harmony: 'complementary',
+        count: 2,
+        space: 'hsl',
+        options: { hueShift: -60 }
+      });
+
+      expect(shifted.success).toBe(true);
+      if (shifted.success) {
+        expect(ColorUtils.convertColor(shifted.result.colors[0], 'hsl').values[0]).toBeCloseTo(160, 0);
+      }
+    });
+  });
+
+  describe('tool definition', () => {
+    test('advertises options and object base colors', () => {
+      const { properties } = colorGeneratePaletteTool.inputSchema;
+
+      expect(properties.options.properties).toHaveProperty('lightnessRange');
+      expect(properties.options.properties).toHaveProperty('saturationRange');
+      expect(properties.options.properties).toHaveProperty('hueShift');
+      expect(properties.baseColor.oneOf).toHaveLength(2);
+      expect(properties.count.type).toBe('integer');
     });
   });
 });
