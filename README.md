@@ -1,6 +1,6 @@
 # mcp-servers
 
-A collection of Model Context Protocol (MCP) servers written in TypeScript. MCP is an open protocol that lets AI clients such as Claude Code and Claude Desktop call tools provided by local or remote servers.
+Six Model Context Protocol (MCP) servers for graphic design work, written in TypeScript. They cover color and WCAG contrast, raster images, SVG, typography, layout, and design templates. MCP is an open protocol that lets AI clients such as Claude Code and Claude Desktop call tools provided by local or remote servers.
 
 Each server lives in its own folder under `packages/`, has its own `package.json` and lockfile, and runs over stdio. Two test harnesses under `tools/` exercise the graphics servers together.
 
