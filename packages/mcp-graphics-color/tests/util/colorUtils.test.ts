@@ -2,6 +2,7 @@ import { ColorUtils } from '../../src/util/colorUtils.js';
 import { Color, ColorErrorCode } from '../../src/types/color.js';
 import { describe, test, expect } from '@jest/globals';
 import * as culori from 'culori';
+import { ColorProcessingError } from '../../src/util/colorError.js';
 
 describe('ColorUtils', () => {
   describe('parseColorInput', () => {
@@ -404,11 +405,12 @@ describe('ColorUtils', () => {
       try {
         ColorUtils.parseColorInput('invalid-color');
       } catch (error) {
-        expect(error).toBeInstanceOf(Error);
+        expect(error).toBeInstanceOf(ColorProcessingError);
         
-        const errorData = JSON.parse((error as Error).message);
+        const errorData = (error as ColorProcessingError).toColorError();
         expect(errorData.code).toBe(ColorErrorCode.INVALID_COLOR);
-        expect(errorData.message).toBeDefined();
+        expect(errorData.message).toBe('Failed to parse color input');
+        expect(errorData.details?.error).toBe('Invalid color string format');
         expect(errorData.suggestions).toBeInstanceOf(Array);
       }
     });
@@ -421,7 +423,7 @@ describe('ColorUtils', () => {
       try {
         ColorUtils.parseColorInput({ space: 'rgb' as any, values: [1, 0] });
       } catch (error) {
-        const errorData = JSON.parse((error as Error).message);
+        const errorData = (error as ColorProcessingError).toColorError();
         expect(errorData.suggestions).toContain('Use object format with space and values array');
       }
     });
@@ -512,7 +514,7 @@ describe('ColorUtils', () => {
 
       expect(() => {
         ColorUtils.convertColor(sourceColor, 'xyz' as any);
-      }).toThrow('CONVERSION_FAILED');
+      }).toThrow(expect.objectContaining({ code: ColorErrorCode.CONVERSION_FAILED }));
     });
 
     test('handles conversion failures', () => {
@@ -760,7 +762,9 @@ describe('ColorUtils', () => {
           space: 'xyz' as any,
           values: [0.5, 0.6, 0.7]
         });
-      }).toThrow('Unsupported color space: xyz');
+      }).toThrow(expect.objectContaining({
+        details: expect.objectContaining({ error: 'Unsupported color space: xyz' })
+      }));
     });
   });
 

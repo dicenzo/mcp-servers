@@ -62,7 +62,7 @@ This server reads no environment variables.
 
 ## Known issues
 
-- Last verified test run: build passes; all 331 tests pass (9 of 9 suites).
+- Last verified test run: build passes; all 334 tests pass (10 of 10 suites).
 - A few tests assert wall-clock limits (for example, a batch of conversions under 50ms) and can fail on a slow or heavily loaded machine.
 - Delta E is CIEDE2000 in `color.brandMatch`, `color.lintBrand`, and `color.contrast` metadata. About 1 is just noticeable side by side; `maxDeltaE` defaults to 3. Delta E ignores transparency, so `color.brandMatch` reports `alphaDifference` separately.
 

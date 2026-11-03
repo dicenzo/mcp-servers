@@ -1,6 +1,5 @@
-#!/usr/bin/env node
-
 import { ColorUtils } from '../util/colorUtils.js';
+import { ColorProcessingError } from '../util/colorError.js';
 import {
   ColorContrastInputSchema,
   ContrastReport,
@@ -64,11 +63,6 @@ export async function colorContrast(input: unknown): Promise<ColorContrastRespon
     const endTime = performance.now();
     const processingTime = Math.round((endTime - startTime) * 100) / 100;
     
-    // Ensure we meet performance requirements (<50ms for accessibility validation)
-    if (processingTime > 50) {
-      console.warn(`Contrast check took ${processingTime}ms, exceeding 50ms target`);
-    }
-    
     const report: ContrastReport = {
       ratio,
       score: wcagScore,
@@ -115,32 +109,31 @@ export async function colorContrast(input: unknown): Promise<ColorContrastRespon
     }
     
     // Handle structured errors from ColorUtils
+    if (error instanceof ColorProcessingError) {
+      return {
+        success: false,
+        error: error.toColorError()
+      };
+    }
+
+    // Handle unstructured errors
     if (error instanceof Error) {
-      try {
-        const colorError = JSON.parse(error.message);
-        return {
-          success: false,
-          error: colorError
-        };
-      } catch {
-        // Handle unstructured errors
-        return {
-          success: false,
-          error: {
-            code: ColorErrorCode.ACCESSIBILITY_CHECK_FAILED,
-            message: error.message || 'Contrast check failed',
-            details: {
-              input,
-              processingTime: Math.round((performance.now() - startTime) * 100) / 100
-            },
-            suggestions: [
-              'Verify foreground and background colors are valid',
-              'Check that colors are not identical',
-              'Ensure algorithm is either "wcag" or "apca"'
-            ]
-          }
-        };
-      }
+      return {
+        success: false,
+        error: {
+          code: ColorErrorCode.ACCESSIBILITY_CHECK_FAILED,
+          message: error.message || 'Contrast check failed',
+          details: {
+            input,
+            processingTime: Math.round((performance.now() - startTime) * 100) / 100
+          },
+          suggestions: [
+            'Verify foreground and background colors are valid',
+            'Check that colors are not identical',
+            'Ensure algorithm is either "wcag" or "apca"'
+          ]
+        }
+      };
     }
     
     return {

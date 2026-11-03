@@ -1,6 +1,5 @@
-#!/usr/bin/env node
-
 import { ColorUtils } from '../util/colorUtils.js';
+import { ColorProcessingError } from '../util/colorError.js';
 import {
   ColorConvertInputSchema,
   Color,
@@ -52,14 +51,6 @@ export async function colorConvert(input: unknown): Promise<ColorConvertResponse
     // Perform conversion
     const convertedColor = ColorUtils.convertColor(sourceColor, targetSpace, precision);
     
-    const endTime = performance.now();
-    const processingTime = Math.round((endTime - startTime) * 100) / 100;
-    
-    // Ensure we meet performance requirements (<10ms for color conversion)
-    if (processingTime > 10) {
-      console.warn(`Color conversion took ${processingTime}ms, exceeding 10ms target`);
-    }
-    
     return {
       success: true,
       result: convertedColor,
@@ -94,32 +85,31 @@ export async function colorConvert(input: unknown): Promise<ColorConvertResponse
     }
     
     // Handle structured errors from ColorUtils
+    if (error instanceof ColorProcessingError) {
+      return {
+        success: false,
+        error: error.toColorError()
+      };
+    }
+
+    // Handle unstructured errors
     if (error instanceof Error) {
-      try {
-        const colorError = JSON.parse(error.message);
-        return {
-          success: false,
-          error: colorError
-        };
-      } catch {
-        // Handle unstructured errors
-        return {
-          success: false,
-          error: {
-            code: ColorErrorCode.PROCESSING_FAILED,
-            message: error.message || 'Color conversion failed',
-            details: {
-              input,
-              processingTime: Math.round((performance.now() - startTime) * 100) / 100
-            },
-            suggestions: [
-              'Verify input color format is correct',
-              'Check target color space is supported',
-              'Ensure precision value is between 1 and 10'
-            ]
-          }
-        };
-      }
+      return {
+        success: false,
+        error: {
+          code: ColorErrorCode.PROCESSING_FAILED,
+          message: error.message || 'Color conversion failed',
+          details: {
+            input,
+            processingTime: Math.round((performance.now() - startTime) * 100) / 100
+          },
+          suggestions: [
+            'Verify input color format is correct',
+            'Check target color space is supported',
+            'Ensure precision value is between 1 and 10'
+          ]
+        }
+      };
     }
     
     return {

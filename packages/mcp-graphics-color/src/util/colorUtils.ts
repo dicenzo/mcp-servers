@@ -2,10 +2,10 @@ import {
   Color,
   ColorInput,
   ColorSpace,
-  ColorError,
   ColorErrorCode
 } from '../types/color.js';
 import * as culori from 'culori';
+import { ColorProcessingError } from './colorError.js';
 import type { Color as CuloriColor, Mode as CuloriMode } from 'culori';
 import type { ZodError } from 'zod';
 
@@ -72,7 +72,7 @@ export class ColorUtils {
         return this.parseObjectColor(input);
       }
     } catch (error) {
-      throw new Error(JSON.stringify({
+      throw new ColorProcessingError({
         code: ColorErrorCode.INVALID_COLOR,
         message: 'Failed to parse color input',
         details: { input, error: error instanceof Error ? error.message : 'Unknown error' },
@@ -82,7 +82,7 @@ export class ColorUtils {
           'Use named colors (red, blue, green, etc.)',
           'Use object format with space and values array'
         ]
-      } satisfies ColorError));
+      });
     }
   }
 
@@ -296,7 +296,7 @@ export class ColorUtils {
         css: culori.formatCss(convertedColor)
       };
     } catch (error) {
-      throw new Error(JSON.stringify({
+      throw new ColorProcessingError({
         code: ColorErrorCode.CONVERSION_FAILED,
         message: 'Color space conversion failed',
         details: { 
@@ -309,7 +309,7 @@ export class ColorUtils {
           'Verify target color space is supported',
           'Ensure color values are within valid ranges'
         ]
-      } satisfies ColorError));
+      });
     }
   }
 
@@ -328,7 +328,7 @@ export class ColorUtils {
       const ratio = culori.wcagContrast(fgCulori, bgCulori);
       return Math.round(ratio * 100) / 100; // Round to 2 decimal places
     } catch (error) {
-      throw new Error(JSON.stringify({
+      throw new ColorProcessingError({
         code: ColorErrorCode.ACCESSIBILITY_CHECK_FAILED,
         message: 'Failed to calculate contrast ratio',
         details: { 
@@ -340,7 +340,7 @@ export class ColorUtils {
           'Ensure both colors are valid',
           'Check color space compatibility'
         ]
-      } satisfies ColorError));
+      });
     }
   }
 
@@ -364,7 +364,7 @@ export class ColorUtils {
       const deltaE = culori.differenceEuclidean('lab')(lab1, lab2);
       return Math.round(deltaE * 100) / 100;
     } catch (error) {
-      throw new Error(JSON.stringify({
+      throw new ColorProcessingError({
         code: ColorErrorCode.PROCESSING_FAILED,
         message: 'Failed to calculate Delta E',
         details: { 
@@ -376,7 +376,7 @@ export class ColorUtils {
           'Ensure both colors are valid',
           'Check color values are within valid ranges'
         ]
-      } satisfies ColorError));
+      });
     }
   }
 
@@ -400,7 +400,7 @@ export class ColorUtils {
       }
       return Math.round(deltaE * 100) / 100;
     } catch (error) {
-      throw new Error(JSON.stringify({
+      throw new ColorProcessingError({
         code: ColorErrorCode.PROCESSING_FAILED,
         message: 'Failed to calculate CIEDE2000 Delta E',
         details: {
@@ -412,7 +412,7 @@ export class ColorUtils {
           'Ensure both colors are valid',
           'Check color values are within valid ranges'
         ]
-      } satisfies ColorError));
+      });
     }
   }
 
@@ -424,12 +424,12 @@ export class ColorUtils {
     const culoriColor = this.colorToCulori(color);
     const lch = culoriColor ? culori.converter('lch65')(culoriColor) : undefined;
     if (!lch) {
-      throw new Error(JSON.stringify({
+      throw new ColorProcessingError({
         code: ColorErrorCode.PROCESSING_FAILED,
         message: 'Failed to convert color to LCh',
         details: { color },
         suggestions: ['Ensure the color is valid']
-      } satisfies ColorError));
+      });
     }
     return { l: lch.l, c: lch.c, ...(lch.h !== undefined && { h: lch.h }) };
   }
@@ -474,7 +474,7 @@ export class ColorUtils {
           throw new Error(`Unsupported harmony type: ${harmony}`);
       }
     } catch (error) {
-      throw new Error(JSON.stringify({
+      throw new ColorProcessingError({
         code: ColorErrorCode.PALETTE_GENERATION_FAILED,
         message: 'Failed to generate color palette',
         details: { 
@@ -488,7 +488,7 @@ export class ColorUtils {
           'Check harmony type is supported',
           'Verify count is reasonable (2-20)'
         ]
-      } satisfies ColorError));
+      });
     }
   }
 

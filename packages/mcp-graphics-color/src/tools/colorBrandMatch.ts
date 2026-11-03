@@ -1,7 +1,6 @@
-#!/usr/bin/env node
-
 import { ZodError } from 'zod';
 import { ColorUtils } from '../util/colorUtils.js';
+import { ColorProcessingError } from '../util/colorError.js';
 import {
   ColorBrandMatchInputSchema,
   BrandPaletteEntry,
@@ -135,11 +134,6 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
     const endTime = performance.now();
     const processingTime = Math.round((endTime - startTime) * 100) / 100;
     
-    // Ensure we meet performance requirements (<150ms for brand matching)
-    if (processingTime > 150) {
-      console.warn(`Brand matching took ${processingTime}ms, exceeding 150ms target`);
-    }
-    
     const result: ColorMatch = {
       inputColor: parsedTargetColor,
       bestMatch: bestMatch.color,
@@ -190,33 +184,32 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
     }
 
     // Handle structured errors from ColorUtils
+    if (error instanceof ColorProcessingError) {
+      return {
+        success: false,
+        error: error.toColorError()
+      };
+    }
+
+    // Handle unstructured errors
     if (error instanceof Error) {
-      try {
-        const colorError = JSON.parse(error.message);
-        return {
-          success: false,
-          error: colorError
-        };
-      } catch {
-        // Handle unstructured errors
-        return {
-          success: false,
-          error: {
-            code: ColorErrorCode.BRAND_MATCH_FAILED,
-            message: error.message || 'Brand matching failed',
-            details: {
-              input,
-              processingTime: Math.round((performance.now() - startTime) * 100) / 100
-            },
-            suggestions: [
-              'Verify target color format is correct',
-              'Check that brand palette contains valid colors',
-              'Ensure maxDeltaE is a positive number',
-              'Try with a larger brand palette for better matches'
-            ]
-          }
-        };
-      }
+      return {
+        success: false,
+        error: {
+          code: ColorErrorCode.BRAND_MATCH_FAILED,
+          message: error.message || 'Brand matching failed',
+          details: {
+            input,
+            processingTime: Math.round((performance.now() - startTime) * 100) / 100
+          },
+          suggestions: [
+            'Verify target color format is correct',
+            'Check that brand palette contains valid colors',
+            'Ensure maxDeltaE is a positive number',
+            'Try with a larger brand palette for better matches'
+          ]
+        }
+      };
     }
     
     return {
@@ -241,27 +234,15 @@ function unpackPaletteEntry(entry: BrandPaletteEntry): { color: ColorInput; name
 }
 
 /**
- * Turn a parse failure into a plain message. ColorUtils throws errors whose
- * message is a serialized ColorError, so unwrap that when present, adding the
- * specific cause from details.error.
+ * Turn a parse failure into a plain message, adding the specific cause that
+ * ColorUtils records in details.error
  */
 function describeParseFailure(error: unknown): string {
-  if (!(error instanceof Error)) {
-    return 'Unknown parse error';
+  if (error instanceof ColorProcessingError) {
+    const cause = error.details?.error;
+    return typeof cause === 'string' ? `${error.message}: ${cause}` : error.message;
   }
-  try {
-    const parsed: unknown = JSON.parse(error.message);
-    if (parsed && typeof parsed === 'object' && 'message' in parsed && typeof parsed.message === 'string') {
-      const cause = 'details' in parsed && parsed.details && typeof parsed.details === 'object' &&
-        'error' in parsed.details && typeof parsed.details.error === 'string'
-        ? parsed.details.error
-        : undefined;
-      return cause ? `${parsed.message}: ${cause}` : parsed.message;
-    }
-  } catch {
-    // Not a serialized ColorError; fall through to the raw message
-  }
-  return error.message;
+  return error instanceof Error ? error.message : 'Unknown parse error';
 }
 
 /**
