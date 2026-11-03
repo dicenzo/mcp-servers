@@ -9,6 +9,7 @@ import {
   TypographyErrorCode 
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
+import { fontLineGap } from '../util/fontMetrics.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<TextToolResult>;
@@ -298,7 +299,7 @@ async function measureTextDimensions(
     // Calculate font metrics
     const ascender = font.ascender * scale;
     const descender = font.descender * scale;
-    const lineGap = (font.lineGap || 0) * scale;
+    const lineGap = fontLineGap(font) * scale;
     const lineHeight = ascender - descender + lineGap;
     
     // Calculate baseline positions
@@ -401,7 +402,7 @@ export async function calculateLineHeight(
   
   const ascender = font.ascender * scale;
   const descender = font.descender * scale;
-  const lineGap = (font.lineGap || 0) * scale;
+  const lineGap = fontLineGap(font) * scale;
   
   return ascender - descender + lineGap;
 }
