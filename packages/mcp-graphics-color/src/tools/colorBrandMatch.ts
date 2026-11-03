@@ -84,13 +84,16 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
       throw new Error('No valid colors found in brand palette');
     }
     
-    // Calculate CIEDE2000 Delta E for each brand color
+    // Calculate CIEDE2000 Delta E for each brand color. Delta E ignores
+    // transparency, so the alpha difference is reported alongside it.
+    const targetAlpha = alphaOf(parsedTargetColor);
     const matches = parsedBrandColors.map(brandColor => {
       const deltaE = ColorUtils.calculateDeltaE2000(parsedTargetColor, brandColor.color);
       return {
         color: brandColor.color,
         deltaE,
         withinThreshold: deltaE <= maxDeltaE,
+        alphaDifference: Math.round(Math.abs(targetAlpha - alphaOf(brandColor.color)) * 100) / 100,
         paletteIndex: brandColor.paletteIndex,
         ...(brandColor.name !== undefined && { name: brandColor.name })
       };
@@ -122,6 +125,7 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
       deltaE: bestMatch.deltaE,
       confidence,
       withinThreshold: bestMatch.withinThreshold,
+      alphaDifference: bestMatch.alphaDifference,
       paletteIndex: bestMatch.paletteIndex,
       ...(bestMatch.name !== undefined && { name: bestMatch.name }),
       alternatives,
@@ -233,10 +237,20 @@ function describeParseFailure(error: unknown): string {
 }
 
 /**
- * Determine confidence level based on Delta E distance
+ * Read a color's alpha (1 when opaque). Object inputs may carry alpha as a
+ * fourth entry in values rather than in the alpha field.
+ */
+function alphaOf(color: Color): number {
+  return color.alpha ?? (color.values.length === 4 ? color.values[3] : 1);
+}
+
+/**
+ * Determine confidence level based on Delta E distance. 'exact' also requires
+ * the match to be within maxDeltaE, so the label never contradicts
+ * withinThreshold.
  */
 function determineConfidence(deltaE: number, maxDeltaE: number): ColorMatch['confidence'] {
-  if (deltaE < 1) {
+  if (deltaE < 1 && deltaE <= maxDeltaE) {
     return 'exact';
   } else if (deltaE <= maxDeltaE * 0.4) {
     return 'high';
@@ -247,26 +261,42 @@ function determineConfidence(deltaE: number, maxDeltaE: number): ColorMatch['con
   }
 }
 
+// Mirrors ColorInputSchema: a color string or a { space, values } object
+const colorInputJsonSchema = {
+  oneOf: [
+    { type: 'string', minLength: 3, maxLength: 50 },
+    {
+      type: 'object',
+      properties: {
+        space: { enum: ['srgb', 'oklch', 'oklab', 'hsl', 'hsla', 'rgb', 'rgba', 'lab', 'lch'] },
+        values: { type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 4 },
+        alpha: { type: 'number', minimum: 0, maximum: 1 }
+      },
+      required: ['space', 'values']
+    }
+  ]
+};
+
 /**
  * Tool definition for MCP server registration
  */
 export const colorBrandMatchTool = {
   name: 'color.brandMatch',
-  description: 'Find the best matching color from a brand palette using CIEDE2000 Delta E. Palette entries may be plain colors or { name, color } objects; results report each match\'s palette index, name, and whether it falls within maxDeltaE, plus any entries skipped as unparseable.',
+  description: 'Find the best matching color from a brand palette using CIEDE2000 Delta E. Palette entries may be plain colors or { name, color } objects; results report each match\'s palette index, name, whether it falls within maxDeltaE, and its alpha difference (Delta E ignores transparency), plus any entries skipped as unparseable.',
   inputSchema: {
     type: 'object',
     properties: {
-      targetColor: { type: 'string' },
+      targetColor: colorInputJsonSchema,
       brandPalette: {
         type: 'array',
         items: {
           oneOf: [
-            { type: 'string' },
+            ...colorInputJsonSchema.oneOf,
             {
               type: 'object',
               properties: {
                 name: { type: 'string', minLength: 1, maxLength: 100 },
-                color: { type: 'string' }
+                color: colorInputJsonSchema
               },
               required: ['name', 'color']
             }
