@@ -1,7 +1,6 @@
-#!/usr/bin/env node
-
 import { z, ZodError } from 'zod';
 import { ColorUtils } from '../util/colorUtils.js';
+import { ColorProcessingError } from '../util/colorError.js';
 import {
   ColorInputSchema,
   Color,
@@ -182,11 +181,6 @@ export async function colorValidateAccessibility(input: unknown): Promise<ColorV
     const endTime = performance.now();
     const processingTime = Math.round((endTime - startTime) * 100) / 100;
     
-    // Ensure we meet performance requirements (<50ms for accessibility validation)
-    if (processingTime > 50) {
-      console.warn(`Accessibility validation took ${processingTime}ms, exceeding 50ms target`);
-    }
-    
     return {
       success: true,
       result: {
@@ -234,33 +228,32 @@ export async function colorValidateAccessibility(input: unknown): Promise<ColorV
     }
 
     // Handle structured errors from ColorUtils
+    if (error instanceof ColorProcessingError) {
+      return {
+        success: false,
+        error: error.toColorError()
+      };
+    }
+
+    // Handle unstructured errors
     if (error instanceof Error) {
-      try {
-        const colorError = JSON.parse(error.message);
-        return {
-          success: false,
-          error: colorError
-        };
-      } catch {
-        // Handle unstructured errors
-        return {
-          success: false,
-          error: {
-            code: ColorErrorCode.ACCESSIBILITY_CHECK_FAILED,
-            message: error.message || 'Accessibility validation failed',
-            details: {
-              input,
-              processingTime: Math.round((performance.now() - startTime) * 100) / 100
-            },
-            suggestions: [
-              'Verify all colors in the palette are valid',
-              'Check that context indices are within range',
-              'Ensure at least 2 colors are provided',
-              'Verify text size and level parameters are correct'
-            ]
-          }
-        };
-      }
+      return {
+        success: false,
+        error: {
+          code: ColorErrorCode.ACCESSIBILITY_CHECK_FAILED,
+          message: error.message || 'Accessibility validation failed',
+          details: {
+            input,
+            processingTime: Math.round((performance.now() - startTime) * 100) / 100
+          },
+          suggestions: [
+            'Verify all colors in the palette are valid',
+            'Check that context indices are within range',
+            'Ensure at least 2 colors are provided',
+            'Verify text size and level parameters are correct'
+          ]
+        }
+      };
     }
     
     return {
