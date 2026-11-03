@@ -18,6 +18,7 @@ import {
 } from '../types/template.js';
 import Handlebars from 'handlebars';
 import { evaluateValidationRules } from './validationRules.js';
+import { isValidColor } from './color.js';
 
 /**
  * Template validation utilities
@@ -443,12 +444,12 @@ export class TemplateValidator {
         break;
         
       case VariableType.COLOR:
-        if (typeof value !== 'string' || !this.isValidColor(value)) {
+        if (typeof value !== 'string' || !isValidColor(value)) {
           errors.push({
             code: TemplateErrorCode.INVALID_VARIABLE,
             message: `Variable '${name}' must be a valid color`,
             variableName: name,
-            suggestions: ['Use hex (#FF0000), rgb(255,0,0), hsl(0,100%,50%), or named colors']
+            suggestions: ['Use hex (#FF0000 or #FF000080), rgb()/rgba(), hsl()/hsla(), or a CSS color name']
           });
         }
         break;
@@ -703,21 +704,6 @@ export class TemplateValidator {
         }
       }
     }
-  }
-
-  /**
-   * Basic color validation
-   */
-  private static isValidColor(color: string): boolean {
-    const hexPattern = /^#([0-9A-F]{3}){1,2}$/i;
-    const rgbPattern = /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/i;
-    const hslPattern = /^hsl\(\s*\d+\s*,\s*\d+%\s*,\s*\d+%\s*\)$/i;
-    const namedColors = ['red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'black', 'white', 'gray', 'transparent'];
-    
-    return hexPattern.test(color) || 
-           rgbPattern.test(color) || 
-           hslPattern.test(color) || 
-           namedColors.includes(color.toLowerCase());
   }
 }
 

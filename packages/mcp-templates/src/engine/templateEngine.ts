@@ -19,6 +19,7 @@ import {
   MAX_RENDERED_CONTENT_LENGTH
 } from '../types/template.js';
 import { evaluateValidationRules } from '../util/validationRules.js';
+import { isValidColor } from '../util/color.js';
 
 /**
  * Hard limits on rendering work. Enforced inside the engine (not only by optional
@@ -58,9 +59,6 @@ interface RenderState {
   outputLength: number;
 }
 
-const HEX_COLOR = /^#[0-9a-f]{3,8}$/i;
-const FUNCTIONAL_COLOR = /^(rgb|rgba|hsl|hsla)\(\s*[-+0-9.%,\s/]+\)$/i;
-const NAMED_COLOR = /^[a-z]{1,30}$/i;
 const FONT_FAMILY = /^[A-Za-z0-9 ,'"_-]{1,200}$/;
 const DATA_IMAGE_URI = /^data:image\/[a-z0-9.+-]+(;[a-z0-9=.+-]+)*;base64,[A-Za-z0-9+/]*={0,2}$/i;
 const RELATIVE_PATH = /^[A-Za-z0-9._~-][A-Za-z0-9._~\-/]*(\?[A-Za-z0-9._~\-=&%]*)?$/;
@@ -238,12 +236,12 @@ export class TemplateEngine {
         break;
 
       case VariableType.COLOR:
-        if (typeof value !== 'string' || !this.isValidColor(value)) {
+        if (typeof value !== 'string' || !isValidColor(value)) {
           errors.push({
             code: TemplateErrorCode.INVALID_VARIABLE,
             message: `Variable '${name}' must be a valid color (hex, rgb, hsl, or named color)`,
             variableName: name,
-            suggestions: ['Use format like #FF0000, rgb(255,0,0), hsl(0,100%,50%), or "red"']
+            suggestions: ['Use hex (#FF0000 or #FF000080), rgb()/rgba(), hsl()/hsla(), or a CSS color name']
           });
         }
         break;
@@ -837,12 +835,12 @@ export class TemplateEngine {
   }
 
   /**
-   * Allow hex, rgb[a]() / hsl[a]() and named colors only; reject anything that could
-   * break out of an attribute or CSS declaration.
+   * Allow only colours isValidColor accepts, so nothing can break out of an
+   * attribute or CSS declaration.
    */
   private safeColor(value: unknown, field: string): string {
     const color = String(value).trim();
-    if (HEX_COLOR.test(color) || FUNCTIONAL_COLOR.test(color) || NAMED_COLOR.test(color)) {
+    if (isValidColor(color)) {
       return this.escapeXML(color);
     }
     throw new Error(`Invalid color value for ${field}: use hex, rgb(), rgba(), hsl(), hsla() or a named color`);
@@ -891,21 +889,5 @@ export class TemplateEngine {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
-  }
-
-  /**
-   * Validate color format
-   */
-  private isValidColor(color: string): boolean {
-    // Basic color validation - in production, use a more comprehensive validator
-    const hexPattern = /^#([0-9A-F]{3}){1,2}$/i;
-    const rgbPattern = /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/i;
-    const hslPattern = /^hsl\(\s*\d+\s*,\s*\d+%\s*,\s*\d+%\s*\)$/i;
-    const namedColors = ['red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'black', 'white', 'gray'];
-    
-    return hexPattern.test(color) || 
-           rgbPattern.test(color) || 
-           hslPattern.test(color) || 
-           namedColors.includes(color.toLowerCase());
   }
 }
