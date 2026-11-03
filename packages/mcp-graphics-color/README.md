@@ -10,7 +10,7 @@ It runs over stdio and works with any MCP client, including Claude Code and Clau
 | --- | --- |
 | `color.convert` | Convert colors between color spaces (sRGB, HSL, Lab, LCH, OKLCH, and others) with configurable precision. |
 | `color.contrast` | Check the WCAG contrast ratio between a foreground and background color. Also reports the CIEDE2000 Delta E between them. |
-| `color.generatePalette` | Generate a palette from a base color using a harmony rule (monochromatic, analogous, complementary, and others). |
+| `color.generatePalette` | Generate a palette from a base color using a harmony rule (monochromatic, analogous, complementary, and others). Hues rotate in OKLCH by default (or `lab`/`hsl` via `space`), the base color is always included, extra colors are tints and shades, and grey bases fall back to a monochromatic ramp with a warning. `options.lightnessRange`/`saturationRange` are percentages. |
 | `color.brandMatch` | Find the closest color in a brand palette using CIEDE2000 Delta E. Accepts named palette entries and reports threshold fit, a lightness/chroma/hue breakdown, skipped entries, and duplicates. |
 | `color.lintBrand` | Check a brand palette for near-duplicates, contrast problems, and allowed or forbidden colors (matched within a CIEDE2000 `maxDeltaE`, default 3). |
 | `color.validateAccessibility` | Validate color combinations against WCAG and return recommendations. |
@@ -100,7 +100,7 @@ This server reads no environment variables.
 
 ## Known issues
 
-- Last verified test run: build passes; all 334 tests pass (10 of 10 suites).
+- Last verified test run: build passes; all 352 tests pass (10 of 10 suites).
 - A few tests assert wall-clock limits (for example, a batch of conversions under 50ms) and can fail on a slow or heavily loaded machine.
 - `color.contrast` accepts `algorithm: "apca"` but always computes the WCAG 2 ratio. The `algorithm` field in the result echoes the input.
 - `package.json` lists chroma-js, colorjs.io, delta-e, apca-w3, and wcag-contrast as dependencies, but the source imports none of them. All color math uses culori.

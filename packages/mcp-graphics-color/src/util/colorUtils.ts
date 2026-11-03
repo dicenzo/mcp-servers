@@ -14,6 +14,46 @@ import type { ZodError } from 'zod';
  * Every culori color type is assignable to this, so channels can be read
  * without first narrowing on `mode`.
  */
+export type HarmonyType = 'monochromatic' | 'analogous' | 'complementary' | 'triadic' | 'tetradic' | 'split-complementary';
+
+/** Spaces a palette can be generated in; `lab` works in its polar form, LCH. */
+export type PaletteSpace = 'oklch' | 'lab' | 'hsl';
+
+export interface PaletteAdjustments {
+  hueShift?: number;
+  lightnessRange?: [number, number];
+  saturationRange?: [number, number];
+}
+
+interface PaletteSpaceGeometry {
+  mode: 'oklch' | 'lch' | 'hsl';
+  chromaChannel: 'c' | 's';
+  maxLightness: number;
+  maxChroma: number;
+}
+
+const PALETTE_SPACES: Record<PaletteSpace, PaletteSpaceGeometry> = {
+  oklch: { mode: 'oklch', chromaChannel: 'c', maxLightness: 1, maxChroma: 0.4 },
+  lab: { mode: 'lch', chromaChannel: 'c', maxLightness: 100, maxChroma: 150 },
+  hsl: { mode: 'hsl', chromaChannel: 's', maxLightness: 1, maxChroma: 1 }
+};
+
+/** Normalized (0-1) hue/lightness/chroma in a palette space; hue in degrees. */
+interface PaletteCoordinates {
+  hue: number;
+  lightness: number;
+  chroma: number;
+}
+
+/** OKLCH chroma below which a color counts as grey. */
+const ACHROMATIC_CHROMA = 0.02;
+
+/** Normalized lightness bounds for generated tints and shades. */
+const MIN_PALETTE_LIGHTNESS = 0.15;
+const MAX_PALETTE_LIGHTNESS = 0.95;
+/** Largest lightness step between a harmony color and its tints and shades. */
+const MAX_LIGHTNESS_STEP = 0.12;
+
 type CuloriChannels = Partial<Record<'r' | 'g' | 'b' | 'h' | 's' | 'l' | 'c' | 'a' | 'alpha', number>>;
 
 /**
@@ -435,45 +475,57 @@ export class ColorUtils {
   }
 
   /**
-   * Generate harmonious color palette from base color
+   * Generate a harmonious palette from a base color. Hues are rotated in `space`
+   * (OKLCH by default, so lightness stays perceptually even), extra colors are
+   * tints and shades of the harmony hues, and the base color itself is always
+   * included. Greys fall back to a monochromatic ramp.
    */
   static generateHarmonyPalette(
     baseColor: Color,
-    harmony: 'monochromatic' | 'analogous' | 'complementary' | 'triadic' | 'tetradic' | 'split-complementary',
-    count: number = 5
+    harmony: HarmonyType,
+    count: number = 5,
+    space: PaletteSpace = 'oklch'
   ): Color[] {
     try {
-      const baseCulori = this.colorToCulori(baseColor);
-      const toHsl = culori.converter('hsl');
-      const baseHsl = toHsl(baseCulori) as { h: number; s: number; l: number } | null | undefined;
-      
-      if (!baseHsl || typeof baseHsl !== 'object' || !('h' in baseHsl) || baseHsl.h === undefined) {
-        throw new Error('Failed to extract hue from base color');
+      const geometry = PALETTE_SPACES[space];
+      const base = this.toPaletteCoordinates(baseColor, space);
+      // Rotating the hue of a grey only produces more of the same grey
+      const requestedOffsets = this.harmonyHueOffsets(harmony, count);
+      const effectiveHarmony = this.isAchromatic(baseColor) ? 'monochromatic' : harmony;
+      const hueOffsets = effectiveHarmony === harmony
+        ? requestedOffsets
+        : this.harmonyHueOffsets(effectiveHarmony, count);
+      const levels = Math.ceil(count / hueOffsets.length);
+      const ladder = this.lightnessLadder(base.lightness, levels);
+      if (effectiveHarmony === 'monochromatic') {
+        // A single hue reads best as a dark-to-light ramp
+        ladder.sort((a, b) => a - b);
       }
 
-      switch (harmony) {
-        case 'monochromatic':
-          return this.generateMonochromatic(baseColor, count);
-        
-        case 'analogous':
-          return this.generateAnalogous(baseColor, count);
-        
-        case 'complementary':
-          return this.generateComplementary(baseColor, count);
-        
-        case 'triadic':
-          return this.generateTriadic(baseColor, count);
-        
-        case 'tetradic':
-          return this.generateTetradic(baseColor, count);
-        
-        case 'split-complementary':
-          return this.generateSplitComplementary(baseColor, count);
-        
-        default:
-          throw new Error(`Unsupported harmony type: ${harmony}`);
+      // Round 0 places every harmony hue at the base lightness; later rounds add
+      // tints and shades, nearest first, so small counts get the closest variations.
+      const colors: Color[] = [];
+      for (let round = 0; round < levels && colors.length < count; round++) {
+        for (const offset of hueOffsets) {
+          if (colors.length >= count) break;
+          const lightness = ladder[round];
+          if (offset === 0 && lightness === base.lightness) {
+            colors.push(baseColor);
+            continue;
+          }
+          colors.push(this.fromPaletteCoordinates({
+            hue: base.hue + offset,
+            lightness,
+            chroma: base.chroma
+          }, geometry, baseColor));
+        }
       }
+
+      return colors;
     } catch (error) {
+      if (error instanceof ColorProcessingError) {
+        throw error;
+      }
       throw new ColorProcessingError({
         code: ColorErrorCode.PALETTE_GENERATION_FAILED,
         message: 'Failed to generate color palette',
@@ -481,6 +533,7 @@ export class ColorUtils {
           baseColor,
           harmony,
           count,
+          space,
           error: error instanceof Error ? error.message : 'Unknown error'
         },
         suggestions: [
@@ -490,6 +543,44 @@ export class ColorUtils {
         ]
       });
     }
+  }
+
+  /**
+   * Whether a color has too little chroma for its hue to mean anything
+   * (greys, black, white and near-greys).
+   */
+  static isAchromatic(color: Color): boolean {
+    const oklch = this.convertColor(color, 'oklch', 6);
+    return oklch.values[1] < ACHROMATIC_CHROMA;
+  }
+
+  /**
+   * Adjust palette colors in the palette's working space. `hueShift` rotates every
+   * color; `lightnessRange` and `saturationRange` (percent, 0-100) replace each
+   * color's lightness or chroma, spread evenly from the first color to the last.
+   * Chroma percentages are relative to the space's maximum (OKLCH 0.4, LCH 150,
+   * HSL saturation 100%).
+   */
+  static adjustPaletteColors(
+    colors: Color[],
+    space: PaletteSpace,
+    options: PaletteAdjustments
+  ): Color[] {
+    const { hueShift, lightnessRange, saturationRange } = options;
+    const geometry = PALETTE_SPACES[space];
+    const along = (range: [number, number], index: number) => {
+      const factor = colors.length > 1 ? index / (colors.length - 1) : 0;
+      return (range[0] + (range[1] - range[0]) * factor) / 100;
+    };
+
+    return colors.map((color, index) => {
+      const coords = this.toPaletteCoordinates(color, space);
+      return this.fromPaletteCoordinates({
+        hue: coords.hue + (hueShift ?? 0),
+        lightness: lightnessRange ? along(lightnessRange, index) : coords.lightness,
+        chroma: saturationRange ? along(saturationRange, index) : coords.chroma
+      }, geometry, color);
+    });
   }
 
   /**
@@ -559,159 +650,107 @@ export class ColorUtils {
   }
 
   /**
-   * Harmony palette generators
+   * Harmony palette helpers
    */
-  private static generateMonochromatic(baseColor: Color, count: number): Color[] {
-    const colors: Color[] = [];
-    const baseHsl = this.convertColor(baseColor, 'hsl');
-    const baseLightness = baseHsl.values[2];
-    
-    for (let i = 0; i < count; i++) {
-      const lightness = Math.max(0.1, Math.min(0.9, baseLightness + (i - count/2) * 0.15));
-      colors.push(this.convertColor({
-        space: 'hsl',
-        values: [baseHsl.values[0], baseHsl.values[1], lightness]
-      }, baseColor.space));
+
+  /**
+   * Hue offsets (degrees from the base) that define each harmony. Analogous spreads
+   * `count` hues around the base, narrowing the step as the count grows.
+   */
+  private static harmonyHueOffsets(harmony: HarmonyType, count: number): number[] {
+    switch (harmony) {
+      case 'monochromatic':
+        return [0];
+      case 'analogous': {
+        const step = Math.min(30, 120 / (count - 1));
+        const centre = Math.floor((count - 1) / 2);
+        return Array.from({ length: count }, (_, i) => (i - centre) * step);
+      }
+      case 'complementary':
+        return [0, 180];
+      case 'triadic':
+        return [0, 120, 240];
+      case 'tetradic':
+        return [0, 90, 180, 270];
+      case 'split-complementary':
+        return [0, 150, 210];
+      default:
+        throw new Error(`Unsupported harmony type: ${harmony}`);
     }
-    
-    return colors;
   }
 
-  private static generateAnalogous(baseColor: Color, count: number): Color[] {
-    const colors: Color[] = [];
-    const baseHsl = this.convertColor(baseColor, 'hsl');
-    const baseHue = baseHsl.values[0];
-    
-    for (let i = 0; i < count; i++) {
-      const hue = (baseHue + (i - count/2) * 30 + 360) % 360;
-      colors.push(this.convertColor({
-        space: 'hsl',
-        values: [hue, baseHsl.values[1], baseHsl.values[2]]
-      }, baseColor.space));
+  /**
+   * `levels` distinct lightness values (normalized 0-1): the base lightness first,
+   * then steps above and below it, nearest first. Steps are at most
+   * MAX_LIGHTNESS_STEP so a few variations stay close to the base, and shrink as
+   * more are needed so they all fit in the usable range.
+   */
+  private static lightnessLadder(baseLightness: number, levels: number): number[] {
+    if (levels <= 1) return [baseLightness];
+
+    const range = MAX_PALETTE_LIGHTNESS - MIN_PALETTE_LIGHTNESS;
+    // Dividing by `levels` (not levels - 1) leaves room for levels - 1 steps
+    // on whichever sides of the anchor have space
+    const step = Math.min(MAX_LIGHTNESS_STEP, range / levels);
+    const anchor = Math.max(MIN_PALETTE_LIGHTNESS, Math.min(MAX_PALETTE_LIGHTNESS, baseLightness));
+    const inRange = (value: number) =>
+      value >= MIN_PALETTE_LIGHTNESS - 1e-9 && value <= MAX_PALETTE_LIGHTNESS + 1e-9;
+
+    // A base outside the usable range (near-black, near-white) gets the anchor as a variation
+    const ladder = [baseLightness];
+    if (anchor !== baseLightness) ladder.push(anchor);
+    for (let k = 1; ladder.length < levels; k++) {
+      for (const candidate of [anchor + k * step, anchor - k * step]) {
+        if (ladder.length < levels && inRange(candidate)) ladder.push(candidate);
+      }
     }
-    
-    return colors;
+    return ladder;
   }
 
-  private static generateComplementary(baseColor: Color, count: number): Color[] {
-    const colors: Color[] = [baseColor];
-    const baseHsl = this.convertColor(baseColor, 'hsl');
-    const complementaryHue = (baseHsl.values[0] + 180) % 360;
-    
-    colors.push(this.convertColor({
-      space: 'hsl',
-      values: [complementaryHue, baseHsl.values[1], baseHsl.values[2]]
-    }, baseColor.space));
-    
-    // Add variations if more colors needed
-    while (colors.length < count) {
-      const variation = colors.length % 2 === 0 ? baseHsl : {
-        space: 'hsl' as ColorSpace,
-        values: [complementaryHue, baseHsl.values[1], baseHsl.values[2]]
-      };
-      const lightness = Math.max(0.1, Math.min(0.9, variation.values[2] + (colors.length * 0.1)));
-      
-      colors.push(this.convertColor({
-        space: 'hsl',
-        values: [variation.values[0], variation.values[1], lightness]
-      }, baseColor.space));
+  /**
+   * Read a color as normalized hue/lightness/chroma in the palette's working space.
+   * Lightness and chroma are 0-1 fractions of the space's range; a missing hue
+   * (greys) reads as 0.
+   */
+  private static toPaletteCoordinates(color: Color, space: PaletteSpace): PaletteCoordinates {
+    const geometry = PALETTE_SPACES[space];
+    const converted = culori.converter(geometry.mode)(this.colorToCulori(color));
+    if (!converted) {
+      throw new Error(`Conversion to ${geometry.mode} failed`);
     }
-    
-    return colors.slice(0, count);
+    const channels: CuloriChannels = converted;
+    return {
+      hue: channels.h ?? 0,
+      lightness: (channels.l ?? 0) / geometry.maxLightness,
+      chroma: (channels[geometry.chromaChannel] ?? 0) / geometry.maxChroma
+    };
   }
 
-  private static generateTriadic(baseColor: Color, count: number): Color[] {
-    const colors: Color[] = [baseColor];
-    const baseHsl = this.convertColor(baseColor, 'hsl');
-    const baseHue = baseHsl.values[0];
-    
-    // Add triadic colors (120° apart)
-    for (let i = 1; i <= 2; i++) {
-      const hue = (baseHue + i * 120) % 360;
-      colors.push(this.convertColor({
-        space: 'hsl',
-        values: [hue, baseHsl.values[1], baseHsl.values[2]]
-      }, baseColor.space));
-    }
-    
-    // Add variations if more colors needed
-    while (colors.length < count) {
-      const baseIndex = (colors.length - 3) % 3;
-      const baseForVariation = colors[baseIndex];
-      const baseHslVar = this.convertColor(baseForVariation, 'hsl');
-      const lightness = Math.max(0.1, Math.min(0.9, baseHslVar.values[2] + 0.2));
-      
-      colors.push(this.convertColor({
-        space: 'hsl',
-        values: [baseHslVar.values[0], baseHslVar.values[1], lightness]
-      }, baseColor.space));
-    }
-    
-    return colors.slice(0, count);
-  }
+  /**
+   * Build a color from normalized palette coordinates, reduce its chroma until it
+   * fits in sRGB, and return it in the template color's space with its alpha.
+   */
+  private static fromPaletteCoordinates(
+    coords: PaletteCoordinates,
+    geometry: PaletteSpaceGeometry,
+    template: Color
+  ): Color {
+    const hue = ((coords.hue % 360) + 360) % 360;
+    const lightness = Math.max(0, Math.min(1, coords.lightness)) * geometry.maxLightness;
+    const chroma = Math.max(0, coords.chroma) * geometry.maxChroma;
 
-  private static generateTetradic(baseColor: Color, count: number): Color[] {
-    const colors: Color[] = [baseColor];
-    const baseHsl = this.convertColor(baseColor, 'hsl');
-    const baseHue = baseHsl.values[0];
-    
-    // Add tetradic colors (90° apart)
-    for (let i = 1; i <= 3; i++) {
-      const hue = (baseHue + i * 90) % 360;
-      colors.push(this.convertColor({
-        space: 'hsl',
-        values: [hue, baseHsl.values[1], baseHsl.values[2]]
-      }, baseColor.space));
+    let values: number[];
+    if (geometry.mode === 'hsl') {
+      values = [hue, Math.min(1, chroma), lightness];
+    } else {
+      const mapped: CuloriChannels = culori.clampChroma(
+        { mode: geometry.mode, l: lightness, c: chroma, h: hue },
+        geometry.mode
+      );
+      values = [mapped.l ?? lightness, mapped.c ?? 0, hue];
     }
-    
-    // Add variations if more colors needed
-    while (colors.length < count) {
-      const baseIndex = (colors.length - 4) % 4;
-      const baseForVariation = colors[baseIndex];
-      const baseHslVar = this.convertColor(baseForVariation, 'hsl');
-      const lightness = Math.max(0.1, Math.min(0.9, baseHslVar.values[2] + 0.15));
-      
-      colors.push(this.convertColor({
-        space: 'hsl',
-        values: [baseHslVar.values[0], baseHslVar.values[1], lightness]
-      }, baseColor.space));
-    }
-    
-    return colors.slice(0, count);
-  }
 
-  private static generateSplitComplementary(baseColor: Color, count: number): Color[] {
-    const colors: Color[] = [baseColor];
-    const baseHsl = this.convertColor(baseColor, 'hsl');
-    const baseHue = baseHsl.values[0];
-    
-    // Add split-complementary colors (150° and 210° from base)
-    const splitHue1 = (baseHue + 150) % 360;
-    const splitHue2 = (baseHue + 210) % 360;
-    
-    colors.push(this.convertColor({
-      space: 'hsl',
-      values: [splitHue1, baseHsl.values[1], baseHsl.values[2]]
-    }, baseColor.space));
-    
-    colors.push(this.convertColor({
-      space: 'hsl',
-      values: [splitHue2, baseHsl.values[1], baseHsl.values[2]]
-    }, baseColor.space));
-    
-    // Add variations if more colors needed
-    while (colors.length < count) {
-      const baseIndex = (colors.length - 3) % 3;
-      const baseForVariation = colors[baseIndex];
-      const baseHslVar = this.convertColor(baseForVariation, 'hsl');
-      const lightness = Math.max(0.1, Math.min(0.9, baseHslVar.values[2] + 0.2));
-      
-      colors.push(this.convertColor({
-        space: 'hsl',
-        values: [baseHslVar.values[0], baseHslVar.values[1], lightness]
-      }, baseColor.space));
-    }
-    
-    return colors.slice(0, count);
+    const color: Color = { space: geometry.mode, values, alpha: template.alpha };
+    return this.convertColor(color, template.space);
   }
 }

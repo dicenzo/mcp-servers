@@ -19,6 +19,22 @@ export const ColorInputSchema = z.union([
 
 export type ColorInput = z.infer<typeof ColorInputSchema>;
 
+/** JSON Schema equivalent of ColorInputSchema, for MCP tool definitions */
+export const colorInputJsonSchema = {
+  oneOf: [
+    { type: 'string', minLength: 3, maxLength: 50 },
+    {
+      type: 'object',
+      properties: {
+        space: { enum: ['srgb', 'oklch', 'oklab', 'hsl', 'hsla', 'rgb', 'rgba', 'lab', 'lch'] },
+        values: { type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 4 },
+        alpha: { type: 'number', minimum: 0, maximum: 1 }
+      },
+      required: ['space', 'values']
+    }
+  ]
+};
+
 /**
  * Standardized color output format
  */
@@ -214,15 +230,17 @@ export const ColorContrastInputSchema = z.object({
 export type ColorContrastInput = z.infer<typeof ColorContrastInputSchema>;
 
 // Palette generation tool
+const PercentSchema = z.number().min(0).max(100);
+
 export const ColorPaletteInputSchema = z.object({
   baseColor: ColorInputSchema,
   harmony: z.enum(['monochromatic', 'analogous', 'complementary', 'triadic', 'tetradic', 'split-complementary']),
-  count: z.number().min(2).max(20).default(5),
+  count: z.number().int().min(2).max(20).default(5),
   space: z.enum(['oklch', 'hsl', 'lab']).default('oklch').optional(),
   options: z.object({
-    saturationRange: z.tuple([z.number(), z.number()]).optional(),
-    lightnessRange: z.tuple([z.number(), z.number()]).optional(),
-    hueShift: z.number().min(0).max(360).optional()
+    saturationRange: z.tuple([PercentSchema, PercentSchema]).optional(),
+    lightnessRange: z.tuple([PercentSchema, PercentSchema]).optional(),
+    hueShift: z.number().min(-360).max(360).optional()
   }).optional()
 });
 
