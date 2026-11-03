@@ -275,6 +275,18 @@ export function getCurrentTimestamp(): string {
 }
 
 /**
+ * Templates are not stored, so a string id can't be looked up
+ */
+export function rejectTemplateId(template: unknown): void {
+  if (typeof template === 'string') {
+    throw new Error(
+      `Template ids can't be looked up ('${template.slice(0, 100)}'). Pass the template object ` +
+      'that template.create or template.library.compose returned as `template`.'
+    );
+  }
+}
+
+/**
  * Parse template size string (e.g., "1920x1080") to dimensions
  */
 export function parseTemplateSize(size: string): { width: number; height: number } | null {
