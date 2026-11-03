@@ -58,8 +58,8 @@ export async function colorContrast(input: unknown): Promise<ColorContrastRespon
     
     const wcagScore = calculateWCAGCompliance(ratio, textSize, level);
     
-    // Calculate Delta E for additional context
-    const deltaE = ColorUtils.calculateDeltaE(fgColor, bgColor);
+    // Calculate CIEDE2000 Delta E for additional context
+    const deltaE = ColorUtils.calculateDeltaE2000(fgColor, bgColor);
     
     const endTime = performance.now();
     const processingTime = Math.round((endTime - startTime) * 100) / 100;
@@ -77,7 +77,8 @@ export async function colorContrast(input: unknown): Promise<ColorContrastRespon
       background: bgColor,
       metadata: {
         calculatedAt: new Date().toISOString(),
-        deltaE
+        deltaE,
+        deltaEAlgorithm: 'ciede2000'
       }
     };
     

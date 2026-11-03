@@ -836,4 +836,21 @@ describe('colorBrandMatch', () => {
       }
     });
   });
+  describe('default maxDeltaE', () => {
+    test('defaults to a CIEDE2000 threshold of 3', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF0000',
+        brandPalette: ['#F00000'] // CIEDE2000 ~3.19
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.withinThreshold).toBe(false);
+      }
+    });
+
+    test('advertises the default in the MCP input schema', () => {
+      expect(colorBrandMatchTool.inputSchema.properties.maxDeltaE.default).toBe(3);
+    });
+  });
 });

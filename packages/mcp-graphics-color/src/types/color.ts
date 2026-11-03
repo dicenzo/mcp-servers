@@ -65,6 +65,7 @@ export interface ContrastReport {
   metadata?: {
     calculatedAt: string;
     deltaE?: number;
+    deltaEAlgorithm?: 'ciede2000';
   };
 }
 
@@ -227,6 +228,12 @@ export const ColorPaletteInputSchema = z.object({
 
 export type ColorPaletteInput = z.infer<typeof ColorPaletteInputSchema>;
 
+/**
+ * Default CIEDE2000 tolerance for brand matching and linting. About 1 is just
+ * noticeable side by side and 2-3 reads as "the same color" in use.
+ */
+export const DEFAULT_MAX_DELTA_E = 3;
+
 // Brand color matching tool
 export const BrandPaletteEntrySchema = z.union([
   ColorInputSchema,
@@ -241,7 +248,7 @@ export type BrandPaletteEntry = z.infer<typeof BrandPaletteEntrySchema>;
 export const ColorBrandMatchInputSchema = z.object({
   targetColor: ColorInputSchema,
   brandPalette: z.array(BrandPaletteEntrySchema).min(1).max(50),
-  maxDeltaE: z.number().min(0).max(100).default(5).optional(),
+  maxDeltaE: z.number().min(0).max(100).default(DEFAULT_MAX_DELTA_E).optional(),
   includeAlternatives: z.boolean().default(true).optional(),
   maxAlternatives: z.number().int().min(0).max(49).default(3).optional()
 });
@@ -255,7 +262,7 @@ export const ColorBrandLintInputSchema = z.object({
     minContrast: z.number().min(1).max(21).optional(),
     allowedColors: z.array(ColorInputSchema).optional(),
     forbiddenColors: z.array(ColorInputSchema).optional(),
-    maxDeltaE: z.number().min(0).max(100).default(5).optional(),
+    maxDeltaE: z.number().min(0).max(100).default(DEFAULT_MAX_DELTA_E).optional(),
     requiredAccessibility: z.object({
       textSize: z.enum(['normal', 'large']).default('normal'),
       level: z.enum(['AA', 'AAA']).default('AA')
