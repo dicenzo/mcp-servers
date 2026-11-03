@@ -261,18 +261,20 @@ export class ImageUtils {
   }
 
   /**
-   * Convert Sharp instance to base64 output
+   * Convert Sharp instance to base64 output. Encoding happens here, so
+   * callers pass encoder options (quality etc.) rather than calling toFormat.
    */
   static async sharpToOutput(
     sharpInstance: Sharp,
     format: ImageFormat,
     operation: string,
     startTime: number,
-    inputSize: number
+    inputSize: number,
+    encodeOptions: SharpFormatOptions = {}
   ): Promise<ImageOutput> {
     try {
-      // Apply format-specific options
-      const formatOptions = ImageUtils.getFormatOptions(format);
+      // Format defaults, overridden by the caller's encoder options (e.g. quality)
+      const formatOptions = { ...ImageUtils.getFormatOptions(format), ...encodeOptions };
       const outputSharp = sharpInstance.toFormat(toSharpFormat(format), formatOptions);
       
       // Generate output buffer
@@ -352,12 +354,6 @@ export class ImageUtils {
       const parsedInput = ImageUtils.parseImageInput(imageInput);
       const sharpInstance = await ImageUtils.createSharpFromInput(parsedInput);
       
-      // Apply quality if specified
-      if (quality !== undefined) {
-        const formatOptions = { ...ImageUtils.getFormatOptions(targetFormat), quality };
-        sharpInstance.toFormat(toSharpFormat(targetFormat), formatOptions);
-      }
-      
       const base64Data = parsedInput.data.replace(/^data:image\/[a-z]+;base64,/, '');
       const inputSize = Buffer.from(base64Data, 'base64').length;
       
@@ -366,7 +362,8 @@ export class ImageUtils {
         targetFormat,
         `convert_to_${targetFormat}`,
         startTime,
-        inputSize
+        inputSize,
+        quality !== undefined ? { quality } : {}
       );
 
       // Validate performance
@@ -661,45 +658,44 @@ export class ImageUtils {
     try {
       const parsedInput = ImageUtils.parseImageInput(imageInput);
       const validOptions = validateOptimizationOptions(options);
-      let sharpInstance = await ImageUtils.createSharpFromInput(parsedInput);
-      
       // Apply target-specific optimizations
       const optimizationSettings = ImageUtils.getOptimizationSettings(validOptions);
-      
-      // Apply quality settings
-      if (optimizationSettings.quality !== undefined) {
-        const formatOptions = { 
-          ...ImageUtils.getFormatOptions(parsedInput.format), 
-          quality: optimizationSettings.quality,
-          progressive: optimizationSettings.progressive
-        };
-        sharpInstance = sharpInstance.toFormat(toSharpFormat(parsedInput.format), formatOptions);
-      }
-      
-      // Apply size constraints if specified
-      if (optimizationSettings.maxDimension) {
-        sharpInstance = sharpInstance.resize({
-          width: optimizationSettings.maxDimension,
-          height: optimizationSettings.maxDimension,
-          fit: 'inside',
-          withoutEnlargement: true
-        });
-      }
-      
       const base64Data = parsedInput.data.replace(/^data:image\/[a-z]+;base64,/, '');
       const inputSize = Buffer.from(base64Data, 'base64').length;
-      
-      let result = await ImageUtils.sharpToOutput(
-        sharpInstance,
-        parsedInput.format,
-        `optimize_${validOptions.target}`,
-        startTime,
-        inputSize
-      );
 
-      // Enforce file size limit if specified
-      if (validOptions.maxFileSize && result.metadata.fileSize !== undefined && result.metadata.fileSize > validOptions.maxFileSize) {
-        result = await ImageUtils.optimizeToFileSize(parsedInput, validOptions.maxFileSize, startTime, inputSize);
+      const encode = async (quality: number | undefined): Promise<ImageOutput> => {
+        let sharpInstance = await ImageUtils.createSharpFromInput(parsedInput);
+        if (optimizationSettings.maxDimension) {
+          sharpInstance = sharpInstance.resize({
+            width: optimizationSettings.maxDimension,
+            height: optimizationSettings.maxDimension,
+            fit: 'inside',
+            withoutEnlargement: true
+          });
+        }
+        return ImageUtils.sharpToOutput(
+          sharpInstance,
+          parsedInput.format,
+          `optimize_${validOptions.target}`,
+          startTime,
+          inputSize,
+          {
+            ...(quality !== undefined && { quality }),
+            ...(optimizationSettings.progressive !== undefined && { progressive: optimizationSettings.progressive })
+          }
+        );
+      };
+
+      let result = await encode(optimizationSettings.quality);
+
+      // Enforce file size limit by stepping quality down, keeping the target's resize
+      const maxFileSize = validOptions.maxFileSize;
+      if (maxFileSize !== undefined) {
+        let quality = optimizationSettings.quality ?? DEFAULT_PROCESSING_CONTEXT.quality;
+        while ((result.metadata.fileSize ?? 0) > maxFileSize && quality > 10) {
+          quality = Math.max(10, quality - 10);
+          result = await encode(quality);
+        }
       }
 
       // Validate performance
@@ -749,33 +745,6 @@ export class ImageUtils {
     }
 
     return settings;
-  }
-
-  /**
-   * Optimize image to specific file size
-   */
-  static async optimizeToFileSize(
-    imageInput: ImageInput,
-    maxFileSize: number,
-    startTime: number,
-    inputSize: number
-  ): Promise<ImageOutput> {
-    let quality = 80;
-    let result: ImageOutput;
-    
-    do {
-      const sharpInstance = await ImageUtils.createSharpFromInput(imageInput);
-      const formatOptions = { 
-        ...ImageUtils.getFormatOptions(imageInput.format), 
-        quality 
-      };
-      
-      sharpInstance.toFormat(toSharpFormat(imageInput.format), formatOptions);
-      result = await ImageUtils.sharpToOutput(sharpInstance, imageInput.format, 'optimize_filesize', startTime, inputSize);
-      quality -= 10;
-    } while (result.metadata.fileSize !== undefined && result.metadata.fileSize > maxFileSize && quality > 10);
-    
-    return result;
   }
 
   /**
