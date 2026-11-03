@@ -187,6 +187,7 @@ export class ImageUtils {
     let detectedCompression: string | undefined;
     let width: number | undefined;
     let height: number | undefined;
+    let orientation: number | undefined;
 
     try {
       // Remove data URL prefix if present
@@ -214,7 +215,8 @@ export class ImageUtils {
         format: detectedFormat,
         compression: detectedCompression,
         width,
-        height
+        height,
+        orientation
       } = await sharpInstance.metadata());
     } catch (error) {
       if (error instanceof ImageProcessingError) {
@@ -257,6 +259,18 @@ export class ImageUtils {
       });
     }
 
+    // Bake EXIF orientation into the pixels, so every operation (and the
+    // dimensions callers read from metadata()) uses displayed coordinates
+    if (orientation !== undefined && orientation > 1) {
+      // Uncompressed TIFF keeps the pixels lossless and carries the ICC profile
+      const oriented = await sharpInstance
+        .autoOrient()
+        .keepIccProfile()
+        .tiff({ compression: 'none' })
+        .toBuffer();
+      sharpInstance = sharp(oriented, SHARP_INPUT_OPTIONS);
+    }
+
     return sharpInstance;
   }
 
@@ -275,7 +289,10 @@ export class ImageUtils {
     try {
       // Format defaults, overridden by the caller's encoder options (e.g. quality)
       const formatOptions = { ...ImageUtils.getFormatOptions(format), ...encodeOptions };
-      const outputSharp = sharpInstance.toFormat(toSharpFormat(format), formatOptions);
+      // Keep the input's ICC profile so wide-gamut (e.g. Display P3) colours
+      // survive instead of being converted to untagged sRGB. sharp still
+      // converts CMYK input to sRGB.
+      const outputSharp = sharpInstance.keepIccProfile().toFormat(toSharpFormat(format), formatOptions);
       
       // Generate output buffer
       const outputBuffer = await outputSharp.toBuffer();
