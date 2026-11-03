@@ -18,9 +18,9 @@ describe('colorGeneratePalette', () => {
       if (result.success) {
         expect(result.result.colors).toHaveLength(5);
         expect(result.result.harmony).toBe('monochromatic');
-        expect(result.result.name).toBe('monochromatic-palette-5');
-        expect(result.result.metadata?.baseColor).toBeDefined();
-        expect(result.result.metadata?.generatedAt).toBeDefined();
+        expect(result.result.name).toBe('Monochromatic palette from #ff0000 (5 colors)');
+        expect(result.result.metadata).toEqual({ baseColor: expect.objectContaining({ hex: '#ff0000' }) });
+        expect(result.metadata.generatedAt).toBeDefined();
       }
     });
 
@@ -819,6 +819,46 @@ describe('colorGeneratePalette', () => {
       expect(properties).toHaveProperty('scale');
       expect(properties.exports.items.enum).toEqual(['css', 'tailwind', 'tokens']);
       expect(properties).toHaveProperty('exportPrefix');
+    });
+  });
+
+  describe('housekeeping', () => {
+    test('validation errors name the failing field and suggest a fix for it', async () => {
+      const result = await colorGeneratePalette({
+        baseColor: '#3366cc',
+        harmony: 'triadic',
+        count: 3,
+        options: { lightnessRange: [20, 180] }
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toMatch(/^Invalid input parameters: options > lightness range > 1: /);
+        expect(result.error.suggestions).toEqual([expect.stringMatching(/percentages \(0-100\)/)]);
+        expect(Array.isArray(result.error.details?.validationErrors)).toBe(true);
+      }
+    });
+
+    test('several failing fields each get a suggestion', async () => {
+      const result = await colorGeneratePalette({ baseColor: '#3366cc', harmony: 'pentadic', count: 30 });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain('harmony');
+        expect(result.error.message).toContain('count');
+        expect(result.error.suggestions).toHaveLength(2);
+      }
+    });
+
+    test('names reflect the palette actually produced', async () => {
+      const grey = await colorGeneratePalette({ baseColor: '#808080', harmony: 'triadic', count: 4 });
+      const spaced = await colorGeneratePalette({ baseColor: '#3366cc', harmony: 'monochromatic', count: 20, minDeltaE: 20 });
+
+      expect(grey.success && spaced.success).toBe(true);
+      if (grey.success && spaced.success) {
+        expect(grey.result.name).toBe('Monochromatic palette from #808080 (4 colors)');
+        expect(spaced.result.name).toBe(`Monochromatic palette from #3366cc (${spaced.result.colors.length} colors)`);
+      }
     });
   });
 });

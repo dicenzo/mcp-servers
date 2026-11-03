@@ -1,3 +1,4 @@
+import { ZodError } from 'zod';
 import { ColorUtils, HarmonyType, PaletteSpace, PaletteSwatchDraft } from '../util/colorUtils.js';
 import { ColorProcessingError } from '../util/colorError.js';
 import {
@@ -21,6 +22,20 @@ const AA_TEXT_CONTRAST = 4.5;
 const GAMUT_WARNING_LOSS = 0.75;
 /** Upper bound on extra candidates generated when spacing colors apart */
 const MAX_CANDIDATES = 60;
+
+/** Fix-it hints for each input field, used when validation fails */
+const FIELD_SUGGESTIONS: Record<string, string> = {
+  baseColor: 'Use hex (#RRGGBB), a CSS color string, a named color, or a { space, values } object',
+  harmony: 'Use monochromatic, analogous, complementary, triadic, tetradic, or split-complementary',
+  count: 'Use a whole number from 2 to 20',
+  space: 'Use oklch, lab, or hsl',
+  options: 'lightnessRange and saturationRange are [first, last] percentages (0-100); hueShift is -360 to 360',
+  lockedColors: 'Pass at most 10 valid colors, fewer than count',
+  minDeltaE: 'Use a number from 0 to 50 (about 5 is clearly different)',
+  scale: 'Use true or false',
+  exports: 'Use any of css, tailwind, tokens',
+  exportPrefix: 'Use lowercase letters, digits, and hyphens, starting with a letter (max 40)'
+};
 
 const WHITE: Color = { space: 'srgb', values: [1, 1, 1] };
 const BLACK: Color = { space: 'srgb', values: [0, 0, 0] };
@@ -159,14 +174,10 @@ export async function colorGeneratePalette(input: unknown): Promise<ColorGenerat
     const processingTime = Math.round((endTime - startTime) * 100) / 100;
     
     const palette: ColorPalette = {
-      name: `${harmony}-palette-${count}`,
+      name: paletteName(parsedBaseColor, harmony, colors.length),
       colors,
       harmony,
-      metadata: {
-        baseColor: parsedBaseColor,
-        generatedAt: new Date().toISOString(),
-        algorithm: `harmony-${harmony}`
-      }
+      metadata: { baseColor: parsedBaseColor }
     };
     
     return {
@@ -186,24 +197,23 @@ export async function colorGeneratePalette(input: unknown): Promise<ColorGenerat
     };
     
   } catch (error) {
-    // Handle Zod validation errors
-    if (error instanceof Error && error.name === 'ZodError') {
+    // Handle schema validation errors, naming the fields that failed
+    if (error instanceof ZodError) {
+      const fields = [...new Set(error.issues.map(issue => String(issue.path[0] ?? '')))];
+      const suggestions = fields
+        .map(field => FIELD_SUGGESTIONS[field])
+        .filter((suggestion): suggestion is string => suggestion !== undefined);
       return {
         success: false,
         error: {
           code: ColorErrorCode.PALETTE_GENERATION_FAILED,
-          message: 'Invalid input parameters',
+          message: ColorUtils.describeValidationError(error),
           details: {
             input,
-            validationErrors: error.message,
+            validationErrors: error.issues,
             processingTime: Math.round((performance.now() - startTime) * 100) / 100
           },
-          suggestions: [
-            'Verify base color format is correct',
-            'Check harmony type is supported',
-            'Ensure count is between 2 and 20',
-            'Verify color space is valid'
-          ]
+          suggestions: suggestions.length > 0 ? suggestions : ['Provide baseColor and harmony']
         }
       };
     }
@@ -246,6 +256,16 @@ export async function colorGeneratePalette(input: unknown): Promise<ColorGenerat
       }
     };
   }
+}
+
+/**
+ * A readable name such as "Triadic palette from #3366cc (5 colors)". Grey bases
+ * are named monochromatic, since that is what they produce.
+ */
+function paletteName(baseColor: Color, harmony: HarmonyType, count: number): string {
+  const effective = ColorUtils.isAchromatic(baseColor) ? 'monochromatic' : harmony;
+  const title = effective.charAt(0).toUpperCase() + effective.slice(1);
+  return `${title} palette from ${hexOf(baseColor)} (${count} colors)`;
 }
 
 function parseLockedColor(input: ColorInput, index: number): Color {
