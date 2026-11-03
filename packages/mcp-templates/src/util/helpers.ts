@@ -187,29 +187,6 @@ export function extractVariableNames(template: string): string[] {
 }
 
 /**
- * Validate color string
- */
-export function isValidColor(color: string): boolean {
-  const hexPattern = /^#([0-9A-F]{3}){1,2}$/i;
-  const rgbPattern = /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/i;
-  const rgbaPattern = /^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*[01]?(\.\d+)?\s*\)$/i;
-  const hslPattern = /^hsl\(\s*\d+\s*,\s*\d+%\s*,\s*\d+%\s*\)$/i;
-  const hslaPattern = /^hsla\(\s*\d+\s*,\s*\d+%\s*,\s*\d+%\s*,\s*[01]?(\.\d+)?\s*\)$/i;
-  const namedColors = [
-    'transparent', 'black', 'white', 'red', 'green', 'blue', 'yellow', 'orange', 
-    'purple', 'pink', 'brown', 'gray', 'grey', 'cyan', 'magenta', 'lime',
-    'maroon', 'navy', 'olive', 'teal', 'silver', 'aqua', 'fuchsia'
-  ];
-  
-  return hexPattern.test(color) || 
-         rgbPattern.test(color) || 
-         rgbaPattern.test(color) ||
-         hslPattern.test(color) ||
-         hslaPattern.test(color) ||
-         namedColors.includes(color.toLowerCase());
-}
-
-/**
  * Validate URL string
  */
 export function isValidUrl(url: string): boolean {
