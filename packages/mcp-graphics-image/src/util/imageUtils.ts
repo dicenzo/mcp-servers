@@ -60,6 +60,11 @@ function toSharpFormat(format: ImageFormat): keyof FormatEnum | 'avif' {
   return format === 'jpg' ? 'jpeg' : format;
 }
 
+/** Output formats that can hold more than one frame */
+function canAnimate(format: ImageFormat): boolean {
+  return format === 'gif' || format === 'webp';
+}
+
 /**
  * Compare a declared ImageFormat with the format sharp detected from the
  * bytes. jpg/jpeg are equivalent, and sharp reports AVIF as AV1-compressed heif.
@@ -180,9 +185,17 @@ export class ImageUtils {
    * format differs from the declared one or whose dimensions exceed
    * MAX_DIMENSION, so bombs and smuggled formats (e.g. SVG labelled png)
    * never reach a full decode.
+   *
+   * With `animated`, a multi-frame GIF/WebP keeps all its frames (pass it
+   * when the output format can animate); otherwise only the first is read.
    */
-  static async createSharpFromInput(imageInput: ImageInput): Promise<Sharp> {
+  static async createSharpFromInput(
+    imageInput: ImageInput,
+    { animated = false }: { animated?: boolean } = {}
+  ): Promise<Sharp> {
     let sharpInstance: Sharp;
+    let buffer: Buffer;
+    let pages: number | undefined;
     let detectedFormat: string | undefined;
     let detectedCompression: string | undefined;
     let width: number | undefined;
@@ -199,7 +212,7 @@ export class ImageUtils {
           suggestions: ['Reduce image file size before processing']
         });
       }
-      const buffer = Buffer.from(base64Data, 'base64');
+      buffer = Buffer.from(base64Data, 'base64');
       
       // Validate file size
       if (buffer.length > MEMORY_LIMITS.MAX_IMAGE_SIZE) {
@@ -216,7 +229,8 @@ export class ImageUtils {
         compression: detectedCompression,
         width,
         height,
-        orientation
+        orientation,
+        pages
       } = await sharpInstance.metadata());
     } catch (error) {
       if (error instanceof ImageProcessingError) {
@@ -259,6 +273,11 @@ export class ImageUtils {
       });
     }
 
+    if (animated && pages !== undefined && pages > 1 &&
+        width * height * pages <= SHARP_INPUT_OPTIONS.limitInputPixels) {
+      sharpInstance = sharp(buffer, { ...SHARP_INPUT_OPTIONS, animated: true });
+    }
+
     // Bake EXIF orientation into the pixels, so every operation (and the
     // dimensions callers read from metadata()) uses displayed coordinates
     if (orientation !== undefined && orientation > 1) {
@@ -296,6 +315,7 @@ export class ImageUtils {
       
       // Generate output buffer
       const outputBuffer = await outputSharp.toBuffer();
+      const warnings = await ImageUtils.droppedFrameWarnings(sharpInstance, outputBuffer);
       const base64Data = outputBuffer.toString('base64');
       
       // Extract metadata
@@ -325,7 +345,8 @@ export class ImageUtils {
           ...metadata,
           fileSize: outputBuffer.length
         },
-        processingMetadata
+        processingMetadata,
+        ...(warnings.length > 0 && { warnings })
       };
     } catch (error) {
       throw new ImageProcessingError({
@@ -334,6 +355,22 @@ export class ImageUtils {
         details: { error: error instanceof Error ? error.message : 'Unknown error' }
       });
     }
+  }
+
+  /**
+   * A warning when the input had several frames but the output has one,
+   * so callers know an animation was flattened to its first frame
+   */
+  static async droppedFrameWarnings(input: Sharp, outputBuffer: Buffer): Promise<string[]> {
+    const { pages: inputPages } = await input.metadata();
+    if (inputPages === undefined || inputPages <= 1) {
+      return [];
+    }
+    const { pages: outputPages } = await sharp(outputBuffer, SHARP_INPUT_OPTIONS).metadata();
+    if (outputPages !== undefined && outputPages > 1) {
+      return [];
+    }
+    return [`Animated input has ${inputPages} frames; only the first frame was kept`];
   }
 
   /**
@@ -369,7 +406,7 @@ export class ImageUtils {
     
     try {
       const parsedInput = ImageUtils.parseImageInput(imageInput);
-      const sharpInstance = await ImageUtils.createSharpFromInput(parsedInput);
+      const sharpInstance = await ImageUtils.createSharpFromInput(parsedInput, { animated: canAnimate(targetFormat) });
       
       const base64Data = parsedInput.data.replace(/^data:image\/[a-z]+;base64,/, '');
       const inputSize = Buffer.from(base64Data, 'base64').length;
@@ -437,7 +474,7 @@ export class ImageUtils {
         sharpInstance = imageInputOrSharp as Sharp;
       } else {
         const parsedInput = ImageUtils.parseImageInput(imageInputOrSharp as ImageInput);
-        sharpInstance = await ImageUtils.createSharpFromInput(parsedInput);
+        sharpInstance = await ImageUtils.createSharpFromInput(parsedInput, { animated: canAnimate(parsedInput.format) });
       }
       
       const validDimensions = validateDimensions(dimensions);
@@ -528,19 +565,21 @@ export class ImageUtils {
         sharpInstance = imageInputOrSharp as Sharp;
       } else {
         const parsedInput = ImageUtils.parseImageInput(imageInputOrSharp as ImageInput);
-        sharpInstance = await ImageUtils.createSharpFromInput(parsedInput);
+        sharpInstance = await ImageUtils.createSharpFromInput(parsedInput, { animated: canAnimate(parsedInput.format) });
       }
       
       const validBounds = validateRectangle(bounds);
       
       // Validate crop bounds against image dimensions
+      // For animations, bounds are per frame (pageHeight), not the frame strip
       const metadata = await sharpInstance.metadata();
-      if (!metadata.width || !metadata.height) {
+      const frameHeight = metadata.pageHeight ?? metadata.height;
+      if (!metadata.width || !frameHeight) {
         throw new Error('Unable to determine image dimensions');
       }
       
       if (validBounds.x + validBounds.width > metadata.width ||
-          validBounds.y + validBounds.height > metadata.height) {
+          validBounds.y + validBounds.height > frameHeight) {
         throw new Error('Crop bounds exceed image dimensions');
       }
       
@@ -593,7 +632,7 @@ export class ImageUtils {
     
     try {
       const parsedInput = ImageUtils.parseImageInput(imageInput);
-      let sharpInstance = await ImageUtils.createSharpFromInput(parsedInput);
+      let sharpInstance = await ImageUtils.createSharpFromInput(parsedInput, { animated: canAnimate(parsedInput.format) });
       
       // Apply each filter in sequence
       for (const filter of filters) {
@@ -681,7 +720,7 @@ export class ImageUtils {
       const inputSize = Buffer.from(base64Data, 'base64').length;
 
       const encode = async (quality: number | undefined): Promise<ImageOutput> => {
-        let sharpInstance = await ImageUtils.createSharpFromInput(parsedInput);
+        let sharpInstance = await ImageUtils.createSharpFromInput(parsedInput, { animated: canAnimate(parsedInput.format) });
         if (optimizationSettings.maxDimension) {
           sharpInstance = sharpInstance.resize({
             width: optimizationSettings.maxDimension,
@@ -788,8 +827,14 @@ export class ImageUtils {
       const compositeOps: OverlayOptions[] = [];
       let totalInputSize = 0;
 
-      for (const layer of validConfig.layers) {
+      const warnings: string[] = [];
+
+      for (const [index, layer] of validConfig.layers.entries()) {
         const layerSharp = await ImageUtils.createSharpFromInput(layer.image);
+        const { pages } = await layerSharp.metadata();
+        if (pages !== undefined && pages > 1) {
+          warnings.push(`Layer ${index} is animated (${pages} frames); only its first frame was used`);
+        }
         
         // Calculate input size
         const base64Data = layer.image.data.replace(/^data:image\/[a-z]+;base64,/, '');
@@ -840,6 +885,9 @@ export class ImageUtils {
         startTime,
         totalInputSize
       );
+      if (warnings.length > 0) {
+        result.warnings = [...(result.warnings ?? []), ...warnings];
+      }
 
       // Validate performance
       if (result.processingMetadata.processingTime > PERFORMANCE_THRESHOLDS.COMPOSITE) {

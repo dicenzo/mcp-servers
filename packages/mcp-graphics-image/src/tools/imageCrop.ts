@@ -22,6 +22,7 @@ export interface ImageCropResult {
     originalDimensions: { width: number; height: number };
     dimensions: { width: number; height: number };
     cropBounds: { x: number; y: number; width: number; height: number };
+    warnings?: string[];
   };
   metadata: {
     processingTime: number;
@@ -65,7 +66,8 @@ export async function imageCrop(input: unknown): Promise<ImageCropResponse> {
         format: result.format,
         originalDimensions,
         dimensions: result.dimensions,
-        cropBounds: bounds
+        cropBounds: bounds,
+        ...(result.warnings && { warnings: result.warnings })
       },
       metadata: {
         processingTime: result.processingMetadata.processingTime,
