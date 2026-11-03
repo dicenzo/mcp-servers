@@ -2,6 +2,7 @@ import { describe, test, expect } from '@jest/globals';
 import { loadFontTool } from '../../src/tools/loadFont.js';
 import { measureTextTool } from '../../src/tools/measureText.js';
 import { shapeTextTool } from '../../src/tools/shapeText.js';
+import { subsetFontTool } from '../../src/tools/subsetFont.js';
 import { buildTestFont, toBuffer, withTable, kernTable } from '../fixtures/buildTestFont.js';
 import * as opentypeModule from 'opentype.js';
 
@@ -88,5 +89,12 @@ describe('astral characters are one character, not two surrogates', () => {
     expect(glyphs.map(g => g.codepoint)).toEqual([0x41, 0x1f600, 0x42]);
     expect(glyphs.map(g => g.cluster)).toEqual([0, 1, 3]);
     expect(result.shapedText.clusters).toEqual([0, 1, 3]);
+  });
+
+  test('type.subsetFont lists an emoji as one character, not two surrogates', async () => {
+    const result = resultOf(await subsetFontTool.invoke({
+      font: asInput(toBuffer(buildTestFont())), options: { characters: emoji }
+    }));
+    expect(result.subset.charactersIncluded).toEqual(['A', '\u{1F600}', 'B']);
   });
 });
