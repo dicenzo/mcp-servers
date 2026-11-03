@@ -2,6 +2,7 @@ import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { SVG, getWindow, registerWindow, type Container } from '@svgdotjs/svg.js';
 import { SVG_LIMITS } from '../types/svg.js';
+import { toCharGrid } from '../util/asciiGrid.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<any>;
@@ -84,13 +85,13 @@ interface WireframeElement {
 }
 
 class WireframeParser {
-  private lines: string[] = [];
+  private lines: string[][] = [];
   private elements: WireframeElement[] = [];
   private charWidth = 8;
   private charHeight = 16;
 
   parse(wireframeText: string): WireframeElement[] {
-    this.lines = wireframeText.split('\n');
+    this.lines = toCharGrid(wireframeText);
     this.elements = [];
 
     this.extractElements();
@@ -177,13 +178,13 @@ class WireframeParser {
         if (!isBoxChar && char !== ' ' && textStart === -1) {
           textStart = j;
         } else if ((isBoxChar || char === ' ' || j === line.length - 1) && textStart !== -1) {
-          const content = line.substring(textStart, j + (j === line.length - 1 ? 1 : 0)).trim();
+          const content = line.slice(textStart, j + (j === line.length - 1 ? 1 : 0)).join('').trim();
           if (content.length > 0) {
             this.elements.push({
               type: 'text',
               x: textStart * this.charWidth,
               y: i * this.charHeight,
-              width: content.length * this.charWidth,
+              width: [...content].length * this.charWidth,
               height: this.charHeight,
               content
             });
