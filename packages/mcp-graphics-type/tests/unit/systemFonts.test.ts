@@ -99,6 +99,17 @@ describe('font tables are bounds-checked before anything is allocated', () => {
     expect(() => extractFromCollection(collection, 0)).toThrow(/past the end/);
   });
 
+  test('extractFromCollection rejects tables that add up to more than the file', () => {
+    const collection = buildCollection([font('Mcp Overlap')]);
+    const directory = collection.readUInt32BE(12);
+    for (let t = 0; t < collection.readUInt16BE(directory + 4); t++) {
+      // Every table claims the whole file: each is in bounds, but together they are not
+      collection.writeUInt32BE(0, directory + 12 + t * 16 + 8);
+      collection.writeUInt32BE(collection.length, directory + 12 + t * 16 + 12);
+    }
+    expect(() => extractFromCollection(collection, 0)).toThrow(/larger than the collection/);
+  });
+
   test('readFontNames ignores a name table longer than the file', () => {
     const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'mcp-type-names-'));
     try {

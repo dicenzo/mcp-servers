@@ -293,7 +293,13 @@ export function extractFromCollection(data: Buffer, index: number): Buffer {
     }
     return table;
   });
-  const output = Buffer.alloc(directorySize + tables.reduce((sum, t) => sum + pad4(t.length), 0));
+  // Each table can be in bounds while many records point at the same bytes, so cap
+  // the total too: one font can't be larger than the collection it came from.
+  const outputSize = directorySize + tables.reduce((sum, t) => sum + pad4(t.length), 0);
+  if (outputSize > data.length + numTables * 3) {
+    throw new Error('Font tables add up to more than the file: larger than the collection');
+  }
+  const output = Buffer.alloc(outputSize);
   data.copy(output, 0, fontOffset, fontOffset + directorySize);
 
   let offset = directorySize;
