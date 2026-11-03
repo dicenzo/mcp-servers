@@ -9,11 +9,6 @@ import { ColorProcessingError } from './colorError.js';
 import type { Color as CuloriColor, Mode as CuloriMode } from 'culori';
 import type { ZodError } from 'zod';
 
-/**
- * Channel values a culori color object may carry, keyed by channel name.
- * Every culori color type is assignable to this, so channels can be read
- * without first narrowing on `mode`.
- */
 export type HarmonyType = 'monochromatic' | 'analogous' | 'complementary' | 'triadic' | 'tetradic' | 'split-complementary';
 
 /** Spaces a palette can be generated in; `lab` works in its polar form, LCH. */
@@ -38,6 +33,26 @@ const PALETTE_SPACES: Record<PaletteSpace, PaletteSpaceGeometry> = {
   hsl: { mode: 'hsl', chromaChannel: 's', maxLightness: 1, maxChroma: 1 }
 };
 
+/**
+ * A generated palette color with what's needed to describe it: its role
+ * (`base`, `complement`, `triad-1-lighter-2` ...), how much of the requested
+ * chroma was removed to fit sRGB (0-1), its hue offset from the base, and
+ * whether it is a harmony hue at the base lightness rather than a tint/shade.
+ */
+export interface PaletteSwatchDraft {
+  color: Color;
+  role: string;
+  chromaLost: number;
+  hueOffset: number;
+  key: boolean;
+}
+
+/** Tailwind-style scale steps and their OKLCH lightness targets. */
+export const SCALE_STEPS: ReadonlyArray<readonly [step: number, lightness: number]> = [
+  [50, 0.97], [100, 0.93], [200, 0.87], [300, 0.79], [400, 0.7], [500, 0.62],
+  [600, 0.54], [700, 0.46], [800, 0.38], [900, 0.3], [950, 0.22]
+];
+
 /** Normalized (0-1) hue/lightness/chroma in a palette space; hue in degrees. */
 interface PaletteCoordinates {
   hue: number;
@@ -54,6 +69,11 @@ const MAX_PALETTE_LIGHTNESS = 0.95;
 /** Largest lightness step between a harmony color and its tints and shades. */
 const MAX_LIGHTNESS_STEP = 0.12;
 
+/**
+ * Channel values a culori color object may carry, keyed by channel name.
+ * Every culori color type is assignable to this, so channels can be read
+ * without first narrowing on `mode`.
+ */
 type CuloriChannels = Partial<Record<'r' | 'g' | 'b' | 'h' | 's' | 'l' | 'c' | 'a' | 'alpha', number>>;
 
 /**
@@ -486,6 +506,18 @@ export class ColorUtils {
     count: number = 5,
     space: PaletteSpace = 'oklch'
   ): Color[] {
+    return this.generateHarmonySwatches(baseColor, harmony, count, space).map(swatch => swatch.color);
+  }
+
+  /**
+   * generateHarmonyPalette with each color's role, gamut loss and hue offset
+   */
+  static generateHarmonySwatches(
+    baseColor: Color,
+    harmony: HarmonyType,
+    count: number = 5,
+    space: PaletteSpace = 'oklch'
+  ): PaletteSwatchDraft[] {
     try {
       const geometry = PALETTE_SPACES[space];
       const base = this.toPaletteCoordinates(baseColor, space);
@@ -495,33 +527,38 @@ export class ColorUtils {
       const hueOffsets = effectiveHarmony === harmony
         ? requestedOffsets
         : this.harmonyHueOffsets(effectiveHarmony, count);
+      const hueRoles = this.harmonyHueRoles(effectiveHarmony, hueOffsets);
       const levels = Math.ceil(count / hueOffsets.length);
       const ladder = this.lightnessLadder(base.lightness, levels);
       if (effectiveHarmony === 'monochromatic') {
         // A single hue reads best as a dark-to-light ramp
         ladder.sort((a, b) => a - b);
       }
+      const ladderLabels = this.ladderLabels(ladder, base.lightness);
 
       // Round 0 places every harmony hue at the base lightness; later rounds add
       // tints and shades, nearest first, so small counts get the closest variations.
-      const colors: Color[] = [];
-      for (let round = 0; round < levels && colors.length < count; round++) {
-        for (const offset of hueOffsets) {
-          if (colors.length >= count) break;
+      const swatches: PaletteSwatchDraft[] = [];
+      for (let round = 0; round < levels && swatches.length < count; round++) {
+        hueOffsets.forEach((offset, hueIndex) => {
+          if (swatches.length >= count) return;
           const lightness = ladder[round];
-          if (offset === 0 && lightness === base.lightness) {
-            colors.push(baseColor);
-            continue;
+          const key = lightness === base.lightness;
+          const role = key ? hueRoles[hueIndex] : `${hueRoles[hueIndex]}-${ladderLabels[round]}`;
+          if (offset === 0 && key) {
+            swatches.push({ color: baseColor, role, chromaLost: 0, hueOffset: 0, key });
+            return;
           }
-          colors.push(this.fromPaletteCoordinates({
+          const { color, chromaLost } = this.fromPaletteCoordinates({
             hue: base.hue + offset,
             lightness,
             chroma: base.chroma
-          }, geometry, baseColor));
-        }
+          }, geometry, baseColor);
+          swatches.push({ color, role, chromaLost, hueOffset: offset, key });
+        });
       }
 
-      return colors;
+      return swatches;
     } catch (error) {
       if (error instanceof ColorProcessingError) {
         throw error;
@@ -546,6 +583,30 @@ export class ColorUtils {
   }
 
   /**
+   * A Tailwind-style 50-950 scale for one color, built in OKLCH with the color's
+   * hue and chroma and fixed lightness targets (chroma reduced where needed to
+   * fit sRGB). The step closest in lightness to the color is the color itself.
+   */
+  static generateTintScale(color: Color): Array<{ step: number; color: Color; source: boolean }> {
+    const geometry = PALETTE_SPACES.oklch;
+    const coords = this.toPaletteCoordinates(color, 'oklch');
+    let sourceIndex = 0;
+    SCALE_STEPS.forEach(([, lightness], index) => {
+      if (Math.abs(lightness - coords.lightness) < Math.abs(SCALE_STEPS[sourceIndex][1] - coords.lightness)) {
+        sourceIndex = index;
+      }
+    });
+
+    return SCALE_STEPS.map(([step, lightness], index) => ({
+      step,
+      color: index === sourceIndex
+        ? color
+        : this.fromPaletteCoordinates({ hue: coords.hue, lightness, chroma: coords.chroma }, geometry, color).color,
+      source: index === sourceIndex
+    }));
+  }
+
+  /**
    * Whether a color has too little chroma for its hue to mean anything
    * (greys, black, white and near-greys).
    */
@@ -555,31 +616,32 @@ export class ColorUtils {
   }
 
   /**
-   * Adjust palette colors in the palette's working space. `hueShift` rotates every
-   * color; `lightnessRange` and `saturationRange` (percent, 0-100) replace each
-   * color's lightness or chroma, spread evenly from the first color to the last.
-   * Chroma percentages are relative to the space's maximum (OKLCH 0.4, LCH 150,
-   * HSL saturation 100%).
+   * Adjust palette swatches in the palette's working space. `hueShift` rotates
+   * every color; `lightnessRange` and `saturationRange` (percent, 0-100) replace
+   * each color's lightness or chroma, spread evenly from the first color to the
+   * last. Chroma percentages are relative to the space's maximum (OKLCH 0.4,
+   * LCH 150, HSL saturation 100%).
    */
-  static adjustPaletteColors(
-    colors: Color[],
+  static adjustPaletteSwatches(
+    swatches: PaletteSwatchDraft[],
     space: PaletteSpace,
     options: PaletteAdjustments
-  ): Color[] {
+  ): PaletteSwatchDraft[] {
     const { hueShift, lightnessRange, saturationRange } = options;
     const geometry = PALETTE_SPACES[space];
     const along = (range: [number, number], index: number) => {
-      const factor = colors.length > 1 ? index / (colors.length - 1) : 0;
+      const factor = swatches.length > 1 ? index / (swatches.length - 1) : 0;
       return (range[0] + (range[1] - range[0]) * factor) / 100;
     };
 
-    return colors.map((color, index) => {
-      const coords = this.toPaletteCoordinates(color, space);
-      return this.fromPaletteCoordinates({
+    return swatches.map((swatch, index) => {
+      const coords = this.toPaletteCoordinates(swatch.color, space);
+      const { color, chromaLost } = this.fromPaletteCoordinates({
         hue: coords.hue + (hueShift ?? 0),
         lightness: lightnessRange ? along(lightnessRange, index) : coords.lightness,
         chroma: saturationRange ? along(saturationRange, index) : coords.chroma
-      }, geometry, color);
+      }, geometry, swatch.color);
+      return { ...swatch, color, chromaLost };
     });
   }
 
@@ -680,6 +742,52 @@ export class ColorUtils {
   }
 
   /**
+   * Role names for each harmony hue, in the order of harmonyHueOffsets
+   */
+  private static harmonyHueRoles(harmony: HarmonyType, offsets: number[]): string[] {
+    const numbered = (prefix: string) => offsets.map((_, i) => (i === 0 ? 'base' : `${prefix}-${i}`));
+    switch (harmony) {
+      case 'monochromatic':
+        return ['base'];
+      case 'analogous': {
+        const step = offsets.length > 1 ? Math.abs(offsets[1] - offsets[0]) : 1;
+        return offsets.map(offset => {
+          const position = Math.round(offset / step);
+          if (position === 0) return 'base';
+          return `analogous-${position < 0 ? 'minus' : 'plus'}-${Math.abs(position)}`;
+        });
+      }
+      case 'complementary':
+        return ['base', 'complement'];
+      case 'triadic':
+        return numbered('triad');
+      case 'tetradic':
+        return numbered('tetrad');
+      case 'split-complementary':
+        return numbered('split');
+      default:
+        throw new Error(`Unsupported harmony type: ${harmony}`);
+    }
+  }
+
+  /**
+   * Label each ladder entry `lighter-n` / `darker-n` relative to the base,
+   * numbered outward from the base. The base itself gets an empty label.
+   */
+  private static ladderLabels(ladder: number[], baseLightness: number): string[] {
+    const labels = ladder.map(() => '');
+    for (const direction of ['lighter', 'darker'] as const) {
+      ladder
+        .map((lightness, index) => ({ lightness, index }))
+        .filter(({ lightness }) =>
+          direction === 'lighter' ? lightness > baseLightness : lightness < baseLightness)
+        .sort((a, b) => Math.abs(a.lightness - baseLightness) - Math.abs(b.lightness - baseLightness))
+        .forEach(({ index }, n) => { labels[index] = `${direction}-${n + 1}`; });
+    }
+    return labels;
+  }
+
+  /**
    * `levels` distinct lightness values (normalized 0-1): the base lightness first,
    * then steps above and below it, nearest first. Steps are at most
    * MAX_LIGHTNESS_STEP so a few variations stay close to the base, and shrink as
@@ -728,18 +836,20 @@ export class ColorUtils {
 
   /**
    * Build a color from normalized palette coordinates, reduce its chroma until it
-   * fits in sRGB, and return it in the template color's space with its alpha.
+   * fits in sRGB, and return it in the template color's space with its alpha,
+   * along with the fraction of the requested chroma that was removed.
    */
   private static fromPaletteCoordinates(
     coords: PaletteCoordinates,
     geometry: PaletteSpaceGeometry,
     template: Color
-  ): Color {
+  ): { color: Color; chromaLost: number } {
     const hue = ((coords.hue % 360) + 360) % 360;
     const lightness = Math.max(0, Math.min(1, coords.lightness)) * geometry.maxLightness;
     const chroma = Math.max(0, coords.chroma) * geometry.maxChroma;
 
     let values: number[];
+    let chromaLost = 0;
     if (geometry.mode === 'hsl') {
       values = [hue, Math.min(1, chroma), lightness];
     } else {
@@ -747,10 +857,14 @@ export class ColorUtils {
         { mode: geometry.mode, l: lightness, c: chroma, h: hue },
         geometry.mode
       );
-      values = [mapped.l ?? lightness, mapped.c ?? 0, hue];
+      const mappedChroma = mapped.c ?? 0;
+      values = [mapped.l ?? lightness, mappedChroma, hue];
+      if (chroma > 0) {
+        chromaLost = this.roundToPrecision(Math.max(0, (chroma - mappedChroma) / chroma), 2);
+      }
     }
 
     const color: Color = { space: geometry.mode, values, alpha: template.alpha };
-    return this.convertColor(color, template.space);
+    return { color: this.convertColor(color, template.space), chromaLost };
   }
 }

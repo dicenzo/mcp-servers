@@ -505,4 +505,320 @@ describe('colorGeneratePalette', () => {
       expect(properties.count.type).toBe('integer');
     });
   });
+
+  describe('swatches', () => {
+    test('name every color by role, one swatch per color', async () => {
+      const result = await colorGeneratePalette({ baseColor: '#3366cc', harmony: 'triadic', count: 7 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.swatches.map(swatch => swatch.role)).toEqual([
+          'base', 'triad-1', 'triad-2',
+          'base-lighter-1', 'triad-1-lighter-1', 'triad-2-lighter-1',
+          'base-darker-1'
+        ]);
+        expect(result.swatches.map(swatch => swatch.hex)).toEqual(hexes(result.result.colors));
+      }
+    });
+
+    test('roles are unique for every harmony and count', async () => {
+      for (const harmony of ['monochromatic', 'analogous', 'complementary', 'triadic', 'tetradic', 'split-complementary']) {
+        for (const count of [2, 5, 11, 20]) {
+          const result = await colorGeneratePalette({ baseColor: '#3366cc', harmony, count });
+          expect(result.success).toBe(true);
+          if (result.success) {
+            const roles = result.swatches.map(swatch => swatch.role);
+            expect(new Set(roles).size).toBe(count);
+            expect(roles).toContain('base');
+          }
+        }
+      }
+    });
+
+    test('report contrast and the readable text color', async () => {
+      const result = await colorGeneratePalette({ baseColor: '#ffff00', harmony: 'monochromatic', count: 2 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const yellow = result.swatches.find(swatch => swatch.hex === '#ffff00');
+        expect(yellow?.contrast.onWhite).toBeCloseTo(1.07, 1);
+        expect(yellow?.contrast.onBlack).toBeCloseTo(19.56, 1);
+        expect(yellow?.contrast.textColor).toBe('#000000');
+        expect(yellow?.contrast.meetsAA).toBe(true);
+      }
+    });
+
+    test('report each color\'s nearest neighbour', async () => {
+      const result = await colorGeneratePalette({ baseColor: '#3366cc', harmony: 'complementary', count: 2 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.swatches[0].nearest).toMatchObject({ index: 1, role: 'complement' });
+        expect(result.swatches[0].nearest?.deltaE).toBeGreaterThan(30);
+      }
+    });
+
+    test('report chroma lost to the gamut, with a warning when harmony hues wash out', async () => {
+      const result = await colorGeneratePalette({ baseColor: '#ffff00', harmony: 'triadic', count: 3 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.swatches[0].chromaLost).toBe(0);
+        expect(result.swatches[1].chromaLost).toBeGreaterThan(0.75);
+        expect(result.warnings?.some(warning => /lost most of their chroma/.test(warning))).toBe(true);
+      }
+    });
+
+    test('hsl palettes never lose chroma', async () => {
+      const result = await colorGeneratePalette({ baseColor: '#ffff00', harmony: 'triadic', count: 3, space: 'hsl' });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.swatches.every(swatch => swatch.chromaLost === 0)).toBe(true);
+      }
+    });
+  });
+
+  describe('lockedColors', () => {
+    test('keeps locked colors unchanged and counts them in count', async () => {
+      const result = await colorGeneratePalette({
+        baseColor: '#3366cc',
+        harmony: 'complementary',
+        count: 5,
+        lockedColors: ['#ff6600', { space: 'hsl', values: [120, 0.5, 0.4] }]
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.colors).toHaveLength(5);
+        expect(result.swatches.slice(-2).map(swatch => [swatch.role, swatch.locked])).toEqual([
+          ['locked-1', true], ['locked-2', true]
+        ]);
+        expect(result.swatches[3].hex).toBe('#ff6600');
+        expect(result.swatches[0].role).toBe('base');
+      }
+    });
+
+    test('generated colors avoid duplicating a locked color', async () => {
+      // The plain palette's complement is #8c6500; lock something right next to it
+      const result = await colorGeneratePalette({
+        baseColor: '#3366cc',
+        harmony: 'complementary',
+        count: 4,
+        lockedColors: ['#8b6501']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const generated = result.swatches.filter(swatch => !swatch.locked);
+        expect(generated).toHaveLength(3);
+        generated.forEach(swatch => {
+          const locked = result.swatches.length - 1;
+          expect(swatch.nearest?.index === locked ? swatch.nearest.deltaE : Infinity).toBeGreaterThanOrEqual(3);
+        });
+      }
+    });
+
+    test('flags a locked color that duplicates the base', async () => {
+      const result = await colorGeneratePalette({
+        baseColor: '#3366cc',
+        harmony: 'complementary',
+        count: 3,
+        lockedColors: ['#3367cc']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.closePairs).toEqual([
+          expect.objectContaining({ roles: ['base', 'locked-1'] })
+        ]);
+        expect(result.warnings?.some(warning => /closer than 3 Delta E/.test(warning))).toBe(true);
+      }
+    });
+
+    test('rejects as many locked colors as count', async () => {
+      const result = await colorGeneratePalette({
+        baseColor: '#3366cc',
+        harmony: 'complementary',
+        count: 2,
+        lockedColors: ['#ff0000', '#00ff00']
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    test('names the locked color that failed to parse', async () => {
+      const result = await colorGeneratePalette({
+        baseColor: '#3366cc',
+        harmony: 'complementary',
+        count: 3,
+        lockedColors: ['#ff0000', 'nope']
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe(ColorErrorCode.INVALID_COLOR);
+        expect(result.error.message).toBe('lockedColors[1] could not be parsed');
+      }
+    });
+  });
+
+  describe('minDeltaE', () => {
+    const minDistance = (swatches: { nearest?: { deltaE: number } }[]) =>
+      Math.min(...swatches.map(swatch => swatch.nearest?.deltaE ?? Infinity));
+
+    test.each(['analogous', 'triadic', 'monochromatic'])('keeps %s colors apart and still fills count when possible', async (harmony) => {
+      const result = await colorGeneratePalette({ baseColor: '#3366cc', harmony, count: 8, minDeltaE: 8 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.colors).toHaveLength(8);
+        expect(minDistance(result.swatches)).toBeGreaterThanOrEqual(8);
+        expect(hexes(result.result.colors)).toContain('#3366cc');
+        expect(result.warnings).toBeUndefined();
+      }
+    });
+
+    test('analogous without minDeltaE crowds colors that minDeltaE separates', async () => {
+      const plain = await colorGeneratePalette({ baseColor: '#3366cc', harmony: 'analogous', count: 12 });
+      const spaced = await colorGeneratePalette({ baseColor: '#3366cc', harmony: 'analogous', count: 12, minDeltaE: 6 });
+
+      expect(plain.success && spaced.success).toBe(true);
+      if (plain.success && spaced.success) {
+        expect(minDistance(plain.swatches)).toBeLessThan(6);
+        expect(minDistance(spaced.swatches)).toBeGreaterThanOrEqual(6);
+      }
+    });
+
+    test('monochromatic stays dark to light after spacing', async () => {
+      const result = await colorGeneratePalette({ baseColor: '#3366cc', harmony: 'monochromatic', count: 6, minDeltaE: 10 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const lightness = result.result.colors.map(color => ColorUtils.convertColor(color, 'oklch').values[0]);
+        expect(lightness).toEqual([...lightness].sort((a, b) => a - b));
+      }
+    });
+
+    test('returns fewer colors with a warning when the spacing cannot be met', async () => {
+      const result = await colorGeneratePalette({ baseColor: '#3366cc', harmony: 'monochromatic', count: 20, minDeltaE: 20 });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.colors.length).toBeLessThan(20);
+        expect(minDistance(result.swatches)).toBeGreaterThanOrEqual(20);
+        expect(result.warnings?.some(warning => /could not be placed at least 20 Delta E apart/.test(warning))).toBe(true);
+      }
+    });
+  });
+
+  describe('scale', () => {
+    test('builds a 50-950 scale per harmony hue with the source color in place', async () => {
+      const result = await colorGeneratePalette({ baseColor: '#3366cc', harmony: 'complementary', count: 4, scale: true });
+
+      expect(result.success).toBe(true);
+      if (result.success && result.scales) {
+        expect(result.scales.map(scale => scale.role)).toEqual(['base', 'complement']);
+        const base = result.scales[0];
+        expect(base.steps.map(step => step.step)).toEqual([50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]);
+        expect(base.steps.filter(step => step.source).map(step => step.hex)).toEqual(['#3366cc']);
+
+        const lightness = base.steps.map(step => ColorUtils.convertColor(step.color, 'oklch').values[0]);
+        expect(lightness).toEqual([...lightness].sort((a, b) => b - a));
+        expect(new Set(base.steps.map(step => step.hex)).size).toBe(11);
+      }
+    });
+
+    test('includes locked colors and omits scales unless asked', async () => {
+      const scaled = await colorGeneratePalette({
+        baseColor: '#3366cc', harmony: 'monochromatic', count: 3, scale: true, lockedColors: ['#ff6600']
+      });
+      const plain = await colorGeneratePalette({ baseColor: '#3366cc', harmony: 'monochromatic', count: 3 });
+
+      expect(scaled.success && plain.success).toBe(true);
+      if (scaled.success && plain.success) {
+        expect(scaled.scales?.map(scale => scale.role)).toEqual(['base', 'locked-1']);
+        expect(plain.scales).toBeUndefined();
+      }
+    });
+  });
+
+  describe('exports', () => {
+    test('css custom properties use the prefix and include scale steps', async () => {
+      const result = await colorGeneratePalette({
+        baseColor: '#3366cc', harmony: 'complementary', count: 2, scale: true, exports: ['css'], exportPrefix: 'brand'
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const css = result.exports?.css ?? '';
+        expect(css.startsWith(':root {')).toBe(true);
+        expect(css).toContain('  --brand-base: #3366cc;');
+        expect(css).toContain('  --brand-complement-500: ');
+        expect(css.match(/--brand-/g)).toHaveLength(2 + 2 * 11);
+        expect(result.exports?.tailwind).toBeUndefined();
+      }
+    });
+
+    test('tailwind nests scales under DEFAULT and keeps plain colors flat', async () => {
+      const result = await colorGeneratePalette({
+        baseColor: '#3366cc', harmony: 'complementary', count: 3, scale: true, exports: ['tailwind']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        const tailwind = result.exports?.tailwind ?? {};
+        expect(tailwind.base).toMatchObject({ DEFAULT: '#3366cc', '600': '#3366cc' });
+        expect(typeof tailwind['base-lighter-1']).toBe('string');
+      }
+    });
+
+    test('tokens follow the W3C design tokens format', async () => {
+      const result = await colorGeneratePalette({
+        baseColor: '#3366cc', harmony: 'complementary', count: 2, exports: ['tokens']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.exports?.tokens).toEqual({
+          color: {
+            base: { $type: 'color', $value: '#3366cc' },
+            complement: { $type: 'color', $value: result.swatches[1].hex }
+          }
+        });
+      }
+    });
+
+    test('rejects prefixes that are not valid CSS identifiers', async () => {
+      const result = await colorGeneratePalette({
+        baseColor: '#3366cc', harmony: 'complementary', count: 2, exports: ['css'], exportPrefix: '--Bad Prefix'
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    test('keeps alpha in exported hex', async () => {
+      const result = await colorGeneratePalette({
+        baseColor: { space: 'rgb', values: [0.2, 0.4, 0.8], alpha: 0.5 }, harmony: 'complementary', count: 2, exports: ['css']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.swatches[0].hex).toBe('#3366cc80');
+        expect(result.exports?.css).toContain('#3366cc80');
+      }
+    });
+  });
+
+  describe('tool definition for new inputs', () => {
+    test('advertises locked colors, spacing, scales and exports', () => {
+      const { properties } = colorGeneratePaletteTool.inputSchema;
+
+      expect(properties.lockedColors.items).toBe(properties.baseColor);
+      expect(properties).toHaveProperty('minDeltaE');
+      expect(properties).toHaveProperty('scale');
+      expect(properties.exports.items.enum).toEqual(['css', 'tailwind', 'tokens']);
+      expect(properties).toHaveProperty('exportPrefix');
+    });
+  });
 });

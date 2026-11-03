@@ -241,8 +241,16 @@ export const ColorPaletteInputSchema = z.object({
     saturationRange: z.tuple([PercentSchema, PercentSchema]).optional(),
     lightnessRange: z.tuple([PercentSchema, PercentSchema]).optional(),
     hueShift: z.number().min(-360).max(360).optional()
-  }).optional()
-});
+  }).optional(),
+  lockedColors: z.array(ColorInputSchema).max(10).optional(),
+  minDeltaE: z.number().min(0).max(50).optional(),
+  scale: z.boolean().default(false).optional(),
+  exports: z.array(z.enum(['css', 'tailwind', 'tokens'])).max(3).optional(),
+  exportPrefix: z.string().regex(/^[a-z][a-z0-9-]*$/).max(40).default('color').optional()
+}).refine(
+  input => (input.lockedColors?.length ?? 0) < input.count,
+  { message: 'lockedColors must leave at least one slot for the base color (fewer locked colors than count)', path: ['lockedColors'] }
+);
 
 export type ColorPaletteInput = z.infer<typeof ColorPaletteInputSchema>;
 
