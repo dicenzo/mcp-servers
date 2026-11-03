@@ -1,6 +1,6 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { SVG, registerWindow, type Container } from '@svgdotjs/svg.js';
+import { SVG, getWindow, registerWindow, type Container } from '@svgdotjs/svg.js';
 import { SVG_LIMITS } from '../types/svg.js';
 
 interface ExecutableTool extends Tool {
@@ -230,14 +230,26 @@ function addText(
     .fill(options.fill);
 }
 
-export async function executeWireframeToSvg(args: z.infer<typeof WireframeToSvgSchema>): Promise<string> {
-  // Use JSDOM for SVG creation
-  const { JSDOM } = await import('jsdom');
-  const dom = new JSDOM('<!DOCTYPE html><html><body><div id="drawing"></div></body></html>');
-  const window = dom.window as any;
-  const document = window.document;
-  registerWindow(window, document);
+type SvgWindow = Parameters<typeof registerWindow>[0];
+type SvgDocument = Parameters<typeof registerWindow>[1];
 
+export async function executeWireframeToSvg(args: z.infer<typeof WireframeToSvgSchema>): Promise<string> {
+  // svg.js needs a DOM, but its window is process-wide: other tools (svg.transform)
+  // behave differently when one is registered. Register a private jsdom window for
+  // this call only and put back whatever was there before, even if rendering throws.
+  const { JSDOM } = await import('jsdom');
+  const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
+  const previousWindow = getWindow();
+  registerWindow(dom.window as unknown as SvgWindow, dom.window.document as unknown as SvgDocument);
+  try {
+    return renderWireframe(args);
+  } finally {
+    registerWindow(previousWindow, (previousWindow ? previousWindow.document : null) as SvgDocument);
+    dom.window.close();
+  }
+}
+
+function renderWireframe(args: z.infer<typeof WireframeToSvgSchema>): string {
   const colors = args.colors || {
     border: '#333333',
     background: '#ffffff',
