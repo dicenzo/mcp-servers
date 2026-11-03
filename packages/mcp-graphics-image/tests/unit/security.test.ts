@@ -6,7 +6,8 @@ import {
   ImageInputSchema,
   CompositionConfigSchema,
   ImageErrorCode,
-  MEMORY_LIMITS
+  MEMORY_LIMITS,
+  DEFAULT_PROCESSING_CONTEXT
 } from '../../src/types/image';
 import { imageResize } from '../../src/tools/imageResize';
 import { imageConvert } from '../../src/tools/imageConvert';
@@ -191,4 +192,39 @@ describe('Security hardening', () => {
       expect(result.error?.details).not.toHaveProperty('input');
     });
   });
+});
+
+describe('resource limits', () => {
+  test('a composite whose decoded pixels exceed MAX_OPERATION_MEMORY is rejected before decoding', async () => {
+    const side = MEMORY_LIMITS.MAX_DIMENSION;
+    const bigLayer = { image: { data: forgePngDimensions(tinyPng, side, side), format: 'png' } };
+    const result = await imageComposite({
+      config: { width: side, height: side, layers: [bigLayer, bigLayer] }
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.code).toBe(ImageErrorCode.MEMORY_EXCEEDED);
+    }
+  });
+
+  test('encoding stops with PERFORMANCE_TIMEOUT once the processing timeout passes', async () => {
+    const context = DEFAULT_PROCESSING_CONTEXT as { timeout: number };
+    const original = context.timeout;
+    context.timeout = 1000;
+    try {
+      const large = (await sharp({ create: { width: 4000, height: 4000, channels: 3, background: '#336699' } })
+        .png()
+        .toBuffer()).toString('base64');
+      const result = await imageFilter({
+        image: { data: large, format: 'png' },
+        filters: [{ type: 'blur', intensity: 100, radius: 1000 }]
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe(ImageErrorCode.PERFORMANCE_TIMEOUT);
+      }
+    } finally {
+      context.timeout = original;
+    }
+  }, 20000);
 });

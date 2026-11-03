@@ -64,10 +64,13 @@ This server reads no environment variables.
 
 - sharp ships native binaries. If install fails on your platform, see the sharp installation docs.
 - Input limits: images are rejected above 8192 px on either side, 10 MB decoded (about 14 MB of base64), or when the declared `format` does not match the actual encoding (`jpg` and `jpeg` are interchangeable). `image.composite` accepts at most 10 layers on a canvas of at most 8192x8192.
+- Processing limits: encoding stops after 30 s (`PERFORMANCE_TIMEOUT`). A composite whose canvas and layers would decode to more than 512 MB of RGBA pixels is rejected (`MEMORY_EXCEEDED`), as is resizing an animation to more than 8192x8192 pixels across all its frames.
+- Orientation, colour and animation: EXIF orientation is applied, so photos are processed as they are displayed. ICC profiles (such as Display P3) are kept; CMYK is converted to sRGB. GIF and WebP output keeps every frame of an animation; other formats keep the first frame, and the result's `warnings` says so.
+- Errors: failures return `{ success: false, error: { code, message, details?, suggestions? } }`. Invalid arguments return `INVALID_INPUT`, with a message naming each failing field and the zod issues in `details.issues`.
 
 ## Known issues
 
-- Last verified test run: build passes; 54 of 54 tests pass (5 suites).
+- Last verified test run: build passes; 82 of 82 tests pass (9 suites).
 - Five older test files are disabled with a `.disabled` suffix in `tests/` and do not run.
 
 ## License
