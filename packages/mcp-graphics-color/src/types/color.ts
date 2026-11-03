@@ -76,6 +76,11 @@ export interface ContrastReport {
     };
   };
   algorithm: 'wcag' | 'apca';
+  /** APCA lightness contrast, present when algorithm is 'apca' */
+  apca?: {
+    lc: number; // signed: positive dark-on-light, negative light-on-dark
+    polarity: 'dark-on-light' | 'light-on-dark';
+  };
   foreground: Color;
   background: Color;
   metadata?: {

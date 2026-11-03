@@ -206,7 +206,7 @@ async function lintContrastRules(
           issues.push({
             type: 'contrast',
             severity: ratio < minContrast * 0.7 ? 'error' : 'warning',
-            message: `Contrast ratio ${ratio.toFixed(2)} between colors is below required ${minContrast}`,
+            message: `Contrast ratio ${ColorUtils.formatContrastRatio(ratio)} between colors is below required ${minContrast}`,
             color: colors[i],
             suggestion: `Consider adjusting lightness to achieve minimum ${minContrast} contrast ratio`
           });
@@ -320,7 +320,7 @@ async function lintAccessibilityRules(
           issues.push({
             type: 'accessibility',
             severity: 'warning',
-            message: `Colors don't meet ${level} accessibility standard for ${textSize} text (${ratio.toFixed(2)} < ${requiredRatio})`,
+            message: `Colors don't meet ${level} accessibility standard for ${textSize} text (${ColorUtils.formatContrastRatio(ratio)} < ${requiredRatio})`,
             color: colors[i],
             suggestion: `Increase contrast to meet WCAG ${level} standard (${requiredRatio}:1 minimum)`
           });

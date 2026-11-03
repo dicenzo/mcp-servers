@@ -1,1 +1,1 @@
-{"extends": "./tsconfig.json", "compilerOptions": {"types": ["node", "jest"], "noEmit": true}, "include": ["src/**/*", "tests/**/*"], "exclude": ["node_modules", "dist"]}
+{"extends": "./tsconfig.json", "compilerOptions": {"types": ["node", "jest"], "noEmit": true, "allowJs": true}, "include": ["src/**/*", "tests/**/*"], "exclude": ["node_modules", "dist"]}
