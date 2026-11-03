@@ -11,6 +11,7 @@ import {
   UNICODE_BLOCKS 
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
+import { parseFont } from '../util/parseFont.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<TextToolResult>;
@@ -222,11 +223,10 @@ async function performFontValidation(
     const recommendations: string[] = [];
     
     // Parse font using opentype.js
-    const opentype = await import('opentype.js');
     let font: Font;
     
     try {
-      font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
+      font = await parseFont(fontBuffer);
     } catch (parseError) {
       errors.push({
         code: 'PARSE_ERROR',

@@ -11,6 +11,7 @@ import {
   TypographyErrorCode 
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
+import { parseFont } from '../util/parseFont.js';
 
 type GenericFamily = SystemFontStack['genericFamily'];
 type TargetPlatform = SystemFontStack['platform'];
@@ -279,8 +280,7 @@ async function generateSystemFontStack(
  * Analyzes font characteristics for fallback selection
  */
 async function analyzeFontCharacteristics(fontBuffer: Buffer): Promise<FontCharacteristics> {
-  const opentype = await import('opentype.js');
-  const font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
+  const font = await parseFont(fontBuffer);
   
   // Analyze font properties
   const os2Table = font.tables.os2;
@@ -312,8 +312,7 @@ async function getPrimaryFontName(fontBuffer: Buffer, primaryFontInput: FontInpu
   }
   
   try {
-    const opentype = await import('opentype.js');
-    const font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
+    const font = await parseFont(fontBuffer);
     return font.names.fontFamily?.en || 'Unknown Font';
   } catch {
     return 'Unknown Font';
