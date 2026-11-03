@@ -23,7 +23,8 @@ export async function imageComposite(input: unknown) {
         format: result.format,
         dimensions: result.dimensions,
         layerCount: config.layers.length,
-        processingMetadata: result.processingMetadata
+        processingMetadata: result.processingMetadata,
+        ...(result.warnings && { warnings: result.warnings })
       }
     };
     

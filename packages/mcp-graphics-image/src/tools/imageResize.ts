@@ -33,6 +33,7 @@ export interface ImageResizeResult {
     dimensions: { width: number; height: number };
     scaleFactor: number;
     method: ResizeMethod;
+    warnings?: string[];
   };
   metadata: {
     processingTime: number;
@@ -105,7 +106,8 @@ export async function imageResize(input: unknown): Promise<ImageResizeResponse> 
         originalDimensions,
         dimensions: result.dimensions,
         scaleFactor: Math.round(scaleFactor * 1000) / 1000,
-        method
+        method,
+        ...(result.warnings && { warnings: result.warnings })
       },
       metadata: {
         processingTime: result.processingMetadata.processingTime,
