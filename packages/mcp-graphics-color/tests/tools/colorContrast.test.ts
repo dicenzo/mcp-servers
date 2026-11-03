@@ -290,4 +290,18 @@ describe('colorContrast', () => {
       }
     });
   });
+  describe('Delta E metadata', () => {
+    test('reports CIEDE2000 Delta E and labels the algorithm', async () => {
+      const result = await colorContrast({
+        foreground: '#FF0000',
+        background: '#0000FF' // CIEDE2000 ~52.88 (CIE76 ~184)
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.metadata?.deltaE).toBeCloseTo(52.88, 1);
+        expect(result.result.metadata?.deltaEAlgorithm).toBe('ciede2000');
+      }
+    });
+  });
 });
