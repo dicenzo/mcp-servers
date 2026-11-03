@@ -64,10 +64,12 @@ This server reads no environment variables.
 
 - `svg.path.operations` does not compute true geometric boolean operations. For example, `union` concatenates the input paths (the source says so in a comment). Treat its output as approximate.
 - `advanced_examples/` holds four small sample SVGs produced by the server.
+- Path data (`svg.create`, `svg.path.operations`) is checked against the full SVG path grammar, including compact forms such as `M-5-5`, `M.5.5`, `1e2` and arc flags without separators.
+- Colours (`fill`, `stroke`, `svgbob.to.svg` colours) may be 3, 4, 6 or 8-digit hex, `rgb()`/`rgba()` with channels 0–255 or 0–100%, `hsl()`/`hsla()`, in comma or space syntax with an optional `/ alpha`, a CSS named colour, `currentColor`, `none`, `inherit`, or `url(#id)` with an optional fallback colour. Out-of-range values such as `rgb(999, 999, 999)` are rejected.
 
 ## Known issues
 
-- Last verified test run: build passes; all 268 tests in 8 suites pass.
+- Last verified test run: build passes; all 315 tests in 10 suites pass.
 - The `mermaid.to.svg` and `fabric.wireframe` tools were removed. Mermaid never loaded under the test runner, `fabric.wireframe` only returned a placeholder, and their dependencies (mermaid, fabric, canvas) carried most of the package's audit findings.
 
 ## License
