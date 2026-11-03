@@ -145,7 +145,7 @@ export async function colorValidateAccessibility(input: unknown): Promise<ColorV
         foregroundColor: fgColor,
         backgroundColor: bgColor,
         wcag: {
-          ratio: Math.round(ratio * 100) / 100,
+          ratio: ColorUtils.formatContrastRatio(ratio),
           level,
           textSize,
           passed: wcagPassed,
@@ -155,7 +155,7 @@ export async function colorValidateAccessibility(input: unknown): Promise<ColorV
       
       // Add APCA scoring if requested
       if (includeAPCA) {
-        const apcaScore = calculateAPCAScore(fgColor, bgColor);
+        const apcaScore = Math.round(ColorUtils.calculateAPCAContrast(fgColor, bgColor) * 10) / 10;
         const minAPCAScore = getMinAPCAScore(textSize);
         validation.apca = {
           score: apcaScore,
@@ -277,20 +277,6 @@ function getRequiredContrastRatio(textSize: 'normal' | 'large', level: 'AA' | 'A
   };
   
   return ratios[level][textSize];
-}
-
-/**
- * Calculate APCA score (simplified implementation)
- * Note: This is a simplified version. Full APCA requires more complex calculations.
- */
-function calculateAPCAScore(foreground: Color, background: Color): number {
-  // Simplified APCA calculation - in production, use the official APCA library
-  const fgLuminance = getRelativeLuminance(foreground);
-  const bgLuminance = getRelativeLuminance(background);
-  
-  // Simplified contrast score (not actual APCA)
-  const contrast = Math.abs(fgLuminance - bgLuminance);
-  return Math.round(contrast * 100);
 }
 
 /**

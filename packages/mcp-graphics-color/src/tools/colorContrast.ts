@@ -63,10 +63,18 @@ export async function colorContrast(input: unknown): Promise<ColorContrastRespon
     const endTime = performance.now();
     const processingTime = Math.round((endTime - startTime) * 100) / 100;
     
+    const apcaLc = algorithm === 'apca' ? ColorUtils.calculateAPCAContrast(fgColor, bgColor) : undefined;
+
     const report: ContrastReport = {
-      ratio,
+      ratio: ColorUtils.formatContrastRatio(ratio),
       score: wcagScore,
       algorithm,
+      ...(apcaLc !== undefined && {
+        apca: {
+          lc: Math.round(apcaLc * 10) / 10,
+          polarity: apcaLc >= 0 ? 'dark-on-light' as const : 'light-on-dark' as const
+        }
+      }),
       foreground: fgColor,
       background: bgColor,
       metadata: {
