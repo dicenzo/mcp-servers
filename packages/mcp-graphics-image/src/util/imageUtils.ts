@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import sharp, {
   type Blend,
   type FormatEnum,
@@ -32,6 +30,7 @@ import {
   validateOptimizationOptions,
   validateCompositionConfig
 } from '../types/image.js';
+import { ImageProcessingError } from './imageError.js';
 
 /**
  * Constructor options applied to every sharp instance. Caps decoded pixels at
@@ -59,32 +58,6 @@ function toSharpBlend(blend: BlendMode): Blend {
  */
 function toSharpFormat(format: ImageFormat): keyof FormatEnum | 'avif' {
   return format === 'jpg' ? 'jpeg' : format;
-}
-
-/**
- * Error whose message is a JSON-encoded { code, message, ... } payload, the
- * convention every tool's catch block parses.
- */
-class StructuredImageError extends Error {
-  constructor(payload: { code: ImageErrorCode; message: string; suggestions?: string[] }) {
-    super(JSON.stringify(payload));
-  }
-}
-
-/**
- * True when the error message is a structured JSON error that should be
- * re-thrown as-is rather than wrapped in a generic one.
- */
-function isStructuredImageError(error: unknown): error is Error {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  try {
-    const parsed: unknown = JSON.parse(error.message);
-    return typeof parsed === 'object' && parsed !== null && 'code' in parsed;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -159,7 +132,7 @@ export class ImageUtils {
     try {
       return validateImageInput(input);
     } catch (error) {
-      throw new Error(JSON.stringify({
+      throw new ImageProcessingError({
         code: ImageErrorCode.INVALID_INPUT,
         message: 'Invalid image input format',
         details: { error: error instanceof Error ? error.message : 'Unknown error' },
@@ -168,7 +141,7 @@ export class ImageUtils {
           'Verify format is one of: png, jpeg, jpg, webp, avif, gif, tiff',
           'Check that data field is not empty'
         ]
-      }));
+      });
     }
   }
 
@@ -192,11 +165,11 @@ export class ImageUtils {
         exif: metadata.exif ? JSON.parse(metadata.exif.toString()) : undefined
       };
     } catch (error) {
-      throw new Error(JSON.stringify({
+      throw new ImageProcessingError({
         code: ImageErrorCode.PROCESSING_FAILED,
         message: 'Failed to extract image metadata',
         details: { error: error instanceof Error ? error.message : 'Unknown error' }
-      }));
+      });
     }
   }
 
@@ -219,7 +192,7 @@ export class ImageUtils {
       // Remove data URL prefix if present
       const base64Data = imageInput.data.replace(/^data:image\/[a-z]+;base64,/, '');
       if (base64Data.length > MEMORY_LIMITS.MAX_BASE64_LENGTH) {
-        throw new StructuredImageError({
+        throw new ImageProcessingError({
           code: ImageErrorCode.FILE_TOO_LARGE,
           message: `Image data too large: ${base64Data.length} base64 characters (max: ${MEMORY_LIMITS.MAX_BASE64_LENGTH})`,
           suggestions: ['Reduce image file size before processing']
@@ -229,7 +202,7 @@ export class ImageUtils {
       
       // Validate file size
       if (buffer.length > MEMORY_LIMITS.MAX_IMAGE_SIZE) {
-        throw new StructuredImageError({
+        throw new ImageProcessingError({
           code: ImageErrorCode.FILE_TOO_LARGE,
           message: `Image file too large: ${buffer.length} bytes (max: ${MEMORY_LIMITS.MAX_IMAGE_SIZE} bytes)`,
           suggestions: ['Reduce image file size before processing']
@@ -244,18 +217,18 @@ export class ImageUtils {
         height
       } = await sharpInstance.metadata());
     } catch (error) {
-      if (isStructuredImageError(error)) {
+      if (error instanceof ImageProcessingError) {
         throw error; // Re-throw structured errors
       }
       // sharp refuses to read the header of an input over limitInputPixels
       if (error instanceof Error && error.message.includes('exceeds pixel limit')) {
-        throw new StructuredImageError({
+        throw new ImageProcessingError({
           code: ImageErrorCode.DIMENSION_TOO_LARGE,
           message: `Image exceeds the maximum of ${MEMORY_LIMITS.MAX_DIMENSION}x${MEMORY_LIMITS.MAX_DIMENSION} pixels`,
           suggestions: ['Downscale the image before processing']
         });
       }
-      throw new Error(JSON.stringify({
+      throw new ImageProcessingError({
         code: ImageErrorCode.DECODE_ERROR,
         message: 'Failed to decode image data',
         details: { error: error instanceof Error ? error.message : 'Unknown error' },
@@ -264,11 +237,11 @@ export class ImageUtils {
           'Check that the image format matches the specified format',
           'Ensure image file is not corrupted'
         ]
-      }));
+      });
     }
 
     if (!matchesDeclaredFormat(imageInput.format, detectedFormat, detectedCompression)) {
-      throw new StructuredImageError({
+      throw new ImageProcessingError({
         code: ImageErrorCode.UNSUPPORTED_FORMAT,
         message: `Declared format '${imageInput.format}' does not match detected format '${detectedFormat ?? 'unknown'}'`,
         suggestions: ['Set format to the actual encoding of the image data']
@@ -277,7 +250,7 @@ export class ImageUtils {
 
     const maxDimension = MEMORY_LIMITS.MAX_DIMENSION;
     if (!width || !height || width > maxDimension || height > maxDimension) {
-      throw new StructuredImageError({
+      throw new ImageProcessingError({
         code: ImageErrorCode.DIMENSION_TOO_LARGE,
         message: `Image dimensions ${width ?? 0}x${height ?? 0} exceed the maximum of ${maxDimension}x${maxDimension}`,
         suggestions: ['Downscale the image before processing']
@@ -336,11 +309,11 @@ export class ImageUtils {
         processingMetadata
       };
     } catch (error) {
-      throw new Error(JSON.stringify({
+      throw new ImageProcessingError({
         code: ImageErrorCode.ENCODE_ERROR,
         message: 'Failed to encode output image',
         details: { error: error instanceof Error ? error.message : 'Unknown error' }
-      }));
+      });
     }
   }
 
@@ -403,14 +376,14 @@ export class ImageUtils {
 
       return result;
     } catch (error) {
-      if (isStructuredImageError(error)) {
+      if (error instanceof ImageProcessingError) {
         throw error; // Re-throw structured errors
       }
-      throw new Error(JSON.stringify({
+      throw new ImageProcessingError({
         code: ImageErrorCode.PROCESSING_FAILED,
         message: 'Format conversion failed',
         details: { error: error instanceof Error ? error.message : 'Unknown error' }
-      }));
+      });
     }
   }
 
@@ -499,14 +472,14 @@ export class ImageUtils {
 
       return result;
     } catch (error) {
-      if (isStructuredImageError(error)) {
+      if (error instanceof ImageProcessingError) {
         throw error;
       }
-      throw new Error(JSON.stringify({
+      throw new ImageProcessingError({
         code: ImageErrorCode.PROCESSING_FAILED,
         message: 'Image resize failed',
         details: { error: error instanceof Error ? error.message : 'Unknown error' }
-      }));
+      });
     }
   }
 
@@ -584,14 +557,14 @@ export class ImageUtils {
 
       return result;
     } catch (error) {
-      if (isStructuredImageError(error)) {
+      if (error instanceof ImageProcessingError) {
         throw error;
       }
-      throw new Error(JSON.stringify({
+      throw new ImageProcessingError({
         code: ImageErrorCode.PROCESSING_FAILED,
         message: 'Image crop failed',
         details: { error: error instanceof Error ? error.message : 'Unknown error' }
-      }));
+      });
     }
   }
 
@@ -633,14 +606,14 @@ export class ImageUtils {
 
       return result;
     } catch (error) {
-      if (isStructuredImageError(error)) {
+      if (error instanceof ImageProcessingError) {
         throw error;
       }
-      throw new Error(JSON.stringify({
+      throw new ImageProcessingError({
         code: ImageErrorCode.INVALID_FILTER_PARAMS,
         message: 'Filter application failed',
         details: { error: error instanceof Error ? error.message : 'Unknown error' }
-      }));
+      });
     }
   }
 
@@ -736,14 +709,14 @@ export class ImageUtils {
 
       return result;
     } catch (error) {
-      if (isStructuredImageError(error)) {
+      if (error instanceof ImageProcessingError) {
         throw error;
       }
-      throw new Error(JSON.stringify({
+      throw new ImageProcessingError({
         code: ImageErrorCode.OPTIMIZATION_FAILED,
         message: 'Image optimization failed',
         details: { error: error instanceof Error ? error.message : 'Unknown error' }
-      }));
+      });
     }
   }
 
@@ -889,14 +862,14 @@ export class ImageUtils {
 
       return result;
     } catch (error) {
-      if (isStructuredImageError(error)) {
+      if (error instanceof ImageProcessingError) {
         throw error;
       }
-      throw new Error(JSON.stringify({
+      throw new ImageProcessingError({
         code: ImageErrorCode.COMPOSITE_FAILED,
         message: 'Image composition failed',
         details: { error: error instanceof Error ? error.message : 'Unknown error' }
-      }));
+      });
     }
   }
 }
