@@ -8,7 +8,7 @@ Each server lives in its own folder under `packages/`, has its own `package.json
 
 | Server | What it does | Tools |
 | --- | --- | --- |
-| [mcp-graphics-color](packages/mcp-graphics-color) | Color space conversion, WCAG contrast checks, palette generation, brand palette matching and linting. | 6 |
+| [mcp-graphics-color](packages/mcp-graphics-color) | Color space conversion, WCAG contrast checks, palette generation, CIEDE2000 brand palette matching and linting, accessibility validation. | 6 |
 | [mcp-graphics-image](packages/mcp-graphics-image) | Raster image resize, convert, crop, filter, composite, and optimize, using sharp. | 6 |
 | [mcp-graphics-svg](packages/mcp-graphics-svg) | SVG creation, optimization, and transforms, plus ASCII art and ASCII wireframe conversion to SVG. | 6 |
 | [mcp-graphics-type](packages/mcp-graphics-type) | Font loading and metadata, text shaping and measurement, font subsetting, fallback stacks, font validation. | 6 |
@@ -93,23 +93,24 @@ Only `mcp-business-strategy` reads environment variables. See [its `.env.example
 
 ## Known issues
 
-These are the results of the last verified run (Node 22, Yarn 4.9.2, macOS). Every package builds. Several test suites have problems that predate this repo; they are listed here and in each package README.
+These are the results of the last verified run (2026-11-03; Node 22, Yarn 4.9.2, macOS). Every package builds and every package's own test suite passes. The integration harness still has failing assertions.
 
 | Package | Build | Tests |
 | --- | --- | --- |
-| mcp-graphics-color | passes | 186 of 210 pass; 24 fail (assertion mismatches; `tests/index.test.ts` does not compile) |
-| mcp-graphics-image | passes | 27 of 27 pass (five older test files are disabled) |
-| mcp-graphics-svg | passes | 181 of 185 pass; 3 fail, 1 skipped; 3 suites do not compile |
-| mcp-graphics-type | passes | 127 of 130 pass; 3 skipped (network, installed system fonts, fontTools) |
-| mcp-layout | passes | 71 of 74 pass; 3 skipped (CSS output and accessibility analysis are stubbed in the tools) |
-| mcp-templates | passes | 31 of 31 pass |
-| mcp-business-strategy | passes | 11 of 19 pass; 7 of 8 suites cannot resolve `.js` imports; `data.enrich` tests expect fields the tool no longer returns |
+| mcp-graphics-color | passes | 334 of 334 pass |
+| mcp-graphics-image | passes | 54 of 54 pass (four older test files are disabled) |
+| mcp-graphics-svg | passes | 268 of 268 pass |
+| mcp-graphics-type | passes | 147 of 150 pass; 3 skipped (network, installed system fonts, fontTools) |
+| mcp-layout | passes | 95 of 98 pass; 3 skipped (CSS output and accessibility analysis are stubbed in the tools) |
+| mcp-templates | passes | 63 of 63 pass |
+| mcp-business-strategy | passes | 175 of 175 pass |
 | tools/integration-tests | passes | 23 of 51 pass; failures are mostly assertions on tool responses |
 | tools/performance-suite | passes | runs to completion, but it times mock functions, so its results do not reflect the servers |
 
 Behavior to know about:
 
 - `mcp-business-strategy`: `data.enrich` returns fixed, keyword-matched figures stored in the source. It does not fetch live data. `web.search` falls back to placeholder results when no search key works.
+- `mcp-graphics-color`: `color.contrast` accepts `algorithm: "apca"` but always computes the WCAG 2 ratio.
 - `mcp-graphics-svg`: `svg.path.operations` does not compute true geometric boolean operations, and `wireframe.to.svg` can fail on wireframes with text because jsdom has no `getBBox`.
 - `tools/performance-suite` replaces every tool with a mock that waits a simulated delay. Treat it as scaffolding until the mocks are replaced with real MCP calls.
 - Some harness `package.json` scripts point at files that are not in the repo. The harness READMEs list them.
