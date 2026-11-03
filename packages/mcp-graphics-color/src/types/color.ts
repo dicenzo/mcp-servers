@@ -86,9 +86,24 @@ export interface ColorMatch {
   bestMatch: Color;
   deltaE: number;
   confidence: 'exact' | 'high' | 'medium' | 'low';
+  /** Whether deltaE is at or below the requested maxDeltaE */
+  withinThreshold: boolean;
+  /** Position of the match in the original brandPalette input */
+  paletteIndex: number;
+  name?: string;
   alternatives: Array<{
     color: Color;
     deltaE: number;
+    withinThreshold: boolean;
+    paletteIndex: number;
+    name?: string;
+  }>;
+  /** Palette entries that could not be parsed and were left out of matching */
+  skipped: Array<{
+    paletteIndex: number;
+    input: ColorInput;
+    name?: string;
+    reason: string;
   }>;
 }
 
@@ -187,9 +202,19 @@ export const ColorPaletteInputSchema = z.object({
 export type ColorPaletteInput = z.infer<typeof ColorPaletteInputSchema>;
 
 // Brand color matching tool
+export const BrandPaletteEntrySchema = z.union([
+  ColorInputSchema,
+  z.object({
+    name: z.string().min(1).max(100),
+    color: ColorInputSchema
+  })
+]);
+
+export type BrandPaletteEntry = z.infer<typeof BrandPaletteEntrySchema>;
+
 export const ColorBrandMatchInputSchema = z.object({
   targetColor: ColorInputSchema,
-  brandPalette: z.array(ColorInputSchema).min(1).max(50),
+  brandPalette: z.array(BrandPaletteEntrySchema).min(1).max(50),
   maxDeltaE: z.number().min(0).max(100).default(5).optional(),
   includeAlternatives: z.boolean().default(true).optional()
 });

@@ -4,6 +4,8 @@ import { ZodError } from 'zod';
 import { ColorUtils } from '../util/colorUtils.js';
 import {
   ColorBrandMatchInputSchema,
+  BrandPaletteEntry,
+  ColorInput,
   ColorMatch,
   ColorErrorCode,
   Color,
@@ -56,28 +58,41 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
     // Parse target color
     const parsedTargetColor = ColorUtils.parseColorInput(targetColor);
     
-    // Parse brand palette colors
-    const parsedBrandColors: Color[] = [];
-    for (const brandColorInput of brandPalette) {
+    // Parse brand palette colors, keeping each entry's original position so
+    // callers can map results (and skipped entries) back to their input
+    const parsedBrandColors: Array<{ color: Color; paletteIndex: number; name?: string }> = [];
+    const skipped: ColorMatch['skipped'] = [];
+    brandPalette.forEach((entry, paletteIndex) => {
+      const { color: colorInput, name } = unpackPaletteEntry(entry);
       try {
-        const parsedColor = ColorUtils.parseColorInput(brandColorInput);
-        parsedBrandColors.push(parsedColor);
+        parsedBrandColors.push({
+          color: ColorUtils.parseColorInput(colorInput),
+          paletteIndex,
+          ...(name !== undefined && { name })
+        });
       } catch (error) {
-        console.warn('Skipping invalid brand color:', brandColorInput, error);
+        skipped.push({
+          paletteIndex,
+          input: colorInput,
+          ...(name !== undefined && { name }),
+          reason: describeParseFailure(error)
+        });
       }
-    }
+    });
     
     if (parsedBrandColors.length === 0) {
       throw new Error('No valid colors found in brand palette');
     }
     
-    // Calculate Delta E for each brand color
-    const matches = parsedBrandColors.map((brandColor, index) => {
-      const deltaE = ColorUtils.calculateDeltaE(parsedTargetColor, brandColor);
+    // Calculate CIEDE2000 Delta E for each brand color
+    const matches = parsedBrandColors.map(brandColor => {
+      const deltaE = ColorUtils.calculateDeltaE2000(parsedTargetColor, brandColor.color);
       return {
-        color: brandColor,
+        color: brandColor.color,
         deltaE,
-        index
+        withinThreshold: deltaE <= maxDeltaE,
+        paletteIndex: brandColor.paletteIndex,
+        ...(brandColor.name !== undefined && { name: brandColor.name })
       };
     });
     
@@ -85,18 +100,13 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
     matches.sort((a, b) => a.deltaE - b.deltaE);
     
     // Find best match
-    const bestMatch = matches[0];
+    const [bestMatch, ...otherMatches] = matches;
     
     // Determine confidence level based on Delta E
     const confidence = determineConfidence(bestMatch.deltaE, maxDeltaE);
     
     // Get alternatives if requested
-    const alternatives = includeAlternatives
-      ? matches.slice(1, Math.min(4, matches.length)).map(match => ({
-          color: match.color,
-          deltaE: match.deltaE
-        }))
-      : [];
+    const alternatives = includeAlternatives ? otherMatches.slice(0, 3) : [];
     
     const endTime = performance.now();
     const processingTime = Math.round((endTime - startTime) * 100) / 100;
@@ -111,7 +121,11 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
       bestMatch: bestMatch.color,
       deltaE: bestMatch.deltaE,
       confidence,
-      alternatives
+      withinThreshold: bestMatch.withinThreshold,
+      paletteIndex: bestMatch.paletteIndex,
+      ...(bestMatch.name !== undefined && { name: bestMatch.name }),
+      alternatives,
+      skipped
     };
     
     return {
@@ -121,7 +135,7 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
         processingTime,
         checkedAt: new Date().toISOString(),
         brandPaletteSize: parsedBrandColors.length,
-        algorithm: 'deltaE-euclidean'
+        algorithm: 'ciede2000'
       }
     };
     
@@ -190,6 +204,35 @@ export async function colorBrandMatch(input: unknown): Promise<ColorBrandMatchRe
 }
 
 /**
+ * Split a palette entry into its color input and optional name
+ */
+function unpackPaletteEntry(entry: BrandPaletteEntry): { color: ColorInput; name?: string } {
+  if (typeof entry === 'object' && 'name' in entry) {
+    return { color: entry.color, name: entry.name };
+  }
+  return { color: entry };
+}
+
+/**
+ * Turn a parse failure into a plain message. ColorUtils throws errors whose
+ * message is a serialized ColorError, so unwrap that when present.
+ */
+function describeParseFailure(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return 'Unknown parse error';
+  }
+  try {
+    const parsed: unknown = JSON.parse(error.message);
+    if (parsed && typeof parsed === 'object' && 'message' in parsed && typeof parsed.message === 'string') {
+      return parsed.message;
+    }
+  } catch {
+    // Not a serialized ColorError; fall through to the raw message
+  }
+  return error.message;
+}
+
+/**
  * Determine confidence level based on Delta E distance
  */
 function determineConfidence(deltaE: number, maxDeltaE: number): ColorMatch['confidence'] {
@@ -209,13 +252,30 @@ function determineConfidence(deltaE: number, maxDeltaE: number): ColorMatch['con
  */
 export const colorBrandMatchTool = {
   name: 'color.brandMatch',
-  description: 'Find the best matching color from a brand palette using Delta E color difference calculations',
+  description: 'Find the best matching color from a brand palette using CIEDE2000 Delta E. Palette entries may be plain colors or { name, color } objects; results report each match\'s palette index, name, and whether it falls within maxDeltaE, plus any entries skipped as unparseable.',
   inputSchema: {
     type: 'object',
     properties: {
       targetColor: { type: 'string' },
-      brandPalette: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 50 },
-      maxDeltaE: { type: 'number', minimum: 0, maximum: 100, default: 5 },
+      brandPalette: {
+        type: 'array',
+        items: {
+          oneOf: [
+            { type: 'string' },
+            {
+              type: 'object',
+              properties: {
+                name: { type: 'string', minLength: 1, maxLength: 100 },
+                color: { type: 'string' }
+              },
+              required: ['name', 'color']
+            }
+          ]
+        },
+        minItems: 1,
+        maxItems: 50
+      },
+      maxDeltaE: { type: 'number', minimum: 0, maximum: 100, default: 5, description: 'CIEDE2000 distance at or below which a match counts as within threshold (about 1 is just noticeable, 2-3 is close)' },
       includeAlternatives: { type: 'boolean', default: true }
     },
     required: ['targetColor', 'brandPalette']

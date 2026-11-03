@@ -1,6 +1,6 @@
-import { colorBrandMatch } from '../../src/tools/colorBrandMatch.js';
+import { colorBrandMatch, colorBrandMatchTool } from '../../src/tools/colorBrandMatch.js';
 import { ColorErrorCode } from '../../src/types/color.js';
-import { describe, test, expect } from '@jest/globals';
+import { describe, test, expect, jest } from '@jest/globals';
 
 describe('colorBrandMatch', () => {
   describe('successful brand matching', () => {
@@ -16,7 +16,7 @@ describe('colorBrandMatch', () => {
         expect(result.result.deltaE).toBeLessThan(1);
         expect(result.result.bestMatch.hex).toBe('#ff5733');
         expect(result.metadata.brandPaletteSize).toBe(3);
-        expect(result.metadata.algorithm).toBe('deltaE-euclidean');
+        expect(result.metadata.algorithm).toBe('ciede2000');
         expect(result.result.alternatives).toHaveLength(2);
       }
     });
@@ -24,7 +24,7 @@ describe('colorBrandMatch', () => {
     test('finds close match with high confidence', async () => {
       const result = await colorBrandMatch({
         targetColor: '#FF5733',
-        brandPalette: ['#FF5B37', '#33FF57', '#3357FF'], // Very close red (CIE76 deltaE ~2.07)
+        brandPalette: ['#FF6040', '#33FF57', '#3357FF'], // Very close red (CIEDE2000 ~1.98)
         maxDeltaE: 10
       });
 
@@ -32,7 +32,7 @@ describe('colorBrandMatch', () => {
       if (result.success) {
         expect(result.result.confidence).toBe('high');
         expect(result.result.deltaE).toBeLessThan(4); // maxDeltaE * 0.4
-        expect(result.result.bestMatch.hex).toBe('#ff5b37');
+        expect(result.result.bestMatch.hex).toBe('#ff6040');
         expect(result.result.alternatives).toHaveLength(2);
       }
     });
@@ -40,7 +40,7 @@ describe('colorBrandMatch', () => {
     test('finds medium confidence match', async () => {
       const result = await colorBrandMatch({
         targetColor: '#FF0000', // Pure red
-        brandPalette: ['#E00000', '#00FF00', '#0000FF'], // Darker red (CIE76 deltaE ~11.93)
+        brandPalette: ['#C00000', '#00FF00', '#0000FF'], // Darker red (CIEDE2000 ~13.46)
         maxDeltaE: 20
       });
 
@@ -48,7 +48,7 @@ describe('colorBrandMatch', () => {
       if (result.success) {
         expect(result.result.confidence).toBe('medium');
         expect(result.result.deltaE).toBeLessThan(16); // maxDeltaE * 0.8
-        expect(result.result.bestMatch.hex).toBe('#e00000');
+        expect(result.result.bestMatch.hex).toBe('#c00000');
       }
     });
 
@@ -288,7 +288,7 @@ describe('colorBrandMatch', () => {
     test('handles very similar colors with proper confidence levels', async () => {
       const result = await colorBrandMatch({
         targetColor: '#FF5733',
-        brandPalette: ['#FF5A36', '#FF5B37', '#FF5C38'], // Very similar reds (closest CIE76 deltaE ~1.55)
+        brandPalette: ['#FF5D3A', '#FF6040', '#FF6242'], // Very similar reds (closest CIEDE2000 ~1.11)
         maxDeltaE: 5
       });
 
@@ -343,7 +343,7 @@ describe('colorBrandMatch', () => {
     test('assigns high confidence for deltaE <= maxDeltaE * 0.4', async () => {
       const result = await colorBrandMatch({
         targetColor: '#FF0000',
-        brandPalette: ['#FF0B0B'], // Close match (CIE76 deltaE ~2.76)
+        brandPalette: ['#F00000'], // Close match (CIEDE2000 ~3.19)
         maxDeltaE: 10
       });
 
@@ -357,7 +357,7 @@ describe('colorBrandMatch', () => {
     test('assigns medium confidence for deltaE <= maxDeltaE * 0.8', async () => {
       const result = await colorBrandMatch({
         targetColor: '#FF0000',
-        brandPalette: ['#E00000'], // Medium match (CIE76 deltaE ~11.93)
+        brandPalette: ['#C00000'], // Medium match (CIEDE2000 ~13.46)
         maxDeltaE: 20
       });
 
@@ -380,6 +380,136 @@ describe('colorBrandMatch', () => {
         expect(result.result.confidence).toBe('low');
         expect(result.result.deltaE).toBeGreaterThan(40); // 50 * 0.8
       }
+    });
+  });
+  describe('maxDeltaE threshold', () => {
+    test('flags a best match beyond maxDeltaE as outside the threshold', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF0000',
+        brandPalette: ['#0000FF', '#00FF00'],
+        maxDeltaE: 5
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.bestMatch.hex).toBe('#0000ff');
+        expect(result.result.withinThreshold).toBe(false);
+        expect(result.result.alternatives[0].withinThreshold).toBe(false);
+      }
+    });
+
+    test('flags matches inside maxDeltaE as within the threshold', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF0000',
+        brandPalette: ['#F00000', '#0000FF'], // CIEDE2000 ~3.19, ~52.88
+        maxDeltaE: 5
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.withinThreshold).toBe(true);
+        expect(result.result.alternatives[0].withinThreshold).toBe(false);
+      }
+    });
+  });
+
+  describe('skipped palette entries', () => {
+    test('reports each invalid entry with its palette index and a reason', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const result = await colorBrandMatch({
+        targetColor: '#FF5733',
+        brandPalette: ['not-a-color', '#33FF57', 'also-invalid', '#3357FF']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.skipped).toHaveLength(2);
+        expect(result.result.skipped[0]).toMatchObject({ paletteIndex: 0, input: 'not-a-color' });
+        expect(result.result.skipped[1]).toMatchObject({ paletteIndex: 2, input: 'also-invalid' });
+        expect(result.result.skipped[0].reason).toMatch(/\S/);
+        expect(result.result.skipped[0].reason).not.toMatch(/^\{/); // plain message, not serialized JSON
+      }
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    test('returns an empty skipped list when every entry is valid', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF5733',
+        brandPalette: ['#FF5733', '#33FF57']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.skipped).toEqual([]);
+      }
+    });
+  });
+
+  describe('palette indexes and names', () => {
+    test('returns original palette indexes, counting skipped entries', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF5733',
+        brandPalette: ['not-a-color', '#33FF57', '#FF5733']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.paletteIndex).toBe(2);
+        expect(result.result.alternatives[0].paletteIndex).toBe(1);
+      }
+    });
+
+    test('accepts named palette entries and echoes the names back', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF5733',
+        brandPalette: [
+          { name: 'Primary', color: '#FF5733' },
+          { name: 'Accent', color: '#3357FF' },
+          '#33FF57'
+        ]
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.name).toBe('Primary');
+        expect(result.result.paletteIndex).toBe(0);
+        const accent = result.result.alternatives.find(alt => alt.paletteIndex === 1);
+        const unnamed = result.result.alternatives.find(alt => alt.paletteIndex === 2);
+        expect(accent?.name).toBe('Accent');
+        expect(unnamed?.name).toBeUndefined();
+      }
+    });
+
+    test('includes the name of a skipped named entry', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF5733',
+        brandPalette: [{ name: 'Broken', color: 'not-a-color' }, '#FF5733']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.skipped).toEqual([
+          expect.objectContaining({ paletteIndex: 0, name: 'Broken', input: 'not-a-color' })
+        ]);
+      }
+    });
+
+    test('rejects a named entry with an empty name', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF5733',
+        brandPalette: [{ name: '', color: '#FF5733' }]
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    test('advertises named entries in the MCP input schema', () => {
+      const items = colorBrandMatchTool.inputSchema.properties.brandPalette.items;
+      expect(items.oneOf).toEqual(expect.arrayContaining([
+        { type: 'string' },
+        expect.objectContaining({ type: 'object', required: ['name', 'color'] })
+      ]));
     });
   });
 });
