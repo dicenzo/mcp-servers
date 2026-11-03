@@ -1,7 +1,6 @@
-#!/usr/bin/env node
-
 import { z } from 'zod';
 import { ImageUtils } from '../util/imageUtils.js';
+import { toImageError } from '../util/imageError.js';
 import { ImageInputSchema, OptimizationOptionsSchema, ImageErrorCode } from '../types/image.js';
 
 export const ImageOptimizeInputSchema = z.object({
@@ -19,7 +18,7 @@ export async function imageOptimize(input: unknown) {
     const result = await ImageUtils.optimizeImage(image, options);
     
     return {
-      success: true,
+      success: true as const,
       result: {
         data: result.data,
         format: result.format,
@@ -30,22 +29,7 @@ export async function imageOptimize(input: unknown) {
     };
     
   } catch (error) {
-    if (error instanceof Error) {
-      try {
-        const imageError = JSON.parse(error.message);
-        return { success: false, error: imageError };
-      } catch {
-        return {
-          success: false,
-          error: {
-            code: ImageErrorCode.OPTIMIZATION_FAILED,
-            message: error.message || 'Image optimization failed',
-            details: { processingTime: Math.round((performance.now() - startTime) * 100) / 100 }
-          }
-        };
-      }
-    }
-    return { success: false, error: { code: ImageErrorCode.PROCESSING_FAILED, message: 'Unknown error' } };
+    return { success: false as const, error: toImageError(error, { code: ImageErrorCode.OPTIMIZATION_FAILED, message: 'Image optimization failed' }, startTime) };
   }
 }
 

@@ -1,7 +1,6 @@
-#!/usr/bin/env node
-
 import { z } from 'zod';
 import { ImageUtils } from '../util/imageUtils.js';
+import { toImageError } from '../util/imageError.js';
 import {
   ImageInputSchema,
   SupportedImageFormats,
@@ -76,7 +75,7 @@ export async function imageConvert(input: unknown): Promise<ImageConvertResponse
       const size = Buffer.from(base64Data, 'base64').length;
       
       return {
-        success: true,
+        success: true as const,
         result: {
           data: image.data,
           format: image.format,
@@ -119,7 +118,7 @@ export async function imageConvert(input: unknown): Promise<ImageConvertResponse
     const processingTime = Math.round((endTime - startTime) * 100) / 100;
     
     return {
-      success: true,
+      success: true as const,
       result: {
         data: result.data,
         format: result.format,
@@ -140,42 +139,7 @@ export async function imageConvert(input: unknown): Promise<ImageConvertResponse
     };
     
   } catch (error) {
-    // Handle structured errors from ImageUtils
-    if (error instanceof Error) {
-      try {
-        const imageError = JSON.parse(error.message);
-        return {
-          success: false,
-          error: imageError
-        };
-      } catch {
-        // Handle unstructured errors
-        return {
-          success: false,
-          error: {
-            code: ImageErrorCode.PROCESSING_FAILED,
-            message: error.message || 'Format conversion failed',
-            details: {
-              processingTime: Math.round((performance.now() - startTime) * 100) / 100
-            },
-            suggestions: [
-              'Verify the input image is valid and properly encoded',
-              'Check that the target format is supported',
-              'Ensure quality parameter is within valid range (10-100)',
-              'Try with a smaller image if processing fails'
-            ]
-          }
-        };
-      }
-    }
-    
-    return {
-      success: false,
-      error: {
-        code: ImageErrorCode.PROCESSING_FAILED,
-        message: 'Unknown error during format conversion'
-      }
-    };
+    return { success: false as const, error: toImageError(error, { code: ImageErrorCode.PROCESSING_FAILED, message: 'Format conversion failed', suggestions: ['Verify the input image is valid and properly encoded', 'Check that the target format is supported'] }, startTime) };
   }
 }
 
