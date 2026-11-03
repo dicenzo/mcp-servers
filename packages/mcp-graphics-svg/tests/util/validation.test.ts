@@ -349,7 +349,7 @@ describe('Validation Utilities', () => {
             const parsedError = JSON.parse((error as Error).message);
             expect(parsedError.message).toBe('Invalid color format');
             expect(parsedError.details.color).toBe(color);
-            expect(parsedError.suggestions).toContain('Use hex format (#RGB or #RRGGBB)');
+            expect(parsedError.suggestions).toContain('Use hex format (#RGB, #RGBA, #RRGGBB or #RRGGBBAA)');
           }
         });
       });

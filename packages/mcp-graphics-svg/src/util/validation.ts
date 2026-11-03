@@ -144,13 +144,12 @@ export class SVGValidator {
       }));
     }
 
-    // Basic path command validation - ensure path starts with M or m and has valid structure
-    const pathCommandPattern = /^\s*[Mm]\s*[\d.-]+[\s,][\d.-]+/;
-    if (!pathCommandPattern.test(pathData.trim())) {
+    const problem = findPathDataProblem(pathData);
+    if (problem) {
       throw new Error(JSON.stringify({
         code: SVGErrorCode.INVALID_INPUT,
         message: 'Invalid path data - no valid path commands found',
-        details: { pathData: pathData.substring(0, 100) },
+        details: { pathData: pathData.substring(0, 100), problem },
         suggestions: [
           'Use valid SVG path commands (M, L, C, Q, A, Z, etc.)',
           'Check SVG path syntax documentation',
@@ -161,7 +160,7 @@ export class SVGValidator {
   }
 
   /**
-   * Validates color values (hex, rgb, named colors)
+   * Validates SVG paint values: CSS colors, currentColor, none, inherit and url(#id)
    */
   static validateColor(color: string): void {
     // Optional colors are allowed: an absent or empty value means "not specified"
@@ -176,44 +175,7 @@ export class SVGValidator {
       }));
     }
 
-    const hexPattern = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
-    const rgbPattern = /^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/;
-    const rgbaPattern = /^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)$/;
-    const hslPattern = /^hsl\(\s*(\d+)\s*,\s*(\d+)%\s*,\s*(\d+)%\s*\)$/;
-    const hslaPattern = /^hsla\(\s*(\d+)\s*,\s*(\d+)%\s*,\s*(\d+)%\s*,\s*([\d.]+)\s*\)$/;
-    const namedColors = [
-      'aliceblue', 'antiquewhite', 'aqua', 'aquamarine', 'azure', 'beige', 'bisque', 'black',
-      'blanchedalmond', 'blue', 'blueviolet', 'brown', 'burlywood', 'cadetblue', 'chartreuse',
-      'chocolate', 'coral', 'cornflowerblue', 'cornsilk', 'crimson', 'cyan', 'darkblue',
-      'darkcyan', 'darkgoldenrod', 'darkgray', 'darkgrey', 'darkgreen', 'darkkhaki',
-      'darkmagenta', 'darkolivegreen', 'darkorange', 'darkorchid', 'darkred', 'darksalmon',
-      'darkseagreen', 'darkslateblue', 'darkslategray', 'darkslategrey', 'darkturquoise',
-      'darkviolet', 'deeppink', 'deepskyblue', 'dimgray', 'dimgrey', 'dodgerblue', 'firebrick',
-      'floralwhite', 'forestgreen', 'fuchsia', 'gainsboro', 'ghostwhite', 'gold', 'goldenrod',
-      'gray', 'grey', 'green', 'greenyellow', 'honeydew', 'hotpink', 'indianred', 'indigo',
-      'ivory', 'khaki', 'lavender', 'lavenderblush', 'lawngreen', 'lemonchiffon', 'lightblue',
-      'lightcoral', 'lightcyan', 'lightgoldenrodyellow', 'lightgray', 'lightgrey', 'lightgreen',
-      'lightpink', 'lightsalmon', 'lightseagreen', 'lightskyblue', 'lightslategray',
-      'lightslategrey', 'lightsteelblue', 'lightyellow', 'lime', 'limegreen', 'linen',
-      'magenta', 'maroon', 'mediumaquamarine', 'mediumblue', 'mediumorchid', 'mediumpurple',
-      'mediumseagreen', 'mediumslateblue', 'mediumspringgreen', 'mediumturquoise',
-      'mediumvioletred', 'midnightblue', 'mintcream', 'mistyrose', 'moccasin', 'navajowhite',
-      'navy', 'oldlace', 'olive', 'olivedrab', 'orange', 'orangered', 'orchid', 'palegoldenrod',
-      'palegreen', 'paleturquoise', 'palevioletred', 'papayawhip', 'peachpuff', 'peru', 'pink',
-      'plum', 'powderblue', 'purple', 'red', 'rosybrown', 'royalblue', 'saddlebrown', 'salmon',
-      'sandybrown', 'seagreen', 'seashell', 'sienna', 'silver', 'skyblue', 'slateblue',
-      'slategray', 'slategrey', 'snow', 'springgreen', 'steelblue', 'tan', 'teal', 'thistle',
-      'tomato', 'turquoise', 'violet', 'wheat', 'white', 'whitesmoke', 'yellow', 'yellowgreen',
-      'transparent', 'none'
-    ];
-
-    const isValid = 
-      hexPattern.test(color) ||
-      rgbPattern.test(color) ||
-      rgbaPattern.test(color) ||
-      hslPattern.test(color) ||
-      hslaPattern.test(color) ||
-      namedColors.includes(color.toLowerCase());
+    const isValid = isValidPaint(color);
 
     if (!isValid) {
       throw new Error(JSON.stringify({
@@ -221,12 +183,11 @@ export class SVGValidator {
         message: 'Invalid color format',
         details: { color },
         suggestions: [
-          'Use hex format (#RGB or #RRGGBB)',
-          'Use rgb format (rgb(r, g, b))',
-          'Use rgba format (rgba(r, g, b, a))',
-          'Use hsl format (hsl(h, s%, l%))',
-          'Use hsla format (hsla(h, s%, l%, a))',
-          'Use named colors (red, blue, green, etc.)'
+          'Use hex format (#RGB, #RGBA, #RRGGBB or #RRGGBBAA)',
+          'Use rgb()/rgba() with channels 0-255 or 0-100%, e.g. rgb(255, 0, 0) or rgb(255 0 0 / 50%)',
+          'Use hsl()/hsla() with saturation and lightness 0-100%, e.g. hsl(210, 50%, 40%)',
+          'Use a CSS named color, currentColor, none or inherit',
+          'Use url(#id) to reference a gradient or pattern, optionally followed by a fallback color'
         ]
       }));
     }
@@ -486,4 +447,155 @@ export function escapeXML(text: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// ---------------------------------------------------------------------------
+// SVG path data grammar (SVG 1.1 §8.3.9 / SVG 2 path data)
+// ---------------------------------------------------------------------------
+
+/** Number of arguments each path command takes per repetition */
+const PATH_ARG_COUNTS: Record<string, number> = { m: 2, l: 2, h: 1, v: 1, c: 6, s: 4, q: 4, t: 2, a: 7, z: 0 };
+const PATH_NUMBER = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/y;
+const PATH_FLAG = /[01]/y;
+const PATH_COMMA_WSP = /\s*,?\s*/y;
+const PATH_WSP = /\s*/y;
+
+/**
+ * Returns a description of the first grammar error in path data, or undefined if it is valid.
+ * Handles compact syntax (`M-5-5`, `M.5.5`, `1e2`, arc flags without separators).
+ */
+function findPathDataProblem(pathData: string): string | undefined {
+  let index = 0;
+  const skip = (pattern: RegExp) => {
+    pattern.lastIndex = index;
+    pattern.exec(pathData);
+    index = pattern.lastIndex;
+  };
+  const read = (pattern: RegExp): boolean => {
+    pattern.lastIndex = index;
+    const match = pattern.exec(pathData);
+    if (!match) return false;
+    index = pattern.lastIndex;
+    return true;
+  };
+  const startsNumber = () => /[\d.+-]/.test(pathData[index] ?? '');
+
+  skip(PATH_WSP);
+  if (!/[Mm]/.test(pathData[index] ?? '')) {
+    return 'path data must start with a moveto (M or m) command';
+  }
+
+  while (index < pathData.length) {
+    const command = pathData[index];
+    const argCount = PATH_ARG_COUNTS[command.toLowerCase()];
+    if (argCount === undefined) {
+      return `unexpected '${command}' at position ${index}`;
+    }
+    index++;
+
+    if (argCount > 0) {
+      do {
+        for (let arg = 0; arg < argCount; arg++) {
+          skip(arg === 0 ? PATH_WSP : PATH_COMMA_WSP);
+          // Arc arguments 4 and 5 are the large-arc and sweep flags
+          const isFlag = command.toLowerCase() === 'a' && (arg === 3 || arg === 4);
+          if (!read(isFlag ? PATH_FLAG : PATH_NUMBER)) {
+            return `'${command}' at position ${index} needs ${argCount} ${isFlag ? 'arguments (arc flags are 0 or 1)' : 'numeric arguments'}`;
+          }
+        }
+        skip(PATH_COMMA_WSP);
+      } while (startsNumber());
+    }
+    skip(PATH_WSP);
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// SVG paint values
+// ---------------------------------------------------------------------------
+
+const NAMED_COLORS = new Set([
+  'aliceblue', 'antiquewhite', 'aqua', 'aquamarine', 'azure', 'beige', 'bisque', 'black',
+  'blanchedalmond', 'blue', 'blueviolet', 'brown', 'burlywood', 'cadetblue', 'chartreuse',
+  'chocolate', 'coral', 'cornflowerblue', 'cornsilk', 'crimson', 'cyan', 'darkblue',
+  'darkcyan', 'darkgoldenrod', 'darkgray', 'darkgrey', 'darkgreen', 'darkkhaki',
+  'darkmagenta', 'darkolivegreen', 'darkorange', 'darkorchid', 'darkred', 'darksalmon',
+  'darkseagreen', 'darkslateblue', 'darkslategray', 'darkslategrey', 'darkturquoise',
+  'darkviolet', 'deeppink', 'deepskyblue', 'dimgray', 'dimgrey', 'dodgerblue', 'firebrick',
+  'floralwhite', 'forestgreen', 'fuchsia', 'gainsboro', 'ghostwhite', 'gold', 'goldenrod',
+  'gray', 'grey', 'green', 'greenyellow', 'honeydew', 'hotpink', 'indianred', 'indigo',
+  'ivory', 'khaki', 'lavender', 'lavenderblush', 'lawngreen', 'lemonchiffon', 'lightblue',
+  'lightcoral', 'lightcyan', 'lightgoldenrodyellow', 'lightgray', 'lightgrey', 'lightgreen',
+  'lightpink', 'lightsalmon', 'lightseagreen', 'lightskyblue', 'lightslategray',
+  'lightslategrey', 'lightsteelblue', 'lightyellow', 'lime', 'limegreen', 'linen',
+  'magenta', 'maroon', 'mediumaquamarine', 'mediumblue', 'mediumorchid', 'mediumpurple',
+  'mediumseagreen', 'mediumslateblue', 'mediumspringgreen', 'mediumturquoise',
+  'mediumvioletred', 'midnightblue', 'mintcream', 'mistyrose', 'moccasin', 'navajowhite',
+  'navy', 'oldlace', 'olive', 'olivedrab', 'orange', 'orangered', 'orchid', 'palegoldenrod',
+  'palegreen', 'paleturquoise', 'palevioletred', 'papayawhip', 'peachpuff', 'peru', 'pink',
+  'plum', 'powderblue', 'purple', 'rebeccapurple', 'red', 'rosybrown', 'royalblue', 'saddlebrown',
+  'salmon', 'sandybrown', 'seagreen', 'seashell', 'sienna', 'silver', 'skyblue', 'slateblue',
+  'slategray', 'slategrey', 'snow', 'springgreen', 'steelblue', 'tan', 'teal', 'thistle',
+  'tomato', 'turquoise', 'violet', 'wheat', 'white', 'whitesmoke', 'yellow', 'yellowgreen'
+]);
+const PAINT_KEYWORDS = new Set(['transparent', 'none', 'currentcolor', 'inherit']);
+const HEX_COLOR = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const FUNCTIONAL_COLOR = /^(rgba?|hsla?)\(\s*([^()]*?)\s*\)$/i;
+const PAINT_SERVER = /^url\(\s*#[A-Za-z_][\w.:-]*\s*\)(?:\s+(.+))?$/;
+const CSS_NUMBER = '[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[+-]?\\d+)?';
+const PERCENT_OR_NUMBER = new RegExp(`^(${CSS_NUMBER})(%?)$`, 'i');
+const HUE = new RegExp(`^${CSS_NUMBER}(?:deg|grad|rad|turn)?$`, 'i');
+
+/** A number or percentage within range: `max` for plain numbers, 100 for percentages */
+function inRange(value: string, max: number, percentOnly = false): boolean {
+  const match = PERCENT_OR_NUMBER.exec(value);
+  if (!match || (percentOnly && !match[2])) return false;
+  const n = Number(match[1]);
+  return n >= 0 && n <= (match[2] ? 100 : max);
+}
+
+/** rgb[a]() / hsl[a]() in comma syntax or CSS Color 4 space syntax with `/ alpha` */
+function isValidFunctionalColor(color: string): boolean {
+  const match = FUNCTIONAL_COLOR.exec(color);
+  if (!match) return false;
+  const isHsl = match[1].toLowerCase().startsWith('hsl');
+  const body = match[2];
+
+  let channels: string[];
+  let alpha: string | undefined;
+  if (body.includes(',')) {
+    const parts = body.split(/\s*,\s*/);
+    if (parts.length !== 3 && parts.length !== 4) return false;
+    [channels, alpha] = [parts.slice(0, 3), parts[3]];
+  } else {
+    const [main, slashAlpha, extra] = body.split(/\s*\/\s*/);
+    if (extra !== undefined) return false;
+    channels = main.split(/\s+/);
+    alpha = slashAlpha;
+    if (channels.length !== 3) return false;
+  }
+
+  if (alpha !== undefined && !inRange(alpha, 1)) return false;
+  if (isHsl) {
+    // Comma syntax requires percentages for saturation and lightness
+    const percentOnly = body.includes(',');
+    return HUE.test(channels[0]) && inRange(channels[1], 100, percentOnly) && inRange(channels[2], 100, percentOnly);
+  }
+  return channels.every(channel => inRange(channel, 255));
+}
+
+function isValidCssColor(color: string): boolean {
+  const lower = color.toLowerCase();
+  return HEX_COLOR.test(color) || NAMED_COLORS.has(lower) || PAINT_KEYWORDS.has(lower) || isValidFunctionalColor(color);
+}
+
+/** An SVG paint: a CSS color or keyword, or url(#id) with an optional fallback color */
+function isValidPaint(value: string): boolean {
+  const color = value.trim();
+  const paintServer = PAINT_SERVER.exec(color);
+  if (paintServer) {
+    return paintServer[1] === undefined || isValidCssColor(paintServer[1]);
+  }
+  return isValidCssColor(color);
 }
