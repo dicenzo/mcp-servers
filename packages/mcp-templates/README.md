@@ -72,12 +72,12 @@ Templates and variables come from the caller, so the server bounds the work one 
 - Raster export: `width` and `height` are at most 8,192 px, the output area (width × scale × height × scale) is at most 50,000,000 pixels, and sharp refuses SVGs larger than 50,000,000 pixels. PDF export renders at most 2 pages at a time, with a 30-second page timeout.
 - Rendered templates passed to `template.export` are schema-checked; their SVG and HTML are at most 5,000,000 characters.
 - `pattern` validation rules: patterns are at most 200 characters and values at most 1,000. Patterns with backreferences, lookarounds, or a repeated group that contains a quantifier or alternation (for example `(a+)+` or `(a|b)*`) are rejected. Patterns that pass run in a worker thread with a 500 ms timeout, never on the main thread.
-- Output escaping: image sources must be `data:image/*`, `https:`, or a relative path. Colors must be hex, `rgb()`/`rgba()`/`hsl()`/`hsla()`, or a named color. Font families may contain only letters, digits, spaces, commas, quotes, hyphens, and underscores. SVG and HTML components are inserted as written, by design.
+- Output escaping: image sources must be `data:image/*`, `https:`, or a relative path. Colors must be 3, 4, 6 or 8-digit hex, `rgb()`/`rgba()`/`hsl()`/`hsla()` (comma or space syntax, with an optional `/ alpha`), a CSS named color, `transparent`, `currentColor` or `none`. `template.validate`, `color` variables and rendering all use this same check. Font families may contain only letters, digits, spaces, commas, quotes, hyphens, and underscores. SVG and HTML components are inserted as written, by design.
 - Component library: at most 50 libraries, 500 components per library, and 256 KB per component.
 
 ## Known issues
 
-- Last verified test run: build passes; 63 of 63 tests pass.
+- Last verified test run: build passes; 111 of 111 tests pass.
 
 
 ## License
