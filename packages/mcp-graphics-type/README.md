@@ -1,6 +1,6 @@
 # mcp-graphics-type
 
-An MCP server for fonts and text: load a font and read its metadata, shape and measure text, subset a font, build fallback font stacks, and validate font files. Built on opentype.js.
+An MCP server for fonts and text: load a font and read its metadata, shape and measure text, subset a font, build fallback font stacks, and validate font files. Built on opentype.js; WOFF2 fonts are decompressed with wawoff2 first.
 
 It runs over stdio and works with any MCP client, including Claude Code and Claude Desktop.
 

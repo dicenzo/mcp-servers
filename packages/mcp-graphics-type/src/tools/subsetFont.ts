@@ -17,6 +17,7 @@ import {
   MAX_UNICODE_RANGES
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
+import { parseFont } from '../util/parseFont.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<TextToolResult>;
@@ -447,7 +448,7 @@ async function createBasicSubset(
   }
 ): Promise<{ buffer: Buffer; glyphsIncluded: number; totalGlyphs: number }> {
   const opentype = await import('opentype.js');
-  const font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
+  const font = await parseFont(fontBuffer);
   
   // Get characters to include
   const characters = Array.from(new Set(options.characters));
@@ -573,9 +574,8 @@ export function codepointsInRanges(
  */
 async function getGlyphCounts(originalBuffer: Buffer, subsetBuffer: Buffer): Promise<{ total: number; subset: number }> {
   try {
-    const opentype = await import('opentype.js');
-    const originalFont = opentype.parse(originalBuffer.buffer as ArrayBuffer);
-    const subsetFont = opentype.parse(subsetBuffer.buffer as ArrayBuffer);
+    const originalFont = await parseFont(originalBuffer);
+    const subsetFont = await parseFont(subsetBuffer);
     
     return {
       total: originalFont.numGlyphs,
