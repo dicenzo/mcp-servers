@@ -89,6 +89,10 @@ function matchFont(name: string, entries: SystemFontEntry[]): SystemFontMatch {
   return { found: false, similar: [...families].sort().slice(0, 8) };
 }
 
+const isInside = (real: string, roots: string[]) =>
+  roots.some(root => real === root || real.startsWith(root + path.sep));
+
+/** Indexes regular font files under the roots (which must be real paths). */
 function buildIndex(roots: string[]): SystemFontEntry[] {
   const entries: SystemFontEntry[] = [];
   const seenDirs = new Set<string>();
@@ -115,10 +119,26 @@ function buildIndex(roots: string[]): SystemFontEntry[] {
     // Sorted so that the same fonts always give the same answer
     dirents.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     for (const dirent of dirents) {
-      const fullPath = path.join(real, dirent.name);
-      if (dirent.isDirectory()) {
+      let fullPath = path.join(real, dirent.name);
+      let isDirectory = dirent.isDirectory();
+      let isFile = dirent.isFile();
+      if (dirent.isSymbolicLink()) {
+        // Follow a link only when its target is also inside the font folders
+        try {
+          fullPath = fs.realpathSync(fullPath);
+          const stats = fs.statSync(fullPath);
+          isDirectory = stats.isDirectory();
+          isFile = stats.isFile();
+        } catch {
+          continue;
+        }
+        if (!isInside(fullPath, roots)) {
+          continue;
+        }
+      }
+      if (isDirectory) {
         walk(fullPath, depth + 1);
-      } else if (INDEXED_EXTENSIONS.has(path.extname(dirent.name).toLowerCase()) && files < MAX_FILES) {
+      } else if (isFile && INDEXED_EXTENSIONS.has(path.extname(fullPath).toLowerCase()) && files < MAX_FILES) {
         files++;
         entries.push(...readFontNames(fullPath));
       }
@@ -135,8 +155,16 @@ function buildIndex(roots: string[]): SystemFontEntry[] {
 export function readFontNames(filePath: string): SystemFontEntry[] {
   let fd: number | undefined;
   try {
-    fd = fs.openSync(filePath, 'r');
+    // O_NONBLOCK so a FIFO swapped in after the walk's checks can't block the open
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
+    const stats = fs.fstatSync(fd);
+    if (!stats.isFile()) {
+      return [];
+    }
     const read = (position: number, length: number) => {
+      if (position + length > stats.size) {
+        throw new Error('Font table extends past the end of the file');
+      }
       const buffer = Buffer.alloc(length);
       const bytesRead = fs.readSync(fd as number, buffer, 0, length, position);
       if (bytesRead < length) {
@@ -253,18 +281,23 @@ export function extractFromCollection(data: Buffer, index: number): Buffer {
   const directorySize = 12 + numTables * 16;
   const pad4 = (n: number) => (n + 3) & ~3;
 
+  if (fontOffset + directorySize > data.length) {
+    throw new Error('Collection table directory extends past the end of the file');
+  }
   const tables = Array.from({ length: numTables }, (_, i) => {
     const record = fontOffset + 12 + i * 16;
-    return { record, offset: data.readUInt32BE(record + 8), length: data.readUInt32BE(record + 12) };
+    const table = { offset: data.readUInt32BE(record + 8), length: data.readUInt32BE(record + 12) };
+    // Checked before allocating, so a bogus length can't size the output buffer
+    if (table.offset + table.length > data.length) {
+      throw new Error('Collection table extends past the end of the file');
+    }
+    return table;
   });
   const output = Buffer.alloc(directorySize + tables.reduce((sum, t) => sum + pad4(t.length), 0));
   data.copy(output, 0, fontOffset, fontOffset + directorySize);
 
   let offset = directorySize;
   tables.forEach((table, i) => {
-    if (table.offset + table.length > data.length) {
-      throw new Error('Collection table extends past the end of the file');
-    }
     data.copy(output, offset, table.offset, table.offset + table.length);
     output.writeUInt32BE(offset, 12 + i * 16 + 8);
     offset += pad4(table.length);
