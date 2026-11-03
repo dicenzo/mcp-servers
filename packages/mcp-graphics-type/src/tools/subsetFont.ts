@@ -272,7 +272,7 @@ async function createFontSubset(
     }
     
     // Analyze character coverage
-    const charactersIncluded = Array.from(new Set(options.characters.split('')));
+    const charactersIncluded = Array.from(new Set(options.characters));
     const unicodeRanges = analyzeUnicodeRanges(charactersIncluded);
     
     // Determine features included
@@ -450,7 +450,7 @@ async function createBasicSubset(
   const font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
   
   // Get characters to include
-  const characters = Array.from(new Set(options.characters.split('')));
+  const characters = Array.from(new Set(options.characters));
   const glyphsToInclude = new Set<Glyph>();
   
   // Add glyphs for specified characters
