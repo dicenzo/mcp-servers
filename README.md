@@ -14,7 +14,6 @@ Each server lives in its own folder under `packages/`, has its own `package.json
 | [mcp-graphics-type](packages/mcp-graphics-type) | Font loading and metadata, text shaping and measurement, font subsetting, fallback stacks, font validation. | 6 |
 | [mcp-layout](packages/mcp-layout) | CSS Grid, Flexbox, constraint-based, automatic, and responsive layout computation. | 6 |
 | [mcp-templates](packages/mcp-templates) | Design templates: create, render to SVG or HTML, validate, export (including PNG and PDF), and compose from a component library. | 6 |
-| [mcp-business-strategy](packages/mcp-business-strategy) | Web search, market data lookups, unit economics, scenario modeling, and Markdown templates. | 5 |
 
 Tool counts come from each server's `ListTools` handler. Each package README lists every tool.
 
@@ -55,8 +54,6 @@ The harnesses expect the servers to be built first, or they build them during se
 claude mcp add mcp-graphics-color -- node /path/to/mcp-servers/packages/mcp-graphics-color/dist/index.js
 ```
 
-Pass environment variables with `-e NAME=value`. Only `mcp-business-strategy` reads any (see below).
-
 ## Register a server with Claude Desktop
 
 Add an entry per server to `claude_desktop_config.json`, then restart Claude Desktop:
@@ -67,29 +64,12 @@ Add an entry per server to `claude_desktop_config.json`, then restart Claude Des
     "mcp-graphics-color": {
       "command": "node",
       "args": ["/path/to/mcp-servers/packages/mcp-graphics-color/dist/index.js"]
-    },
-    "mcp-business-strategy": {
-      "command": "node",
-      "args": ["/path/to/mcp-servers/packages/mcp-business-strategy/dist/index.js"],
-      "env": {
-        "TAVILY_API_KEY": "your-key",
-        "TEMPLATES_DIR": "/path/to/your/templates"
-      }
     }
   }
 }
 ```
 
 Replace `/path/to/mcp-servers` with the location of your clone.
-
-## Environment variables
-
-Only `mcp-business-strategy` reads environment variables. See [its `.env.example`](packages/mcp-business-strategy/.env.example):
-
-| Variable | Purpose |
-| --- | --- |
-| `TAVILY_API_KEY`, `SERPAPI_KEY`, `BRAVE_API_KEY` | Search providers for `web.search`, tried in that order. Without any key, `web.search` returns placeholder results. |
-| `TEMPLATES_DIR` | Folder of Markdown templates for `templates.get` and the `templates://` resources. |
 
 ## Known issues
 
@@ -103,13 +83,11 @@ These are the results of the last verified run (2026-11-03; Node 22, Yarn 4.9.2,
 | mcp-graphics-type | passes | 147 of 150 pass; 3 skipped (network, installed system fonts, fontTools) |
 | mcp-layout | passes | 95 of 98 pass; 3 skipped (CSS output and accessibility analysis are stubbed in the tools) |
 | mcp-templates | passes | 63 of 63 pass |
-| mcp-business-strategy | passes | 175 of 175 pass |
 | tools/integration-tests | passes | 23 of 51 pass; failures are mostly assertions on tool responses |
 | tools/performance-suite | passes | runs to completion, but it times mock functions, so its results do not reflect the servers |
 
 Behavior to know about:
 
-- `mcp-business-strategy`: `data.enrich` returns fixed, keyword-matched figures stored in the source. It does not fetch live data. `web.search` falls back to placeholder results when no search key works.
 - `mcp-graphics-color`: `color.contrast` accepts `algorithm: "apca"` but always computes the WCAG 2 ratio.
 - `mcp-graphics-svg`: `svg.path.operations` does not compute true geometric boolean operations, and `wireframe.to.svg` can fail on wireframes with text because jsdom has no `getBBox`.
 - `tools/performance-suite` replaces every tool with a mock that waits a simulated delay. Treat it as scaffolding until the mocks are replaced with real MCP calls.
