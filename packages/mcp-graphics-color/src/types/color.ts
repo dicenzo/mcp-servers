@@ -88,6 +88,8 @@ export interface ColorMatch {
   confidence: 'exact' | 'high' | 'medium' | 'low';
   /** Whether deltaE is at or below the requested maxDeltaE */
   withinThreshold: boolean;
+  /** Absolute alpha difference (0-1); deltaE ignores transparency */
+  alphaDifference: number;
   /** Position of the match in the original brandPalette input */
   paletteIndex: number;
   name?: string;
@@ -95,6 +97,7 @@ export interface ColorMatch {
     color: Color;
     deltaE: number;
     withinThreshold: boolean;
+    alphaDifference: number;
     paletteIndex: number;
     name?: string;
   }>;

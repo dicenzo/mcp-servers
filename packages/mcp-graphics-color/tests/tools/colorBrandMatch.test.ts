@@ -507,9 +507,112 @@ describe('colorBrandMatch', () => {
     test('advertises named entries in the MCP input schema', () => {
       const items = colorBrandMatchTool.inputSchema.properties.brandPalette.items;
       expect(items.oneOf).toEqual(expect.arrayContaining([
-        { type: 'string' },
+        expect.objectContaining({ type: 'string' }),
         expect.objectContaining({ type: 'object', required: ['name', 'color'] })
       ]));
+    });
+  });
+  describe('confidence and threshold agree', () => {
+    test('does not label a match exact when it is outside maxDeltaE', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF5733',
+        brandPalette: ['#FF5C38'], // CIEDE2000 ~0.87
+        maxDeltaE: 0.5
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.withinThreshold).toBe(false);
+        expect(result.result.confidence).toBe('low');
+      }
+    });
+
+    test('still labels an identical color exact when maxDeltaE is 0', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF5733',
+        brandPalette: ['#FF5733'],
+        maxDeltaE: 0
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.withinThreshold).toBe(true);
+        expect(result.result.confidence).toBe('exact');
+      }
+    });
+  });
+
+  describe('object color inputs', () => {
+    test('advertises object colors for targetColor and palette entries', () => {
+      const { targetColor, brandPalette } = colorBrandMatchTool.inputSchema.properties;
+      const objectColor = expect.objectContaining({ type: 'object', required: ['space', 'values'] });
+
+      expect(targetColor.oneOf).toEqual(expect.arrayContaining([objectColor]));
+      expect(brandPalette.items.oneOf).toEqual(expect.arrayContaining([objectColor]));
+      const namedProperties = brandPalette.items.oneOf
+        .map(option => option.properties)
+        .find(properties => properties !== undefined && 'color' in properties);
+      expect(namedProperties && 'color' in namedProperties ? namedProperties.color.oneOf : undefined)
+        .toEqual(expect.arrayContaining([objectColor]));
+    });
+
+    test('matches object colors in target and palette', async () => {
+      const result = await colorBrandMatch({
+        targetColor: { space: 'srgb', values: [1, 0, 0] },
+        brandPalette: [
+          { name: 'Red', color: { space: 'hsl', values: [0, 1, 0.5] } },
+          { space: 'srgb', values: [0, 0, 1] }
+        ]
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.name).toBe('Red');
+        expect(result.result.confidence).toBe('exact');
+      }
+    });
+  });
+
+  describe('alpha difference', () => {
+    test('reports zero alpha difference for opaque colors', async () => {
+      const result = await colorBrandMatch({
+        targetColor: '#FF0000',
+        brandPalette: ['#FF0000', '#0000FF']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.alphaDifference).toBe(0);
+        expect(result.result.alternatives[0].alphaDifference).toBe(0);
+      }
+    });
+
+    test('reports alpha difference that deltaE ignores', async () => {
+      const result = await colorBrandMatch({
+        targetColor: 'rgba(255,0,0,0.5)',
+        brandPalette: ['#FF0000', 'rgba(255,0,0,0.25)']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.deltaE).toBe(0);
+        const byIndex = [result.result, ...result.result.alternatives]
+          .reduce<Record<number, number>>((acc, m) => ({ ...acc, [m.paletteIndex]: m.alphaDifference }), {});
+        expect(byIndex[0]).toBe(0.5);
+        expect(byIndex[1]).toBe(0.25);
+      }
+    });
+
+    test('reads alpha from a fourth value in object colors', async () => {
+      const result = await colorBrandMatch({
+        targetColor: { space: 'srgb', values: [1, 0, 0, 0.4] },
+        brandPalette: ['#FF0000']
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result.alphaDifference).toBe(0.6);
+      }
     });
   });
 });
