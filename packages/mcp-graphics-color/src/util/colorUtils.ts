@@ -381,6 +381,42 @@ export class ColorUtils {
   }
 
   /**
+   * Calculate CIEDE2000 color difference, the perceptually uniform successor
+   * to CIE76 (calculateDeltaE). Values are smaller than CIE76 for the same
+   * pair, so thresholds tuned for one do not carry over to the other.
+   */
+  static calculateDeltaE2000(color1: Color, color2: Color): number {
+    try {
+      const c1 = this.colorToCulori(color1);
+      const c2 = this.colorToCulori(color2);
+
+      if (!c1 || !c2) {
+        throw new Error('Failed to convert colors for CIEDE2000 calculation');
+      }
+
+      const deltaE = culori.differenceCiede2000()(c1, c2);
+      if (!Number.isFinite(deltaE)) {
+        throw new Error('CIEDE2000 produced a non-finite result');
+      }
+      return Math.round(deltaE * 100) / 100;
+    } catch (error) {
+      throw new Error(JSON.stringify({
+        code: ColorErrorCode.PROCESSING_FAILED,
+        message: 'Failed to calculate CIEDE2000 Delta E',
+        details: {
+          color1,
+          color2,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        },
+        suggestions: [
+          'Ensure both colors are valid',
+          'Check color values are within valid ranges'
+        ]
+      } satisfies ColorError));
+    }
+  }
+
+  /**
    * Generate harmonious color palette from base color
    */
   static generateHarmonyPalette(
