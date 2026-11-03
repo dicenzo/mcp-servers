@@ -2,6 +2,7 @@ import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { SVG_LIMITS } from '../types/svg.js';
 import { SVGValidator, escapeXML } from '../util/validation.js';
+import { toCharGrid } from '../util/asciiGrid.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<any>;
@@ -110,11 +111,10 @@ class ASCIIToSVGConverter {
   }
 
   convert(asciiArt: string): string {
-    const lines = asciiArt.split('\n');
-    this.grid = lines.map(line => line.split(''));
+    this.grid = toCharGrid(asciiArt);
     
-    const width = Math.max(...lines.map(line => line.length)) * this.cellWidth;
-    const height = lines.length * this.cellHeight;
+    const width = Math.max(...this.grid.map(row => row.length)) * this.cellWidth;
+    const height = this.grid.length * this.cellHeight;
 
     this.svgElements = [];
     
