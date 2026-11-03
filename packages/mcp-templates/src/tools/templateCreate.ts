@@ -238,9 +238,11 @@ export const templateCreateTool: ExecutableTool = {
       }
 
       // Template created successfully
+      // Return the whole template: nothing stores it, so callers pass it to template.render
       const result = {
         success: true,
-        template: {
+        template: completeTemplate,
+        summary: {
           id: completeTemplate.id,
           name: completeTemplate.metadata.name,
           version: completeTemplate.metadata.version,

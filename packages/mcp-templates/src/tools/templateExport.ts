@@ -12,7 +12,7 @@ import {
 import { TemplateExporter } from '../util/export.js';
 import { templateRender } from './templateRender.js';
 import { PerformanceMonitor } from '../util/performance.js';
-import { formatBytes } from '../util/helpers.js';
+import { formatBytes, rejectTemplateId } from '../util/helpers.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
@@ -28,17 +28,8 @@ export const templateExportTool: ExecutableTool = {
     type: 'object',
     properties: {
       template: {
-        oneOf: [
-          {
-            type: 'string',
-            description: 'Template ID or rendered template ID'
-          },
-          {
-            type: 'object',
-            description: 'Rendered template object or template definition'
-          }
-        ],
-        description: 'Template or rendered template to export'
+        type: 'object',
+        description: 'A rendered template from template.render, or a template definition (such as the `template` returned by template.create) to render with `variables`'
       },
       variables: {
         type: 'object',
@@ -135,10 +126,8 @@ export const templateExportTool: ExecutableTool = {
       // Determine if we have a rendered template or need to render
       let renderedTemplate: RenderedTemplate;
       
-      if (typeof templateInput === 'string') {
-        // Template ID - would need to load and render
-        throw new Error(`Template lookup by ID not implemented: ${templateInput}`);
-      } else if (looksLikeRenderedTemplate(templateInput)) {
+      rejectTemplateId(templateInput);
+      if (looksLikeRenderedTemplate(templateInput)) {
         // Already rendered template: validate fully (sizes included) before trusting it
         const parsed = RenderedTemplateSchema.safeParse(templateInput);
         if (!parsed.success) {

@@ -367,9 +367,11 @@ export const templateLibraryComposeTool: ComposeTool = {
       const duration = monitor.endOperation(operationId);
 
       // Success result
+      // Return the whole template: nothing stores it, so callers pass it to template.render
       const result = {
         success: true,
-        template: {
+        template,
+        summary: {
           id: template.id,
           name: template.metadata.name,
           version: template.metadata.version,
