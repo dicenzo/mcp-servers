@@ -3949,6 +3949,7 @@ __metadata:
     ts-jest: "npm:^29.2.5"
     tsx: "npm:^4.19.1"
     typescript: "npm:^5.5.4"
+    wawoff2: "npm:2.0.1"
     zod: "npm:^4.6.7"
   languageName: unknown
   linkType: soft
@@ -5330,6 +5331,18 @@ __metadata:
   dependencies:
     makeerror: "npm:1.0.12"
   checksum: 10c0/a17e037bccd3ca8a25a80cb850903facdfed0de4864bd8728f1782370715d679fa72e0a0f5da7c1c1379365159901e5935f35be531229da53bbfc0efdabdb48e
+  languageName: node
+  linkType: hard
+
+"wawoff2@npm:2.0.1":
+  version: 2.0.1
+  resolution: "wawoff2@npm:2.0.1"
+  dependencies:
+    argparse: "npm:^2.0.1"
+  bin:
+    woff2_compress.js: bin/woff2_compress.js
+    woff2_decompress.js: bin/woff2_decompress.js
+  checksum: 10c0/98a286b60114e15ed578bbeeef1759b4890a1e8106e1486d8d0d4106b8e6c7a99c4c1d1b64afc76a83893dae040cc19a59dd64cffd5754b5337b5c82efed3d12
   languageName: node
   linkType: hard
 

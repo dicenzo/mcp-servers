@@ -23,6 +23,7 @@ import {
   FontMetadata, 
   TypographyErrorCode,
 } from '../types/typography.js';
+import { parseFont } from '../util/parseFont.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<TextToolResult>;
@@ -170,7 +171,7 @@ export const loadFontTool: ExecutableTool = {
 /**
  * Loads font data from various input sources.
  *
- * Callers pass `buffer.buffer` to opentype.parse, so the returned Buffer must own
+ * Callers may pass `buffer.buffer` to parsers, so the returned Buffer must own
  * its ArrayBuffer exactly: small Buffers (readFileSync, base64 decoding) are often
  * slices of Node's shared pool, and parsing the whole pool reads unrelated bytes.
  */
@@ -348,7 +349,7 @@ function getSystemFontPaths(): string[] {
 async function extractFontMetadata(fontBuffer: Buffer, _input: FontInput): Promise<FontMetadata> {
   try {
     // Use opentype.js for primary metadata extraction
-    const font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
+    const font = await parseFont(fontBuffer);
     
     // Extract basic metadata
     const metadata: FontMetadata = {

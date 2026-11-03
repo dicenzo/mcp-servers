@@ -11,6 +11,7 @@ import {
 import { loadFontBuffer } from './loadFont.js';
 import { fontLineGap } from '../util/fontMetrics.js';
 import { layoutGlyphRun } from '../util/glyphRun.js';
+import { parseFont } from '../util/parseFont.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<TextToolResult>;
@@ -221,8 +222,7 @@ async function measureTextDimensions(
 ): Promise<TextMetrics> {
   try {
     // Use opentype.js for text measurement
-    const opentype = await import('opentype.js');
-    const font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
+    const font = await parseFont(fontBuffer);
     
     const scale = fontSize / font.unitsPerEm;
     

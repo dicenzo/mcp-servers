@@ -12,6 +12,7 @@ import {
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
 import { layoutGlyphRun } from '../util/glyphRun.js';
+import { parseFont } from '../util/parseFont.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<TextToolResult>;
@@ -256,8 +257,7 @@ async function performBasicShaping(
 ): Promise<ShapedText> {
   try {
     // Use opentype.js for basic shaping
-    const opentype = await import('opentype.js');
-    const font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
+    const font = await parseFont(fontBuffer);
     
     const fontSize = options.fontSize || 16;
     
