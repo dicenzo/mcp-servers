@@ -30,7 +30,6 @@ declare module 'opentype.js' {
     unitsPerEm: number;
     ascender: number;
     descender: number;
-    lineGap?: number;
     numGlyphs: number;
     tables: {
       head?: {
@@ -40,7 +39,11 @@ declare module 'opentype.js' {
         yMax: number;
         macStyle: number;
       };
+      hhea?: {
+        lineGap: number;
+      };
       os2?: {
+        sTypoLineGap?: number;
         sCapHeight?: number;
         sxHeight?: number;
         usWeightClass: number;
