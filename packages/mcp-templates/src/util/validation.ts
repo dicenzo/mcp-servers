@@ -16,6 +16,7 @@ import {
   ComponentType,
   VariableType
 } from '../types/template.js';
+import Handlebars from 'handlebars';
 import { evaluateValidationRules } from './validationRules.js';
 
 /**
@@ -497,69 +498,174 @@ export class TemplateValidator {
     variableNames: Set<string>, 
     errors: TemplateError[]
   ): void {
-    // Check variable references in handlebars expressions
-    const checkString = (str: string, context: string) => {
-      const variablePattern = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*\}\}/g;
-      let match;
-      
-      while ((match = variablePattern.exec(str)) !== null) {
-        const varName = match[1].split('.')[0]; // Handle nested properties
-        if (!variableNames.has(varName)) {
-          errors.push({
-            code: TemplateErrorCode.MISSING_VARIABLE,
-            message: `Undefined variable '${varName}' in ${context}`,
-            componentId: component.id,
-            variableName: varName,
-            suggestions: [`Define variable '${varName}' in template variables`]
-          });
+    // The engine evaluates `conditional` before expanding `repeat`, so it sees the outer scope
+    if (component.conditional) {
+      this.checkHandlebars(`{{#if ${component.conditional}}}{{/if}}`, 'conditional expression', component, variableNames, errors);
+    }
+
+    let scope = variableNames;
+    if (component.repeat) {
+      const loopVariable = this.checkRepeatExpression(component, variableNames, errors);
+      if (loopVariable) {
+        scope = new Set([
+          ...variableNames,
+          loopVariable,
+          `${loopVariable}_index`,
+          `${loopVariable}_first`,
+          `${loopVariable}_last`
+        ]);
+      }
+    }
+
+    const check = (source: string | undefined, context: string) => {
+      if (source) this.checkHandlebars(source, context, component, scope, errors);
+    };
+
+    switch (component.type) {
+      case ComponentType.TEXT:
+        check(component.content, 'text content');
+        break;
+
+      case ComponentType.IMAGE:
+        check(component.source, 'image source');
+        break;
+
+      case ComponentType.SVG:
+        check(component.svgContent, 'SVG content');
+        break;
+
+      case ComponentType.HTML:
+        check(component.htmlContent, 'HTML content');
+        break;
+
+      case ComponentType.GROUP:
+        for (const child of component.children ?? []) {
+          this.checkComponentVariableReferences(child, scope, errors);
+        }
+        break;
+    }
+  }
+
+  /**
+   * Check a `repeat` expression against the engine's `item in items` grammar.
+   * Returns the loop variable name when the expression parses.
+   */
+  private static checkRepeatExpression(
+    component: TemplateComponent,
+    variableNames: Set<string>,
+    errors: TemplateError[]
+  ): string | undefined {
+    // Same pattern as TemplateEngine.renderRepeatingComponent
+    const match = component.repeat?.match(/(\w+)\s+in\s+(\w+)/);
+    if (!match) {
+      errors.push({
+        code: TemplateErrorCode.INVALID_TEMPLATE,
+        message: `Invalid repeat expression '${component.repeat}'`,
+        componentId: component.id,
+        suggestions: ["Use the form 'item in items', where items is an array variable"]
+      });
+      return undefined;
+    }
+
+    const [, loopVariable, arrayVariable] = match;
+    if (!variableNames.has(arrayVariable)) {
+      errors.push({
+        code: TemplateErrorCode.MISSING_VARIABLE,
+        message: `Undefined variable '${arrayVariable}' in repeat expression`,
+        componentId: component.id,
+        variableName: arrayVariable,
+        suggestions: [`Define array variable '${arrayVariable}' in template variables`]
+      });
+    }
+    return loopVariable;
+  }
+
+  /**
+   * Report undefined variables in a Handlebars source string.
+   *
+   * Walks the parsed template so that helper names, `this`, `@data` variables,
+   * block params and fields inside `{{#each}}` / `{{#with}}` blocks are not
+   * mistaken for template variables.
+   */
+  private static checkHandlebars(
+    source: string,
+    context: string,
+    component: TemplateComponent,
+    variableNames: Set<string>,
+    errors: TemplateError[]
+  ): void {
+    let program: hbs.AST.Program;
+    try {
+      program = Handlebars.parse(source);
+    } catch (error) {
+      errors.push({
+        code: TemplateErrorCode.INVALID_TEMPLATE,
+        message: `Invalid Handlebars syntax in ${context}: ${error instanceof Error ? error.message : String(error)}`,
+        componentId: component.id,
+        suggestions: ['Check that every {{#block}} has a matching {{/block}}']
+      });
+      return;
+    }
+
+    // Each frame is one Handlebars context. Only the template's own context is
+    // checked; inside {{#each}} or {{#with}} names refer to the current item.
+    interface Frame { checked: boolean; blockParams: string[] }
+    const stack: Frame[] = [{ checked: true, blockParams: [] }];
+    const reported = new Set<string>();
+
+    const report = (name: string) => {
+      if (reported.has(name)) return;
+      reported.add(name);
+      errors.push({
+        code: TemplateErrorCode.MISSING_VARIABLE,
+        message: `Undefined variable '${name}' in ${context}`,
+        componentId: component.id,
+        variableName: name,
+        suggestions: [`Define variable '${name}' in template variables`]
+      });
+    };
+
+    const checkPath = (path: hbs.AST.PathExpression) => {
+      if (path.data || path.parts.length === 0 || /^(this[./]|\.\/)/.test(path.original)) return;
+      const head = path.parts[0];
+      if (path.depth === 0 && stack.some(frame => frame.blockParams.includes(head))) return;
+      const frame = stack[Math.max(0, stack.length - 1 - path.depth)];
+      if (frame.checked && !variableNames.has(head)) report(head);
+    };
+
+    const checkExpression = (expression: hbs.AST.Expression) => {
+      if (expression.type === 'PathExpression') {
+        checkPath(expression as hbs.AST.PathExpression);
+      } else if (expression.type === 'SubExpression') {
+        checkCall(expression as hbs.AST.SubExpression);
+      }
+    };
+
+    // A path with arguments is a helper call: check the arguments, not the helper name
+    const checkCall = (node: { path: hbs.AST.PathExpression | hbs.AST.Literal; params: hbs.AST.Expression[]; hash?: hbs.AST.Hash }) => {
+      const isHelperCall = node.params.length > 0 || (node.hash?.pairs.length ?? 0) > 0;
+      if (!isHelperCall) checkExpression(node.path);
+      node.params.forEach(checkExpression);
+      node.hash?.pairs.forEach(pair => checkExpression(pair.value));
+    };
+
+    const walk = (body: hbs.AST.Statement[]) => {
+      for (const statement of body) {
+        if (statement.type === 'MustacheStatement') {
+          checkCall(statement as hbs.AST.MustacheStatement);
+        } else if (statement.type === 'BlockStatement') {
+          const block = statement as hbs.AST.BlockStatement;
+          checkCall(block);
+          const keepsContext = block.path.original === 'if' || block.path.original === 'unless';
+          stack.push({ checked: keepsContext && stack[stack.length - 1].checked, blockParams: block.program.blockParams ?? [] });
+          walk(block.program.body);
+          stack.pop();
+          if (block.inverse) walk(block.inverse.body);
         }
       }
     };
-    
-    switch (component.type) {
-      case ComponentType.TEXT: {
-        const textComp = component;
-        if (textComp.content) checkString(textComp.content, 'text content');
-        break;
-      }
 
-      case ComponentType.IMAGE: {
-        const imageComp = component;
-        if (imageComp.source) checkString(imageComp.source, 'image source');
-        break;
-      }
-
-      case ComponentType.SVG: {
-        const svgComp = component;
-        if (svgComp.svgContent) checkString(svgComp.svgContent, 'SVG content');
-        break;
-      }
-
-      case ComponentType.HTML: {
-        const htmlComp = component;
-        if (htmlComp.htmlContent) checkString(htmlComp.htmlContent, 'HTML content');
-        break;
-      }
-
-      case ComponentType.GROUP: {
-        const groupComp = component;
-        if (groupComp.children) {
-          for (const child of groupComp.children) {
-            this.checkComponentVariableReferences(child, variableNames, errors);
-          }
-        }
-        break;
-      }
-    }
-    
-    // Check conditional and repeat expressions
-    if (component.conditional) {
-      checkString(`{{${component.conditional}}}`, 'conditional expression');
-    }
-    
-    if (component.repeat) {
-      checkString(`{{${component.repeat}}}`, 'repeat expression');
-    }
+    walk(program.body);
   }
 
   /**
