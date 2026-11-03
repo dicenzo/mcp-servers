@@ -5,6 +5,7 @@ import {
   ColorErrorCode
 } from '../types/color.js';
 import * as culori from 'culori';
+import { APCAcontrast, sRGBtoY } from 'apca-w3';
 import { ColorProcessingError } from './colorError.js';
 import type { Color as CuloriColor, Mode as CuloriMode } from 'culori';
 import type { ZodError } from 'zod';
@@ -215,37 +216,18 @@ export class ColorUtils {
       throw new Error(`Invalid color values for space ${space}`);
     }
 
-    // Create culori color object
-    let culoriColor: CuloriColor;
-    
-    switch (space) {
-      case 'srgb':
-      case 'rgb':
-        culoriColor = { mode: 'rgb', r: values[0], g: values[1], b: values[2], alpha };
-        break;
-      case 'hsl':
-        culoriColor = { mode: 'hsl', h: values[0], s: values[1], l: values[2], alpha };
-        break;
-      case 'oklch':
-        culoriColor = { mode: 'oklch', l: values[0], c: values[1], h: values[2], alpha };
-        break;
-      case 'oklab':
-        culoriColor = { mode: 'oklab', l: values[0], a: values[1], b: values[2], alpha };
-        break;
-      case 'lab':
-        culoriColor = { mode: 'lab', l: values[0], a: values[1], b: values[2], alpha };
-        break;
-      case 'lch':
-        culoriColor = { mode: 'lch', l: values[0], c: values[1], h: values[2], alpha };
-        break;
-      default:
-        throw new Error(`Color space conversion not implemented: ${space}`);
+    // A fourth value is the alpha channel when no separate alpha is given
+    const channels = values.slice(0, 3);
+    const resolvedAlpha = alpha ?? (values.length > 3 ? values[3] : undefined);
+    const culoriColor = this.colorToCulori({ space, values: channels, alpha: resolvedAlpha });
+    if (!culoriColor) {
+      throw new Error(`Color space conversion not implemented: ${space}`);
     }
 
     return {
       space,
-      values: [...values],
-      alpha,
+      values: channels,
+      ...(resolvedAlpha !== undefined && { alpha: resolvedAlpha }),
       hex: culori.formatHex(culoriColor),
       css: culori.formatCss(culoriColor)
     };
@@ -374,19 +356,41 @@ export class ColorUtils {
   }
 
   /**
-   * Calculate WCAG contrast ratio between two colors
+   * The opaque sRGB colours a viewer actually sees for a text/background pair:
+   * both are clipped to the sRGB gamut (as their hex is), a translucent
+   * background is composited over white, and a translucent foreground over
+   * that background.
+   */
+  private static visibleContrastPair(foreground: Color, background: Color): [culori.Rgb, culori.Rgb] {
+    const toClippedRgb = (color: Color): culori.Rgb => {
+      const culoriColor = this.colorToCulori(color);
+      if (!culoriColor) {
+        throw new Error('Failed to convert colors for contrast calculation');
+      }
+      return culori.clampRgb(culori.rgb(culoriColor));
+    };
+    const over = (top: culori.Rgb, bottom: culori.Rgb): culori.Rgb => {
+      const a = top.alpha ?? 1;
+      return {
+        mode: 'rgb',
+        r: top.r * a + bottom.r * (1 - a),
+        g: top.g * a + bottom.g * (1 - a),
+        b: top.b * a + bottom.b * (1 - a)
+      };
+    };
+    const white: culori.Rgb = { mode: 'rgb', r: 1, g: 1, b: 1 };
+    const backdrop = over(toClippedRgb(background), white);
+    return [over(toClippedRgb(foreground), backdrop), backdrop];
+  }
+
+  /**
+   * WCAG 2 contrast ratio between two colors, unrounded so threshold checks
+   * are exact (4.4993 must fail 4.5). Use formatContrastRatio for display.
    */
   static calculateContrastRatio(foreground: Color, background: Color): number {
     try {
-      const fgCulori = this.colorToCulori(foreground);
-      const bgCulori = this.colorToCulori(background);
-
-      if (!fgCulori || !bgCulori) {
-        throw new Error('Failed to convert colors for contrast calculation');
-      }
-
-      const ratio = culori.wcagContrast(fgCulori, bgCulori);
-      return Math.round(ratio * 100) / 100; // Round to 2 decimal places
+      const [fg, bg] = this.visibleContrastPair(foreground, background);
+      return culori.wcagContrast(fg, bg);
     } catch (error) {
       throw new ColorProcessingError({
         code: ColorErrorCode.ACCESSIBILITY_CHECK_FAILED,
@@ -675,6 +679,25 @@ export class ColorUtils {
       default:
         throw new Error(`Unsupported color space: ${space}`);
     }
+  }
+
+  /**
+   * A contrast ratio for display: truncated to 2 decimals, so a failing
+   * ratio is never shown as the threshold it misses (4.4993 shows as 4.49)
+   */
+  static formatContrastRatio(ratio: number): number {
+    return Math.floor(ratio * 100) / 100;
+  }
+
+  /**
+   * APCA (WCAG 3 draft) lightness contrast Lc of text on a background, via the
+   * reference apca-w3 implementation. Positive for dark text on a light
+   * background, negative for light on dark; |Lc| 60 suits body text, 45 large.
+   */
+  static calculateAPCAContrast(text: Color, background: Color): number {
+    const [fg, bg] = this.visibleContrastPair(text, background);
+    const to8bit = (color: culori.Rgb) => [color.r, color.g, color.b].map(channel => Math.round(channel * 255));
+    return Number(APCAcontrast(sRGBtoY(to8bit(fg)), sRGBtoY(to8bit(bg))));
   }
 
   /**

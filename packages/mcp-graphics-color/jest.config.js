@@ -22,11 +22,13 @@ export default {
     },
   },
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', {
+    // .js too: apca-w3 and its colorparsley dependency ship only as ES modules
+    '^.+\\.[tj]sx?$': ['ts-jest', {
       useESM: true,
       tsconfig: 'tsconfig.test.json'
     }],
   },
+  transformIgnorePatterns: ['/node_modules/(?!(apca-w3|colorparsley)/)'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   rootDir: '.',
   testTimeout: 30000,

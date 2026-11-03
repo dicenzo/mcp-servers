@@ -9,7 +9,7 @@ It runs over stdio and works with any MCP client, including Claude Code and Clau
 | Tool | What it does |
 | --- | --- |
 | `color.convert` | Convert colors between color spaces (sRGB, HSL, Lab, LCH, OKLCH, and others) with configurable precision. |
-| `color.contrast` | Check the WCAG contrast ratio between a foreground and background color. Also reports the CIEDE2000 Delta E between them. |
+| `color.contrast` | Check the WCAG contrast ratio between a foreground and background color. With `algorithm: "apca"` it also reports the APCA lightness contrast (`apca.lc`, signed, with `polarity`). Also reports the CIEDE2000 Delta E between them. |
 | `color.generatePalette` | Generate a palette from a base color using a harmony rule (monochromatic, analogous, complementary, and others), with role names, contrast, optional locked brand colors, spacing, 50-950 scales, and CSS/Tailwind/design-token exports. |
 | `color.brandMatch` | Find the closest color in a brand palette using CIEDE2000 Delta E. Accepts named palette entries and reports threshold fit, a lightness/chroma/hue breakdown, skipped entries, and duplicates. |
 | `color.lintBrand` | Check a brand palette for near-duplicates, contrast problems, and allowed or forbidden colors (matched within a CIEDE2000 `maxDeltaE`, default 3). |
@@ -21,7 +21,7 @@ It runs over stdio and works with any MCP client, including Claude Code and Clau
 
 ## Using `color.brandMatch`
 
-Palette entries can be plain colors or `{ name, color }` objects. Colors can be strings (hex, CSS, or named) or `{ space, values, alpha }` objects.
+Palette entries can be plain colors or `{ name, color }` objects. Colors can be strings (hex, CSS, or named) or `{ space, values, alpha }` objects. For `rgba` and `hsla`, a fourth entry in `values` is read as alpha when `alpha` is not given.
 
 ```json
 {
@@ -135,10 +135,10 @@ This server reads no environment variables.
 
 ## Known issues
 
-- Last verified test run: build passes; all 377 tests pass (10 of 10 suites).
+- Last verified test run: build passes; all 392 tests pass (11 of 11 suites).
+- Contrast (in `color.contrast`, `color.lintBrand` and `color.validateAccessibility`) compares the unrounded WCAG ratio with thresholds, so 4.4993:1 fails AA. Reported ratios are truncated to 2 decimals (4.4993 shows as 4.49). A translucent foreground is composited over the background, a translucent background over white, and out-of-gamut colors are clipped to sRGB first, as their hex is.
 - A few tests assert wall-clock limits (for example, a batch of conversions under 50ms) and can fail on a slow or heavily loaded machine.
-- `color.contrast` accepts `algorithm: "apca"` but always computes the WCAG 2 ratio. The `algorithm` field in the result echoes the input.
-- `package.json` lists chroma-js, colorjs.io, delta-e, apca-w3, and wcag-contrast as dependencies, but the source imports none of them. All color math uses culori.
+- `package.json` lists chroma-js, colorjs.io, delta-e and wcag-contrast as dependencies, but the source imports none of them. Color math uses culori, and APCA uses `apca-w3`.
 
 ## License
 
