@@ -380,7 +380,8 @@ export const templateLibraryAddTool: ExecutableTool = {
 
       // Create library item
       const libraryItem: ComponentLibraryItem = {
-        id: generateId('comp'),
+        // Overwriting keeps the id, so references to the component stay valid
+        id: existingIndex >= 0 ? library.components[existingIndex].id : generateId('comp'),
         name: componentData.name,
         description: componentData.description,
         category: componentData.category,
@@ -499,6 +500,14 @@ export function listLibraries(): ComponentLibrary[] {
 /**
  * Search components across all libraries
  */
+/**
+ * Find a component by the id template.library.add returned, or else by its exact name
+ */
+export function findComponent(idOrName: string): ComponentLibraryItem | undefined {
+  const components = Array.from(componentLibraries.values()).flatMap(library => library.components);
+  return components.find(c => c.id === idOrName) ?? components.find(c => c.name === idOrName);
+}
+
 export function searchComponents(query: {
   name?: string;
   category?: string;

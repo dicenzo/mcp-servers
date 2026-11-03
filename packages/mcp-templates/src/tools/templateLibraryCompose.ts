@@ -9,7 +9,7 @@ import {
   Position,
   Style
 } from '../types/template.js';
-import { searchComponents } from './templateLibraryAdd.js';
+import { findComponent } from './templateLibraryAdd.js';
 import { TemplateValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
 import { generateId, getCurrentTimestamp, deepClone } from '../util/helpers.js';
@@ -453,9 +453,7 @@ export const templateLibraryComposeTool: ComposeTool = {
       if (processed.has(id)) return;
       processed.add(id);
       
-      // Search for component in all libraries
-      const searchResult = searchComponents({ name: id });
-      let component = searchResult.find(c => c.id === id || c.name === id);
+      let component = findComponent(id);
       
       if (!component) {
         throw new Error(`Component '${id}' not found in any library`);
