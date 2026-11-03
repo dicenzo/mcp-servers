@@ -1,6 +1,5 @@
-#!/usr/bin/env node
-
 import { ColorUtils } from '../util/colorUtils.js';
+import { ColorProcessingError } from '../util/colorError.js';
 import {
   ColorPaletteInputSchema,
   ColorPaletteInput,
@@ -69,11 +68,6 @@ export async function colorGeneratePalette(input: unknown): Promise<ColorGenerat
     const endTime = performance.now();
     const processingTime = Math.round((endTime - startTime) * 100) / 100;
     
-    // Ensure we meet performance requirements (<100ms for palette generation)
-    if (processingTime > 100) {
-      console.warn(`Palette generation took ${processingTime}ms, exceeding 100ms target`);
-    }
-    
     const palette: ColorPalette = {
       name: `${harmony}-palette-${count}`,
       colors: processedColors,
@@ -120,33 +114,32 @@ export async function colorGeneratePalette(input: unknown): Promise<ColorGenerat
     }
     
     // Handle structured errors from ColorUtils
+    if (error instanceof ColorProcessingError) {
+      return {
+        success: false,
+        error: error.toColorError()
+      };
+    }
+
+    // Handle unstructured errors
     if (error instanceof Error) {
-      try {
-        const colorError = JSON.parse(error.message);
-        return {
-          success: false,
-          error: colorError
-        };
-      } catch {
-        // Handle unstructured errors
-        return {
-          success: false,
-          error: {
-            code: ColorErrorCode.PALETTE_GENERATION_FAILED,
-            message: error.message || 'Palette generation failed',
-            details: {
-              input,
-              processingTime: Math.round((performance.now() - startTime) * 100) / 100
-            },
-            suggestions: [
-              'Verify base color format is correct',
-              'Check harmony type is supported',
-              'Ensure count is between 2 and 20',
-              'Verify color space is valid'
-            ]
-          }
-        };
-      }
+      return {
+        success: false,
+        error: {
+          code: ColorErrorCode.PALETTE_GENERATION_FAILED,
+          message: error.message || 'Palette generation failed',
+          details: {
+            input,
+            processingTime: Math.round((performance.now() - startTime) * 100) / 100
+          },
+          suggestions: [
+            'Verify base color format is correct',
+            'Check harmony type is supported',
+            'Ensure count is between 2 and 20',
+            'Verify color space is valid'
+          ]
+        }
+      };
     }
     
     return {

@@ -1,7 +1,6 @@
-#!/usr/bin/env node
-
 import { ZodError } from 'zod';
 import { ColorUtils } from '../util/colorUtils.js';
+import { ColorProcessingError } from '../util/colorError.js';
 import {
   ColorBrandLintInputSchema,
   ColorBrandLintInput,
@@ -147,33 +146,32 @@ export async function colorLintBrand(input: unknown): Promise<ColorLintBrandResp
     }
 
     // Handle structured errors from ColorUtils
+    if (error instanceof ColorProcessingError) {
+      return {
+        success: false,
+        error: error.toColorError()
+      };
+    }
+
+    // Handle unstructured errors
     if (error instanceof Error) {
-      try {
-        const colorError = JSON.parse(error.message);
-        return {
-          success: false,
-          error: colorError
-        };
-      } catch {
-        // Handle unstructured errors
-        return {
-          success: false,
-          error: {
-            code: ColorErrorCode.PROCESSING_FAILED,
-            message: error.message || 'Brand linting failed',
-            details: {
-              input,
-              processingTime: Math.round((performance.now() - startTime) * 100) / 100
-            },
-            suggestions: [
-              'Verify all palette colors are valid',
-              'Check that rules are properly formatted',
-              'Ensure allowed/forbidden colors are valid',
-              'Verify contrast and accessibility requirements'
-            ]
-          }
-        };
-      }
+      return {
+        success: false,
+        error: {
+          code: ColorErrorCode.PROCESSING_FAILED,
+          message: error.message || 'Brand linting failed',
+          details: {
+            input,
+            processingTime: Math.round((performance.now() - startTime) * 100) / 100
+          },
+          suggestions: [
+            'Verify all palette colors are valid',
+            'Check that rules are properly formatted',
+            'Ensure allowed/forbidden colors are valid',
+            'Verify contrast and accessibility requirements'
+          ]
+        }
+      };
     }
     
     return {
