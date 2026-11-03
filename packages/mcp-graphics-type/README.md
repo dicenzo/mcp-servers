@@ -60,11 +60,12 @@ Replace `/path/to/mcp-servers` with the location of your clone.
 
 | Variable | Purpose |
 |---|---|
-| `MCP_FONT_DIRS` | Extra directories `type.loadFont` may read font files from, separated by `:` (`;` on Windows). |
+| `MCP_FONT_DIRS` | Extra directories fonts may be read from, separated by `:` (`;` on Windows). `file` paths may point into them, and `system` names are looked up in them too. |
 
 Font sources are restricted because tool arguments come from a model and may be attacker-influenced:
 
-- `file`: only `.ttf`, `.otf`, `.woff`, or `.woff2` files inside the system font folders or `MCP_FONT_DIRS`. Symlinks are resolved first, and error messages don't echo the path.
+- `file`: only `.ttf`, `.otf`, `.ttc`, `.otc`, `.woff`, or `.woff2` files inside the system font folders or `MCP_FONT_DIRS`. Symlinks are resolved first, and error messages don't echo the path. A `.ttc`/`.otc` collection loads its first font.
+- `system`: a family name (`Georgia`), full name (`Georgia Bold`) or PostScript name (`Georgia-Bold`), matched against the names inside each font, ignoring case, spaces and hyphens. A family name loads its regular style. The system font folders and `MCP_FONT_DIRS` are searched with their subfolders, including the fonts inside `.ttc`/`.otc` collections. Names aren't matched by substring; when nothing matches, the error lists installed families with a similar name.
 - `url`: only `https://` URLs on public hosts. The resolved address is checked again at connect time, redirects are refused, and downloads stop at 15 seconds or 20MB.
 - `buffer`: base64-encoded font data, no restrictions.
 - Subsetting runs `python3 -m fontTools.subset`; install fontTools (`pip install fonttools`) to use `type.subsetFont`.
