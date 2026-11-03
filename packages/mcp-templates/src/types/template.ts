@@ -420,7 +420,7 @@ export interface TemplateCreateInput {
 }
 
 export interface TemplateRenderInput {
-  template: string | Template; // Template ID or inline template
+  template: Template;
   variables: VariableMap;
   format?: ExportFormat;
 }
@@ -438,7 +438,7 @@ export interface TemplateLibraryComposeInput {
 }
 
 export interface TemplateExportInput {
-  template: string | RenderedTemplate; // Template ID or rendered template
+  template: Template | RenderedTemplate;
   variables?: VariableMap;
   options: ExportOptions;
 }
@@ -449,12 +449,15 @@ export interface TemplateValidateInput {
 }
 
 // Input validation schemas
+// template.create sets the id and timestamps itself
 export const TemplateCreateInputSchema = z.object({
-  template: TemplateSchema.omit({ id: true })
+  template: TemplateSchema.omit({ id: true }).extend({
+    metadata: TemplateMetadataSchema.omit({ createdAt: true, updatedAt: true })
+  })
 });
 
 export const TemplateRenderInputSchema = z.object({
-  template: z.union([z.string(), TemplateSchema]),
+  template: TemplateSchema,
   variables: z.record(z.string(), z.any()),
   format: z.nativeEnum(ExportFormat).optional(),
   options: z.object({
@@ -465,7 +468,7 @@ export const TemplateRenderInputSchema = z.object({
 });
 
 export const TemplateExportInputSchema = z.object({
-  template: z.union([z.string(), z.any()]),
+  template: z.any(),
   variables: z.record(z.string(), z.any()).optional(),
   options: ExportOptionsSchema
 });

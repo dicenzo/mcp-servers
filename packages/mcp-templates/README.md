@@ -15,6 +15,8 @@ It runs over stdio and works with any MCP client, including Claude Code and Clau
 | `template.library.add` | Add a component to the reusable component library. |
 | `template.library.compose` | Build a template from library components and a layout. |
 
+Templates are not stored. `template.create` and `template.library.compose` return the whole template as `template`, with counts and dimensions in `summary`. To render or export it, pass that `template` object to `template.render` or `template.export`; a string id is rejected. Library components are stored in memory and can be referred to by the id `template.library.add` returns, or by exact name. `template.create` sets the id and the `createdAt`/`updatedAt` timestamps itself.
+
 ## Requirements
 
 - Node.js 22.12 or later (required by Puppeteer 25)
@@ -77,7 +79,7 @@ Templates and variables come from the caller, so the server bounds the work one 
 
 ## Known issues
 
-- Last verified test run: build passes; 111 of 111 tests pass.
+- Last verified test run: build passes; 115 of 115 tests pass.
 
 
 ## License

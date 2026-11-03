@@ -10,6 +10,7 @@ import {
 import { TemplateEngine } from '../engine/templateEngine.js';
 import { TemplateValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
+import { rejectTemplateId } from '../util/helpers.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
@@ -25,17 +26,8 @@ export const templateRenderTool: ExecutableTool = {
     type: 'object',
     properties: {
       template: {
-        oneOf: [
-          {
-            type: 'string',
-            description: 'Template ID or name to render'
-          },
-          {
-            type: 'object',
-            description: 'Inline template definition'
-          }
-        ],
-        description: 'Template to render'
+        type: 'object',
+        description: 'Template to render: the `template` object returned by template.create or template.library.compose, or an inline template definition'
       },
       variables: {
         type: 'object',
@@ -80,19 +72,11 @@ export const templateRenderTool: ExecutableTool = {
     
     try {
       // Validate input
+      rejectTemplateId((args as { template?: unknown } | undefined)?.template);
       const validatedInput = TemplateRenderInputSchema.parse(args);
-      const { template: templateInput, variables, format = ExportFormat.SVG } = validatedInput;
+      const { variables, format = ExportFormat.SVG } = validatedInput;
+      const template = validatedInput.template as Template;
       const options = validatedInput.options || {};
-
-      // Handle template input (string ID or inline template object)
-      let template: Template;
-      if (typeof templateInput === 'string') {
-        // In a real implementation, this would load the template from storage
-        // For now, return an error
-        throw new Error(`Template lookup not implemented. Template ID: ${templateInput}`);
-      } else {
-        template = templateInput as Template;
-      }
 
       // Validate template if requested
       if (options.validateVariables !== false) {
@@ -218,7 +202,7 @@ export const templateRenderTool: ExecutableTool = {
  * Template render handler function for direct use
  */
 export async function templateRender(
-  template: Template | string,
+  template: Template,
   variables: VariableMap,
   options: {
     format?: ExportFormat;
@@ -228,14 +212,8 @@ export async function templateRender(
 ): Promise<RenderedTemplate> {
   const engine = new TemplateEngine();
   
-  // Handle template input
-  let templateObj: Template;
-  if (typeof template === 'string') {
-    throw new Error('Template lookup by ID not implemented');
-  } else {
-    templateObj = template;
-  }
-  
+  const templateObj = template;
+
   // Validate if requested
   if (options.validateVariables !== false) {
     const validationReport = TemplateValidator.validateTemplateWithVariables(templateObj, variables);
