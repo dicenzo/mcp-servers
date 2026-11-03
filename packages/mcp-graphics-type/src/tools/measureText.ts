@@ -10,6 +10,7 @@ import {
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
 import { fontLineGap } from '../util/fontMetrics.js';
+import { layoutGlyphRun } from '../util/glyphRun.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<TextToolResult>;
@@ -242,27 +243,12 @@ async function measureTextDimensions(
     }> = [];
     
     // Measure each character
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      const glyph = font.charToGlyph(char);
-      
-      if (!glyph) {
-        continue;
-      }
-      
-      // Calculate advance width
-      let advance = (glyph.advanceWidth || 0) * scale;
-      
-      // Apply letter spacing
-      if (options.letterSpacing) {
-        advance += options.letterSpacing;
-      }
-      
-      // Apply word spacing for spaces
-      if (options.wordSpacing && char === ' ') {
-        advance += options.wordSpacing;
-      }
-      
+    const run = layoutGlyphRun(font, text, {
+      fontSize,
+      letterSpacing: options.letterSpacing,
+      wordSpacing: options.wordSpacing
+    });
+    for (const { char, glyph, advance } of run) {
       advances.push(advance);
       totalWidth += advance;
       
@@ -352,57 +338,4 @@ async function measureTextDimensions(
       ]
     }));
   }
-}
-
-/**
- * Calculates precise text width using font metrics
- */
-export async function calculateTextWidth(
-  text: string, 
-  fontBuffer: Buffer, 
-  fontSize: number,
-  letterSpacing: number = 0,
-  wordSpacing: number = 0
-): Promise<number> {
-  const opentype = await import('opentype.js');
-  const font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
-  const scale = fontSize / font.unitsPerEm;
-  
-  let totalWidth = 0;
-  
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const glyph = font.charToGlyph(char);
-    
-    if (glyph) {
-      let advance = (glyph.advanceWidth || 0) * scale;
-      advance += letterSpacing;
-      
-      if (char === ' ' && wordSpacing) {
-        advance += wordSpacing;
-      }
-      
-      totalWidth += advance;
-    }
-  }
-  
-  return totalWidth;
-}
-
-/**
- * Calculates line height for a font at given size
- */
-export async function calculateLineHeight(
-  fontBuffer: Buffer,
-  fontSize: number
-): Promise<number> {
-  const opentype = await import('opentype.js');
-  const font = opentype.parse(fontBuffer.buffer as ArrayBuffer);
-  const scale = fontSize / font.unitsPerEm;
-  
-  const ascender = font.ascender * scale;
-  const descender = font.descender * scale;
-  const lineGap = fontLineGap(font) * scale;
-  
-  return ascender - descender + lineGap;
 }
