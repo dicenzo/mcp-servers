@@ -1,7 +1,6 @@
-#!/usr/bin/env node
-
 import { z } from 'zod';
 import { ImageUtils } from '../util/imageUtils.js';
+import { toImageError } from '../util/imageError.js';
 import {
   ImageInputSchema,
   RectangleSchema,
@@ -60,7 +59,7 @@ export async function imageCrop(input: unknown): Promise<ImageCropResponse> {
     const result = await ImageUtils.cropImage(image, bounds);
     
     return {
-      success: true,
+      success: true as const,
       result: {
         data: result.data,
         format: result.format,
@@ -76,34 +75,7 @@ export async function imageCrop(input: unknown): Promise<ImageCropResponse> {
     };
     
   } catch (error) {
-    if (error instanceof Error) {
-      try {
-        const imageError = JSON.parse(error.message);
-        return { success: false, error: imageError };
-      } catch {
-        return {
-          success: false,
-          error: {
-            code: ImageErrorCode.PROCESSING_FAILED,
-            message: error.message || 'Image crop failed',
-            details: { processingTime: Math.round((performance.now() - startTime) * 100) / 100 },
-            suggestions: [
-              'Verify crop bounds are within image dimensions',
-              'Ensure crop bounds have positive width and height',
-              'Check that x and y coordinates are not negative'
-            ]
-          }
-        };
-      }
-    }
-    
-    return {
-      success: false,
-      error: {
-        code: ImageErrorCode.PROCESSING_FAILED,
-        message: 'Unknown error during image crop'
-      }
-    };
+    return { success: false as const, error: toImageError(error, { code: ImageErrorCode.PROCESSING_FAILED, message: 'Image crop failed', suggestions: ['Verify crop bounds are within image dimensions'] }, startTime) };
   }
 }
 

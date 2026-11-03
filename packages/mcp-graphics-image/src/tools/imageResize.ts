@@ -1,7 +1,6 @@
-#!/usr/bin/env node
-
 import { z } from 'zod';
 import { ImageUtils } from '../util/imageUtils.js';
+import { ImageProcessingError, toImageError } from '../util/imageError.js';
 import {
   ImageInputSchema,
   DimensionsSchema,
@@ -76,7 +75,7 @@ export async function imageResize(input: unknown): Promise<ImageResizeResponse> 
       const maxScaleFactor = Math.max(scaleFactorW, scaleFactorH);
       
       if (maxScaleFactor > 1) {
-        throw new Error(JSON.stringify({
+        throw new ImageProcessingError({
           code: ImageErrorCode.INVALID_INPUT,
           message: 'Image enlargement not allowed',
           details: { 
@@ -85,7 +84,7 @@ export async function imageResize(input: unknown): Promise<ImageResizeResponse> 
             scaleFactor: maxScaleFactor 
           },
           suggestions: ['Set allowEnlargement to true or use smaller target dimensions']
-        }));
+        });
       }
     }
     
@@ -99,7 +98,7 @@ export async function imageResize(input: unknown): Promise<ImageResizeResponse> 
       Math.max(scaleFactorW, scaleFactorH);
     
     return {
-      success: true,
+      success: true as const,
       result: {
         data: result.data,
         format: result.format,
@@ -116,37 +115,7 @@ export async function imageResize(input: unknown): Promise<ImageResizeResponse> 
     };
     
   } catch (error) {
-    if (error instanceof Error) {
-      try {
-        const imageError = JSON.parse(error.message);
-        return { success: false, error: imageError };
-      } catch {
-        return {
-          success: false,
-          error: {
-            code: ImageErrorCode.PROCESSING_FAILED,
-            message: error.message || 'Image resize failed',
-            details: {
-              processingTime: Math.round((performance.now() - startTime) * 100) / 100
-            },
-            suggestions: [
-              'Verify image dimensions are within valid range (1-8192 pixels)',
-              'Check that the image data is valid',
-              'Try a different resize method if processing fails',
-              'Consider enabling allowEnlargement if upscaling is needed'
-            ]
-          }
-        };
-      }
-    }
-    
-    return {
-      success: false,
-      error: {
-        code: ImageErrorCode.PROCESSING_FAILED,
-        message: 'Unknown error during image resize'
-      }
-    };
+    return { success: false as const, error: toImageError(error, { code: ImageErrorCode.PROCESSING_FAILED, message: 'Image resize failed' }, startTime) };
   }
 }
 
