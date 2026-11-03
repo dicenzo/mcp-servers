@@ -12,7 +12,7 @@ import * as path from 'path';
  * allowed directories, and URL loads are limited to public HTTPS hosts.
  */
 
-export const FONT_EXTENSIONS = ['.ttf', '.otf', '.woff', '.woff2'];
+export const FONT_EXTENSIONS = ['.ttf', '.otf', '.ttc', '.otc', '.woff', '.woff2'];
 export const MAX_REMOTE_FONT_BYTES = 20 * 1024 * 1024;
 export const REMOTE_FONT_TIMEOUT_MS = 15_000;
 
