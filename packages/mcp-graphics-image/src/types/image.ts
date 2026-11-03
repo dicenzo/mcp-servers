@@ -15,7 +15,7 @@ export type ImageFormat = typeof SupportedImageFormats[number];
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB decoded input
 
 export const MEMORY_LIMITS = {
-  MAX_OPERATION_MEMORY: 100 * 1024 * 1024, // 100MB
+  MAX_OPERATION_MEMORY: 512 * 1024 * 1024, // decoded RGBA bytes per operation (composite canvas + layers)
   MAX_IMAGE_SIZE,
   // base64 inflates by 4/3; allow a little extra for a data URL prefix
   MAX_BASE64_LENGTH: Math.ceil(MAX_IMAGE_SIZE / 3) * 4 + 64,

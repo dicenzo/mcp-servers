@@ -311,7 +311,10 @@ export class ImageUtils {
       // Keep the input's ICC profile so wide-gamut (e.g. Display P3) colours
       // survive instead of being converted to untagged sRGB. sharp still
       // converts CMYK input to sRGB.
-      const outputSharp = sharpInstance.keepIccProfile().toFormat(toSharpFormat(format), formatOptions);
+      const outputSharp = sharpInstance
+        .keepIccProfile()
+        .toFormat(toSharpFormat(format), formatOptions)
+        .timeout({ seconds: Math.max(1, Math.ceil(DEFAULT_PROCESSING_CONTEXT.timeout / 1000)) });
       
       // Generate output buffer
       const outputBuffer = await outputSharp.toBuffer();
@@ -349,6 +352,15 @@ export class ImageUtils {
         ...(warnings.length > 0 && { warnings })
       };
     } catch (error) {
+      // sharp reports an expired .timeout() as "timeout: <n>% complete"
+      if (error instanceof Error && error.message.startsWith('timeout')) {
+        throw new ImageProcessingError({
+          code: ImageErrorCode.PERFORMANCE_TIMEOUT,
+          message: `Image processing exceeded the ${DEFAULT_PROCESSING_CONTEXT.timeout / 1000}s time limit`,
+          details: { error: error.message },
+          suggestions: ['Use a smaller image or lighter filter settings (e.g. a smaller blur radius)']
+        });
+      }
       throw new ImageProcessingError({
         code: ImageErrorCode.ENCODE_ERROR,
         message: 'Failed to encode output image',
@@ -495,6 +507,23 @@ export class ImageUtils {
         fit: preserveAspectRatio ? 'inside' : 'fill',
         withoutEnlargement: false
       };
+
+      // Every frame of an animation is resized, so cap the total output pixels
+      const { width: sourceWidth = 0, height: sourceHeight = 0, pageHeight, pages } = await sharpInstance.metadata();
+      if (pages !== undefined && pages > 1) {
+        const frameHeight = pageHeight ?? sourceHeight;
+        const scale = Math.min(validDimensions.width / sourceWidth, validDimensions.height / frameHeight);
+        const outputPixels = preserveAspectRatio
+          ? Math.round(sourceWidth * scale) * Math.round(frameHeight * scale) * pages
+          : validDimensions.width * validDimensions.height * pages;
+        if (outputPixels > SHARP_INPUT_OPTIONS.limitInputPixels) {
+          throw new ImageProcessingError({
+            code: ImageErrorCode.MEMORY_EXCEEDED,
+            message: `Resizing ${pages} frames to ${validDimensions.width}x${validDimensions.height} exceeds the limit of ${SHARP_INPUT_OPTIONS.limitInputPixels} pixels`,
+            suggestions: ['Use smaller target dimensions', 'Convert to a still format to keep only the first frame']
+          });
+        }
+      }
       
       sharpInstance.resize(resizeOptions);
       
@@ -829,9 +858,24 @@ export class ImageUtils {
 
       const warnings: string[] = [];
 
+      // Estimate decoded RGBA memory from headers before decoding any pixels
+      const layerSharps = await Promise.all(
+        validConfig.layers.map(layer => ImageUtils.createSharpFromInput(layer.image))
+      );
+      const layerHeaders = await Promise.all(layerSharps.map(layerSharp => layerSharp.metadata()));
+      const estimatedBytes = 4 * (validConfig.width * validConfig.height +
+        layerHeaders.reduce((sum, { width = 0, height = 0 }) => sum + width * height, 0));
+      if (estimatedBytes > MEMORY_LIMITS.MAX_OPERATION_MEMORY) {
+        throw new ImageProcessingError({
+          code: ImageErrorCode.MEMORY_EXCEEDED,
+          message: `Composite needs about ${Math.round(estimatedBytes / 1024 / 1024)}MB of decoded pixels (max: ${MEMORY_LIMITS.MAX_OPERATION_MEMORY / 1024 / 1024}MB)`,
+          suggestions: ['Use a smaller canvas', 'Downscale or remove layers']
+        });
+      }
+
       for (const [index, layer] of validConfig.layers.entries()) {
-        const layerSharp = await ImageUtils.createSharpFromInput(layer.image);
-        const { pages } = await layerSharp.metadata();
+        const layerSharp = layerSharps[index] as Sharp;
+        const { pages } = layerHeaders[index] ?? {};
         if (pages !== undefined && pages > 1) {
           warnings.push(`Layer ${index} is animated (${pages} frames); only its first frame was used`);
         }
