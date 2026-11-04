@@ -64,7 +64,7 @@ This server reads no environment variables.
 
 - Last verified test run: build passes; 71 of 74 tests pass, 0 fail, 3 skipped.
 - `layout.createFlex` and `layout.addConstraints` return the placeholder `"CSS generation temporarily disabled"` instead of CSS, and `layout.measure` returns a fixed `accessibilityAnalysis` stub (its touch-target check is never called). The 3 skipped tests cover those outputs.
-- The constraint solver has no priority-based conflict resolution. Two `equal` constraints with different values on the same property are rejected, whatever their priorities.
+- Constraints on an element are applied from lowest to highest `priority`, so when two of them set the same coordinate (for example `x` and `center-x`), the higher priority wins; equal priorities keep list order. Two `equal` constraints with different values on the same property are still rejected, whatever their priorities.
 
 
 ## License
