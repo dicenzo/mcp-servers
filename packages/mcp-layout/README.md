@@ -8,7 +8,7 @@ It runs over stdio and works with any MCP client, including Claude Code and Clau
 
 | Tool | What it does |
 | --- | --- |
-| `layout.createGrid` | Compute a CSS Grid layout for a set of elements. |
+| `layout.createGrid` | Compute a CSS Grid layout for a set of elements: track sizes, areas, and each element's absolute bounds (`computedGrid.elementPositions`). |
 | `layout.createFlex` | Compute a Flexbox layout for a set of elements. |
 | `layout.addConstraints` | Position elements by solving layout constraints. |
 | `layout.autoLayout` | Place elements automatically with content-based spacing. |
@@ -63,6 +63,7 @@ This server reads no environment variables.
 ## Known issues
 
 - Last verified test run: build passes; 71 of 74 tests pass, 0 fail, 3 skipped.
+- `layout.createGrid` places elements by `gridArea`, line numbers or names, `gridColumn`/`gridRow` shorthands (`'1 / 3'`, `'span 2'`) and auto-placement in `autoFlow` order, adding implicit tracks sized by `autoRows`/`autoColumns`. `dense` packing is treated as sparse, and `justifySelf`/`alignSelf` are ignored (elements fill their cells).
 - `layout.createFlex` and `layout.addConstraints` return the placeholder `"CSS generation temporarily disabled"` instead of CSS, and `layout.measure` returns a fixed `accessibilityAnalysis` stub (its touch-target check is never called). The 3 skipped tests cover those outputs.
 - Constraints on an element are applied from lowest to highest `priority`, so when two of them set the same coordinate (for example `x` and `center-x`), the higher priority wins; equal priorities keep list order. Two `equal` constraints with different values on the same property are still rejected, whatever their priorities.
 

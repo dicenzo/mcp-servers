@@ -140,7 +140,11 @@ export const GridLayoutSchema = z.object({
         size: z.number()
       })).max(MAX_GRID_TRACKS)
     }),
-    areas: z.record(z.string(), RectangleSchema).optional()
+    areas: z.record(z.string(), RectangleSchema).optional(),
+    elementPositions: z.array(z.object({
+      id: identifier(),
+      bounds: RectangleSchema
+    })).max(MAX_ELEMENTS).optional()
   }).optional()
 });
 
