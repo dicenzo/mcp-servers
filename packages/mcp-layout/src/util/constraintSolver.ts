@@ -116,6 +116,13 @@ export class ConstraintSolver {
       });
     });
 
+    // Apply each element's constraints from lowest to highest priority, so on a
+    // conflict the higher priority is applied last and wins. The sort is stable,
+    // so equal priorities keep their list order.
+    graph.forEach(entries => {
+      entries.sort((a, b) => (a.constraint.priority ?? 500) - (b.constraint.priority ?? 500));
+    });
+
     return graph;
   }
 
