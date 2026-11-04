@@ -483,14 +483,12 @@ export class LayoutMetricsCalculator {
       return explicit.map(element => ({ elementId: element.id, bounds: element.bounds! }));
     }
     
-    if (layout.type === 'grid' && layout.computedGrid) {
-      // For grid layouts, use computed positions or fall back to grid areas
-      layout.elements.forEach(element => {
-        // This would be filled by the grid engine with actual computed positions
-        // For now, use a default position
+    if (layout.type === 'grid' && layout.computedGrid?.elementPositions) {
+      // Positions computed by the grid engine (layout.createGrid)
+      layout.computedGrid.elementPositions.forEach(pos => {
         positions.push({
-          elementId: element.id,
-          bounds: { x: 0, y: 0, width: 100, height: 50 }
+          elementId: pos.id,
+          bounds: pos.bounds
         });
       });
     } else if (layout.type === 'flex' && layout.computedFlex) {

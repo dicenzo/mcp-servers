@@ -6,6 +6,7 @@ import {
   Rectangle,
 } from '../types/layout.js';
 import { PerformanceMonitor } from './performance.js';
+import { AreaCells, placeGridItems } from './gridPlacement.js';
 import { LayoutValidator } from './validation.js';
 
 /**
@@ -38,7 +39,7 @@ export class GridEngine {
       monitor?.recordIteration();
 
       // Assign elements to grid areas and positions
-      const computedGrid = this.computeElementPositions(config, elements, gridTemplate, monitor);
+      const computedGrid = this.computeElementPositions(config, elements, gridTemplate, bounds, monitor);
       
       const layout: GridLayout = {
         type: 'grid',
@@ -62,17 +63,19 @@ export class GridEngine {
     columns: Array<{ start: number; size: number; name?: string }>;
     rows: Array<{ start: number; size: number; name?: string }>;
     areas: Map<string, Rectangle>;
+    areaCells: Map<string, AreaCells>;
   } {
     const columns = this.parseGridTracks(config.columns, bounds.width, 'columns');
     const rows = this.parseGridTracks(config.rows, bounds.height, 'rows');
     
     // Parse grid areas if defined
     const areas = new Map<string, Rectangle>();
+    const areaCells = new Map<string, AreaCells>();
     if (config.areas) {
-      this.parseGridAreas(config.areas, columns, rows, areas);
+      this.parseGridAreas(config.areas, columns, rows, areas, areaCells);
     }
 
-    return { columns, rows, areas };
+    return { columns, rows, areas, areaCells };
   }
 
   /**
@@ -288,7 +291,8 @@ export class GridEngine {
     areas: string[][],
     columns: Array<{ start: number; size: number }>,
     rows: Array<{ start: number; size: number }>,
-    areaMap: Map<string, Rectangle>
+    areaMap: Map<string, Rectangle>,
+    areaCells: Map<string, AreaCells>
   ): void {
     const areaPositions = new Map<string, {
       minRow: number; maxRow: number; minCol: number; maxCol: number;
@@ -316,6 +320,7 @@ export class GridEngine {
 
     // Convert to rectangles
     areaPositions.forEach((pos, areaName) => {
+      areaCells.set(areaName, pos);
       const startColumn = columns[pos.minCol];
       const endColumn = columns[pos.maxCol];
       const startRow = rows[pos.minRow];
@@ -333,127 +338,83 @@ export class GridEngine {
   }
 
   /**
-   * Compute final element positions within the grid
+   * Places the elements (explicitly or by auto-placement), adds any implicit tracks,
+   * and returns each element's absolute bounds. Tracks and areas stay relative to
+   * the container, as before.
    */
   private static computeElementPositions(
     config: GridConfig,
     elements: GridElement[],
     gridTemplate: {
-      columns: Array<{ start: number; size: number }>;
-      rows: Array<{ start: number; size: number }>;
+      columns: Array<{ start: number; size: number; name?: string }>;
+      rows: Array<{ start: number; size: number; name?: string }>;
       areas: Map<string, Rectangle>;
+      areaCells: Map<string, AreaCells>;
     },
+    bounds: Rectangle,
     monitor?: PerformanceMonitor
-  ): {
-    tracks: {
-      columns: Array<{ start: number; size: number }>;
-      rows: Array<{ start: number; size: number }>;
-    };
-    areas?: Record<string, Rectangle>;
-  } {
+  ): NonNullable<GridLayout['computedGrid']> {
     // Convert areas map to record for output
     const areas: Record<string, Rectangle> = {};
     gridTemplate.areas.forEach((rect, name) => {
       areas[name] = rect;
     });
 
-    elements.forEach(element => {
+    const { placements, columnCount, rowCount } = placeGridItems(
+      elements, gridTemplate.columns, gridTemplate.rows, gridTemplate.areaCells, config.autoFlow
+    );
+    const columns = this.withImplicitTracks(gridTemplate.columns, columnCount, config.autoColumns);
+    const rows = this.withImplicitTracks(gridTemplate.rows, rowCount, config.autoRows);
+
+    const elementPositions = placements.map(placement => {
       monitor?.recordIteration();
-      
-      let elementBounds: Rectangle;
-
-      if (element.gridArea && gridTemplate.areas.has(element.gridArea)) {
-        // Use predefined grid area
-        elementBounds = gridTemplate.areas.get(element.gridArea)!;
-      } else {
-        // Calculate position from grid line references
-        elementBounds = this.calculateElementBounds(element, gridTemplate);
-      }
-
-      // Apply alignment
-      this.applyElementAlignment(element, elementBounds);
+      const first = { column: columns[placement.column], row: rows[placement.row] };
+      const last = {
+        column: columns[placement.column + placement.columnSpan - 1],
+        row: rows[placement.row + placement.rowSpan - 1]
+      };
+      return {
+        id: placement.id,
+        bounds: {
+          x: bounds.x + first.column.start,
+          y: bounds.y + first.row.start,
+          width: last.column.start + last.column.size - first.column.start,
+          height: last.row.start + last.row.size - first.row.start
+        }
+      };
     });
 
     return {
       tracks: {
-        columns: gridTemplate.columns,
-        rows: gridTemplate.rows
+        columns: columns.map(({ start, size }) => ({ start, size })),
+        rows: rows.map(({ start, size }) => ({ start, size }))
       },
-      areas: Object.keys(areas).length > 0 ? areas : undefined
+      areas: Object.keys(areas).length > 0 ? areas : undefined,
+      elementPositions
     };
   }
 
   /**
-   * Calculate element bounds from grid line references
+   * Extends the explicit tracks to `count` with implicit ones sized by
+   * grid-auto-rows / grid-auto-columns (fixed sizes, cycled). Other sizes use the
+   * engine's default auto size, 100px.
    */
-  private static calculateElementBounds(
-    element: GridElement,
-    gridTemplate: {
-      columns: Array<{ start: number; size: number }>;
-      rows: Array<{ start: number; size: number }>;
-    }
-  ): Rectangle {
-    // Parse grid line references
-    const colStart = this.parseGridLine(element.gridColumnStart, gridTemplate.columns, 'start') || 0;
-    const colEnd = this.parseGridLine(element.gridColumnEnd, gridTemplate.columns, 'end') || 1;
-    const rowStart = this.parseGridLine(element.gridRowStart, gridTemplate.rows, 'start') || 0;
-    const rowEnd = this.parseGridLine(element.gridRowEnd, gridTemplate.rows, 'end') || 1;
-
-    // Calculate bounds
-    const startCol = gridTemplate.columns[colStart];
-    const endCol = gridTemplate.columns[colEnd - 1];
-    const startRow = gridTemplate.rows[rowStart];
-    const endRow = gridTemplate.rows[rowEnd - 1];
-
-    if (!startCol || !endCol || !startRow || !endRow) {
-      throw new Error(`Invalid grid line references for element ${element.id}`);
-    }
-
-    return {
-      x: startCol.start,
-      y: startRow.start,
-      width: endCol.start + endCol.size - startCol.start,
-      height: endRow.start + endRow.size - startRow.start
-    };
-  }
-
-  /**
-   * Parse grid line reference (number or name)
-   */
-  private static parseGridLine(
-    line: number | string | undefined,
+  private static withImplicitTracks(
     tracks: Array<{ start: number; size: number; name?: string }>,
-    _type: 'start' | 'end'
-  ): number | undefined {
-    if (line === undefined) {
-      return undefined;
+    count: number,
+    autoTemplate: string | undefined
+  ): Array<{ start: number; size: number; name?: string }> {
+    const result = tracks.map(track => ({ ...track }));
+    const autoSizes = (autoTemplate && autoTemplate !== 'auto'
+      ? this.parseTrackDefinitions(this.expandRepeat(autoTemplate))
+      : []
+    ).map(def => (def.type === 'fixed' ? def.value : 100));
+    for (let i = result.length; i < count; i++) {
+      const previous = result[i - 1];
+      const size = autoSizes.length > 0 ? autoSizes[(i - tracks.length) % autoSizes.length] : 100;
+      result.push({ start: previous ? previous.start + previous.size : 0, size });
     }
-
-    if (typeof line === 'number') {
-      return line - 1; // Convert to 0-based index
-    }
-
-    if (typeof line === 'string') {
-      // Find named line
-      const index = tracks.findIndex(track => track.name === line);
-      return index >= 0 ? index : undefined;
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Apply element self-alignment within its grid area
-   */
-  private static applyElementAlignment(element: GridElement, _bounds: Rectangle): void {
-    // This is a simplified implementation
-    // In a full implementation, this would adjust the element's final position
-    // based on justifySelf and alignSelf properties
-    
-    if (element.justifySelf || element.alignSelf) {
-      // Alignment logic would go here
-      // For now, elements fill their entire grid area
-    }
+    return result;
   }
 
   /**
