@@ -6,6 +6,8 @@ import { shapeTextTool } from '../../src/tools/shapeText.js';
 import { validateFontTool } from '../../src/tools/validateFont.js';
 import { generateFallbackTool } from '../../src/tools/generateFallback.js';
 import { buildTestFont, toBuffer } from '../fixtures/buildTestFont.js';
+import { parseFont } from '../../src/util/parseFont.js';
+import { PERFORMANCE_LIMITS } from '../../src/types/typography.js';
 
 type ToolResult = { content: { text: string }[]; isError?: boolean };
 const resultOf = (response: unknown) => JSON.parse((response as ToolResult).content[0].text);
@@ -50,6 +52,25 @@ describe('WOFF2 fonts are decompressed before parsing', () => {
     const response = await loadFontTool.invoke(asInput(bomb)) as ToolResult;
     expect(response.isError).toBe(true);
     expect(resultOf(response).message).toMatch(/decompress to more than/);
+  });
+
+  test('table sizes in the WOFF2 directory are checked, not just the header total', async () => {
+    // Header says 1000 bytes; the one table (cmap, untransformed) says 2GB
+    const header = Buffer.alloc(48);
+    header.write('wOF2', 0, 'latin1');
+    header.writeUInt32BE(0x00010000, 4); // flavor
+    header.writeUInt16BE(1, 12); // numTables
+    header.writeUInt32BE(1000, 16); // totalSfntSize
+    const entry = Buffer.from([0x00, 0x87, 0xff, 0xff, 0xff, 0x7f]); // flags, origLength (UIntBase128)
+    const bomb = Buffer.concat([header, entry, Buffer.alloc(64)]);
+    header.writeUInt32BE(bomb.length, 8);
+    await expect(parseFont(bomb)).rejects.toThrow(/decompress to more than/);
+  });
+
+  test('parseFont applies the file size limit to every tool', async () => {
+    const huge = Buffer.alloc(PERFORMANCE_LIMITS.MAX_FONT_FILE_SIZE + 1);
+    toBuffer(buildTestFont()).copy(huge);
+    await expect(parseFont(huge)).rejects.toThrow(/too large/);
   });
 
   test('a corrupt WOFF2 file is reported as an error', async () => {
