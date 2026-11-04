@@ -112,3 +112,84 @@ describe('layout.createGrid returns element positions', () => {
     expect(measured.metrics.totalBounds).toEqual({ x: 10, y: 20, width: 300, height: 100 });
   });
 });
+
+// Expected values below were checked against Chrome's grid layout for the same templates.
+describe('grid gaps and track templates', () => {
+  const wide = { x: 0, y: 0, width: 1000, height: 600 };
+  type Track = { start: number; size: number };
+  const tracksOf = (result: { layout: { computedGrid: { tracks: { columns: Track[]; rows: Track[] } } } }) =>
+    result.layout.computedGrid.tracks;
+
+  test('gap is taken off the free space before fr tracks are sized, and added between tracks', async () => {
+    const result = await createGrid({ columns: '1fr 1fr 1fr', rows: '100px 100px', gap: '20px' },
+      [{ id: 'a', gridColumn: '1 / 3' }, { id: 'b' }, { id: 'c' }], wide);
+    expect(tracksOf(result).columns).toEqual([
+      { start: 0, size: 320 }, { start: 340, size: 320 }, { start: 680, size: 320 }
+    ]);
+    expect(tracksOf(result).rows).toEqual([{ start: 0, size: 100 }, { start: 120, size: 100 }]);
+    expect(positionsOf(result)).toEqual({
+      a: { x: 0, y: 0, width: 660, height: 100 },
+      b: { x: 680, y: 0, width: 320, height: 100 },
+      c: { x: 0, y: 120, width: 320, height: 100 }
+    });
+  });
+
+  test('a two-value gap is row then column, and rowGap/columnGap override it', async () => {
+    const two = await createGrid({ columns: '100px 100px', rows: '50px 50px', gap: '10px 30px' }, [{ id: 'a' }], wide);
+    expect(tracksOf(two).rows[1]).toEqual({ start: 60, size: 50 });
+    expect(tracksOf(two).columns[1]).toEqual({ start: 130, size: 100 });
+    const overridden = await createGrid({ columns: '100px 100px', rows: '50px 50px', gap: '10px', columnGap: '5px' }, [{ id: 'a' }], wide);
+    expect(tracksOf(overridden).columns[1].start).toBe(105);
+    expect(tracksOf(overridden).rows[1].start).toBe(60);
+  });
+
+  test('implicit rows are separated by the row gap', async () => {
+    const result = await createGrid({ columns: '100px', rows: '50px', gap: '10px', autoRows: '40px' }, [{ id: 'a' }, { id: 'b' }], wide);
+    expect(positionsOf(result).b).toEqual({ x: 0, y: 60, width: 100, height: 40 });
+  });
+
+  test.each([
+    ['auto auto', [500, 500]],
+    ['min-content max-content', [100, 100]],
+    ['10em 20em', [160, 320]],
+    ['10% 1fr', [100, 900]],
+    ['[side] 200px [main] 1fr', [200, 800]],
+    ['minmax(100px, 1fr) 200px', [800, 200]],
+    ['repeat(2, 1fr 3fr)', [125, 375, 125, 375]]
+  ])('the valid template %s is accepted and sized', async (columns, sizes) => {
+    const result = await createGrid({ columns, rows: '100px' }, [{ id: 'a' }], wide);
+    expect(result.success).toBe(true);
+    expect(tracksOf(result).columns.map(t => t.size)).toEqual(sizes);
+  });
+
+  test('repeat(auto-fill / auto-fit, ...) repeats as many tracks as fit, counting gaps', async () => {
+    const fill = await createGrid({ columns: 'repeat(auto-fill, 200px)', rows: '100px', gap: '20px' }, [{ id: 'a' }], wide);
+    expect(tracksOf(fill).columns).toEqual([
+      { start: 0, size: 200 }, { start: 220, size: 200 }, { start: 440, size: 200 }, { start: 660, size: 200 }
+    ]);
+    // Four items fill every track, so this matches Chrome. With fewer items Chrome
+    // collapses the empty auto-fit tracks; the engine doesn't (see README).
+    const items = ['a', 'b', 'c', 'd'].map(id => ({ id }));
+    const fit = await createGrid({ columns: 'repeat(auto-fit, minmax(200px, 1fr))', rows: '100px', gap: '16px' }, items, wide);
+    expect(tracksOf(fit).columns).toEqual([
+      { start: 0, size: 238 }, { start: 254, size: 238 }, { start: 508, size: 238 }, { start: 762, size: 238 }
+    ]);
+  });
+
+  test.each([
+    ['expx', 'expx'],
+    ['10vw', '10vw'],
+    ['1fr; } body { display: none } .x {', ';'],
+    ['minmax(1fr, 100px)', 'minmax(1fr, 100px)'],
+    ['repeat(2)', 'repeat(2)']
+  ])('the invalid template %s is rejected, naming %s', async (columns, token) => {
+    const result = await createGrid({ columns, rows: '100px' }, [{ id: 'a' }], wide);
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.details)).toContain(token);
+  });
+
+  test('an invalid gap is rejected', async () => {
+    const result = await createGrid({ columns: '1fr', rows: '1fr', gap: '10px 20px 30px' }, [{ id: 'a' }], wide);
+    expect(result.success).toBe(false);
+  });
+});

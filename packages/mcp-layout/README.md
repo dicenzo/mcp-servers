@@ -62,8 +62,9 @@ This server reads no environment variables.
 
 ## Known issues
 
-- Last verified test run: build passes; 71 of 74 tests pass, 0 fail, 3 skipped.
+- Last verified test run: build passes; 121 of 124 tests pass, 0 fail, 3 skipped.
 - `layout.createGrid` places elements by `gridArea`, line numbers or names, `gridColumn`/`gridRow` shorthands (`'1 / 3'`, `'span 2'`) and auto-placement in `autoFlow` order, adding implicit tracks sized by `autoRows`/`autoColumns`. `dense` packing is treated as sparse, and `justifySelf`/`alignSelf` are ignored (elements fill their cells).
+- Grid templates accept `px`, `em`/`rem` (16px), `%`, `fr`, `auto`, `min-content`/`max-content`, `minmax()`, `repeat(n | auto-fill | auto-fit, …)` and `[line names]`; the same parser validates them, so anything else is rejected with the offending token. `vh`/`vw`/`ch`/`ex` are rejected because the engine has no viewport or font. Content-sized tracks use a 100px estimate; with no `fr` tracks, `auto` tracks share the leftover space. `gap` takes one or two values (row, column), and `rowGap`/`columnGap` override it. `auto-fit` doesn't collapse empty tracks (it behaves like `auto-fill`).
 - `layout.createFlex` and `layout.addConstraints` return the placeholder `"CSS generation temporarily disabled"` instead of CSS, and `layout.measure` returns a fixed `accessibilityAnalysis` stub (its touch-target check is never called). The 3 skipped tests cover those outputs.
 - Constraints on an element are applied from lowest to highest `priority`, so when two of them set the same coordinate (for example `x` and `center-x`), the higher priority wins; equal priorities keep list order. Two `equal` constraints with different values on the same property are still rejected, whatever their priorities.
 

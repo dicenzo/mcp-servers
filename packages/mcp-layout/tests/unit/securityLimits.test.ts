@@ -4,9 +4,9 @@ import { addConstraintsTool } from '../../src/tools/addConstraints.js';
 import { autoLayoutTool } from '../../src/tools/autoLayout.js';
 import { responsiveTool } from '../../src/tools/responsive.js';
 import { measureTool } from '../../src/tools/measure.js';
-import { GridEngine } from '../../src/util/gridEngine.js';
 import { FlexEngine } from '../../src/util/flexEngine.js';
 import { LayoutValidator } from '../../src/util/validation.js';
+import { parseTrackList, resolveLength } from '../../src/util/gridTracks.js';
 import {
   BreakpointSchema,
   FlexConfigSchema,
@@ -146,32 +146,36 @@ describe('Security limits', () => {
     });
 
     it('parses a pathological grid track value in linear time', () => {
-      const { result, ms } = timed(() =>
-        (GridEngine as unknown as { parseSingleValue: (v: string) => { value: number; unit: string } })
-          .parseSingleValue(REDOS_PAYLOAD)
-      );
-      expect(result.unit).toBe('px');
+      const { result, ms } = timed(() => {
+        try {
+          parseTrackList(REDOS_PAYLOAD);
+          return 'parsed';
+        } catch (error) {
+          return (error as Error).message;
+        }
+      });
+      expect(result).toMatch(/Invalid track size/);
       expect(ms).toBeLessThan(100);
     });
 
-    it('still accepts the same CSS lengths as before', () => {
-      const valid = ['0', 'auto', '10px', '1.5rem', '.5em', '100%', '2fr', '3ch', '4ex', '50vh', '50vw'];
+    it('accepts the CSS lengths the grid engine can resolve, and rejects the rest', () => {
+      const valid = ['0', '10px', '1.5rem', '.5em', '100%', '10px 20px'];
       valid.forEach(gap => {
         const errors = LayoutValidator.validateGridConfig({ columns: '1fr', rows: 'auto', gap, autoFlow: 'row' });
         expect(errors).toEqual([]);
       });
 
-      const invalid = ['1.px', '1..5px', 'px', '-1px', '10pt'];
+      // auto and fr aren't valid gaps; vh/vw/ch/ex are valid CSS but need a viewport
+      // or font the engine doesn't have, so they're rejected rather than read as px
+      const invalid = ['1.px', '1..5px', 'px', '-1px', '10pt', 'auto', '2fr', '3ch', '4ex', '50vh', '50vw', '40'];
       invalid.forEach(gap => {
         const errors = LayoutValidator.validateGridConfig({ columns: '1fr', rows: 'auto', gap, autoFlow: 'row' });
         expect(errors.length).toBeGreaterThan(0);
       });
 
-      const parse = (GridEngine as unknown as { parseSingleValue: (v: string) => { value: number; unit: string } })
-        .parseSingleValue;
-      expect(parse('.5fr')).toEqual({ value: 0.5, unit: 'fr' });
-      expect(parse('12.25px')).toEqual({ value: 12.25, unit: 'px' });
-      expect(parse('40')).toEqual({ value: 40, unit: 'px' });
+      expect(resolveLength('12.25px', 0, 'gap')).toBe(12.25);
+      expect(resolveLength('.5em', 0, 'gap')).toBe(8);
+      expect(resolveLength('10%', 300, 'gap')).toBe(30);
     });
 
     it('rejects overlong gap strings at the schema', () => {
