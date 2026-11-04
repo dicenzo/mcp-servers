@@ -2,11 +2,11 @@ import {
   GridConfig,
   GridElement,
   GridLayout,
-  MAX_GRID_TRACKS,
   Rectangle,
 } from '../types/layout.js';
 import { PerformanceMonitor } from './performance.js';
 import { AreaCells, placeGridItems } from './gridPlacement.js';
+import { expandTracks, parseTrackList, resolveGaps, sizeTracks, CONTENT_TRACK_SIZE } from './gridTracks.js';
 import { LayoutValidator } from './validation.js';
 
 /**
@@ -64,9 +64,11 @@ export class GridEngine {
     rows: Array<{ start: number; size: number; name?: string }>;
     areas: Map<string, Rectangle>;
     areaCells: Map<string, AreaCells>;
+    gaps: { row: number; column: number };
   } {
-    const columns = this.parseGridTracks(config.columns, bounds.width, 'columns');
-    const rows = this.parseGridTracks(config.rows, bounds.height, 'rows');
+    const gaps = resolveGaps(config, bounds.width, bounds.height);
+    const columns = sizeTracks(expandTracks(parseTrackList(config.columns, 'grid-template-columns'), bounds.width, gaps.column), bounds.width, gaps.column);
+    const rows = sizeTracks(expandTracks(parseTrackList(config.rows, 'grid-template-rows'), bounds.height, gaps.row), bounds.height, gaps.row);
     
     // Parse grid areas if defined
     const areas = new Map<string, Rectangle>();
@@ -75,213 +77,7 @@ export class GridEngine {
       this.parseGridAreas(config.areas, columns, rows, areas, areaCells);
     }
 
-    return { columns, rows, areas, areaCells };
-  }
-
-  /**
-   * Parse grid track definitions (columns or rows)
-   */
-  private static parseGridTracks(
-    template: string,
-    availableSpace: number,
-    _axis: 'columns' | 'rows'
-  ): Array<{ start: number; size: number; name?: string }> {
-    const tracks: Array<{ start: number; size: number; name?: string }> = [];
-    
-    // Handle common patterns
-    if (template === 'auto') {
-      tracks.push({ start: 0, size: availableSpace });
-      return tracks;
-    }
-
-    // Parse repeat() functions
-    template = this.expandRepeat(template);
-    
-    // Split template into individual track definitions
-    const trackDefs = this.parseTrackDefinitions(template);
-    if (trackDefs.length > MAX_GRID_TRACKS) {
-      throw new Error(`Grid template defines ${trackDefs.length} tracks (at most ${MAX_GRID_TRACKS} allowed)`);
-    }
-    
-    // Calculate track sizes
-    let currentPosition = 0;
-    const frTracks: Array<{ index: number; fr: number }> = [];
-    let totalFr = 0;
-    let usedSpace = 0;
-
-    // First pass: calculate fixed sizes and collect fr tracks
-    trackDefs.forEach((def, index) => {
-      const track = { start: currentPosition, size: 0, name: def.name };
-      
-      if (def.type === 'fixed') {
-        track.size = def.value;
-        usedSpace += track.size;
-        currentPosition += track.size;
-      } else if (def.type === 'fr') {
-        frTracks.push({ index, fr: def.value });
-        totalFr += def.value;
-      } else if (def.type === 'auto') {
-        // Auto tracks will be sized based on content (simplified to equal distribution)
-        track.size = 100; // Default auto size
-        usedSpace += track.size;
-        currentPosition += track.size;
-      } else if (def.type === 'minmax') {
-        const minSize = def.min || 0;
-        const maxSize = def.max || availableSpace;
-        track.size = Math.min(maxSize, Math.max(minSize, 100));
-        usedSpace += track.size;
-        currentPosition += track.size;
-      }
-      
-      tracks.push(track);
-    });
-
-    // Second pass: distribute remaining space to fr tracks
-    const remainingSpace = Math.max(0, availableSpace - usedSpace);
-    const frUnit = totalFr > 0 ? remainingSpace / totalFr : 0;
-    
-    const positionAdjustment = 0;
-    frTracks.forEach(({ index, fr }) => {
-      const track = tracks[index];
-      track.size = fr * frUnit;
-      track.start = index === 0 ? 0 : tracks[index - 1].start + tracks[index - 1].size + positionAdjustment;
-    });
-
-    // Recalculate positions for all tracks
-    currentPosition = 0;
-    tracks.forEach(track => {
-      track.start = currentPosition;
-      currentPosition += track.size;
-    });
-
-    return tracks;
-  }
-
-  /**
-   * Expand CSS repeat() functions.
-   * Rejects repeat counts, and total expanded track counts, above MAX_GRID_TRACKS
-   * before allocating anything, so a short template cannot exhaust memory.
-   */
-  private static expandRepeat(template: string): string {
-    let expandedTracks = 0;
-
-    return template.replace(/repeat\((\d+),\s*([^)]+)\)/g, (match, count, pattern) => {
-      const repeatCount = parseInt(count, 10);
-      if (repeatCount > MAX_GRID_TRACKS) {
-        throw new Error(`Grid repeat() count ${count} exceeds the maximum of ${MAX_GRID_TRACKS}`);
-      }
-
-      const trimmedPattern = pattern.trim();
-      expandedTracks += repeatCount * trimmedPattern.split(/\s+/).length;
-      if (expandedTracks > MAX_GRID_TRACKS) {
-        throw new Error(`Grid repeat() expands to more than ${MAX_GRID_TRACKS} tracks`);
-      }
-
-      return Array(repeatCount).fill(trimmedPattern).join(' ');
-    });
-  }
-
-  /**
-   * Parse track definitions from expanded template
-   */
-  private static parseTrackDefinitions(template: string): Array<{
-    type: 'fixed' | 'fr' | 'auto' | 'minmax';
-    value: number;
-    unit?: string;
-    min?: number;
-    max?: number;
-    name?: string;
-  }> {
-    const definitions: Array<{
-      type: 'fixed' | 'fr' | 'auto' | 'minmax';
-      value: number;
-      unit?: string;
-      min?: number;
-      max?: number;
-      name?: string;
-    }> = [];
-
-    // Split by whitespace, but preserve function calls
-    const tokens = template.match(/(\[[\w-]+\]|\w+\([^)]*\)|[\w.-]+)/g) || [];
-    
-    for (let i = 0; i < tokens.length; i++) {
-      const token = tokens[i].trim();
-      
-      if (token.startsWith('[') && token.endsWith(']')) {
-        // Named grid line - attach to next track
-        const name = token.slice(1, -1);
-        if (i + 1 < tokens.length) {
-          const nextDef = { ...this.parseTrackDefinition(tokens[i + 1]), name };
-          definitions.push(nextDef);
-          i++; // Skip next token since we processed it
-        }
-      } else {
-        definitions.push(this.parseTrackDefinition(token));
-      }
-    }
-
-    return definitions;
-  }
-
-  /**
-   * Parse individual track definition
-   */
-  private static parseTrackDefinition(token: string): {
-    type: 'fixed' | 'fr' | 'auto' | 'minmax';
-    value: number;
-    unit?: string;
-    min?: number;
-    max?: number;
-  } {
-    if (token === 'auto') {
-      return { type: 'auto', value: 0 };
-    }
-
-    if (token.startsWith('minmax(')) {
-      const content = token.slice(7, -1);
-      const [minStr, maxStr] = content.split(',').map(s => s.trim());
-      
-      const min = this.parseSingleValue(minStr);
-      const max = this.parseSingleValue(maxStr);
-      
-      return {
-        type: 'minmax',
-        value: min.value,
-        min: min.value,
-        max: max.value === Infinity ? undefined : max.value
-      };
-    }
-
-    const parsed = this.parseSingleValue(token);
-    
-    if (parsed.unit === 'fr') {
-      return { type: 'fr', value: parsed.value };
-    } else {
-      return { type: 'fixed', value: parsed.value, unit: parsed.unit };
-    }
-  }
-
-  /**
-   * Parse single value with unit
-   */
-  private static parseSingleValue(value: string): { value: number; unit: string } {
-    if (value === 'max-content' || value === 'min-content') {
-      return { value: 100, unit: 'px' }; // Simplified
-    }
-    
-    if (value === 'auto') {
-      return { value: 0, unit: 'auto' };
-    }
-
-    const match = value.match(/^(\d+(?:\.\d+)?|\.\d+)(px|fr|%|em|rem|vh|vw|ch|ex)?$/);
-    if (match) {
-      const numValue = parseFloat(match[1]);
-      const unit = match[2] || 'px';
-      return { value: numValue, unit };
-    }
-
-    // Fallback
-    return { value: parseFloat(value) || 0, unit: 'px' };
+    return { columns, rows, areas, areaCells, gaps };
   }
 
   /**
@@ -350,6 +146,7 @@ export class GridEngine {
       rows: Array<{ start: number; size: number; name?: string }>;
       areas: Map<string, Rectangle>;
       areaCells: Map<string, AreaCells>;
+      gaps: { row: number; column: number };
     },
     bounds: Rectangle,
     monitor?: PerformanceMonitor
@@ -363,8 +160,8 @@ export class GridEngine {
     const { placements, columnCount, rowCount } = placeGridItems(
       elements, gridTemplate.columns, gridTemplate.rows, gridTemplate.areaCells, config.autoFlow
     );
-    const columns = this.withImplicitTracks(gridTemplate.columns, columnCount, config.autoColumns);
-    const rows = this.withImplicitTracks(gridTemplate.rows, rowCount, config.autoRows);
+    const columns = this.withImplicitTracks(gridTemplate.columns, columnCount, config.autoColumns, gridTemplate.gaps.column, bounds.width);
+    const rows = this.withImplicitTracks(gridTemplate.rows, rowCount, config.autoRows, gridTemplate.gaps.row, bounds.height);
 
     const elementPositions = placements.map(placement => {
       monitor?.recordIteration();
@@ -396,23 +193,28 @@ export class GridEngine {
 
   /**
    * Extends the explicit tracks to `count` with implicit ones sized by
-   * grid-auto-rows / grid-auto-columns (fixed sizes, cycled). Other sizes use the
-   * engine's default auto size, 100px.
+   * grid-auto-rows / grid-auto-columns (cycled), separated by the gap. Content-sized
+   * values use the 100px estimate.
    */
   private static withImplicitTracks(
     tracks: Array<{ start: number; size: number; name?: string }>,
     count: number,
-    autoTemplate: string | undefined
+    autoTemplate: string | undefined,
+    gap: number,
+    available: number
   ): Array<{ start: number; size: number; name?: string }> {
     const result = tracks.map(track => ({ ...track }));
-    const autoSizes = (autoTemplate && autoTemplate !== 'auto'
-      ? this.parseTrackDefinitions(this.expandRepeat(autoTemplate))
-      : []
-    ).map(def => (def.type === 'fixed' ? def.value : 100));
+    if (count <= result.length) {
+      return result;
+    }
+    const autoSizes = autoTemplate
+      ? sizeTracks(expandTracks(parseTrackList(autoTemplate), available, 0), 0, 0)
+        .map(track => track.size || CONTENT_TRACK_SIZE)
+      : [CONTENT_TRACK_SIZE];
     for (let i = result.length; i < count; i++) {
       const previous = result[i - 1];
-      const size = autoSizes.length > 0 ? autoSizes[(i - tracks.length) % autoSizes.length] : 100;
-      result.push({ start: previous ? previous.start + previous.size : 0, size });
+      const size = autoSizes[(i - tracks.length) % autoSizes.length];
+      result.push({ start: previous ? previous.start + previous.size + gap : 0, size });
     }
     return result;
   }
