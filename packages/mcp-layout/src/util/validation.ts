@@ -9,6 +9,7 @@ import {
   LayoutErrorCode,
   Breakpoint
 } from '../types/layout.js';
+import { GridTemplateError, parseTrackList, resolveGaps } from './gridTracks.js';
 
 /**
  * Validation utilities for layout configurations and constraints
@@ -21,26 +22,33 @@ export class LayoutValidator {
   static validateGridConfig(config: GridConfig): LayoutError[] {
     const errors: LayoutError[] = [];
 
-    // Validate grid template columns/rows syntax
-    if (!this.isValidCSSGridTemplate(config.columns)) {
-      errors.push({
-        code: LayoutErrorCode.INVALID_CONFIG,
-        message: `Invalid grid-template-columns value: ${config.columns}`
-      });
+    // Grid templates and gaps are validated by the same parser that sizes them
+    const templates: Array<[string, string | undefined]> = [
+      ['grid-template-columns', config.columns],
+      ['grid-template-rows', config.rows],
+      ['grid-auto-columns', config.autoColumns],
+      ['grid-auto-rows', config.autoRows]
+    ];
+    for (const [property, value] of templates) {
+      if (value === undefined && property.startsWith('grid-auto')) {
+        continue;
+      }
+      try {
+        parseTrackList(value ?? '', property);
+      } catch (error) {
+        errors.push({
+          code: LayoutErrorCode.INVALID_CONFIG,
+          message: error instanceof GridTemplateError ? error.message : `Invalid ${property} value: ${value}`
+        });
+      }
     }
 
-    if (!this.isValidCSSGridTemplate(config.rows)) {
+    try {
+      resolveGaps(config, 0, 0);
+    } catch (error) {
       errors.push({
         code: LayoutErrorCode.INVALID_CONFIG,
-        message: `Invalid grid-template-rows value: ${config.rows}`
-      });
-    }
-
-    // Validate gap values
-    if (!this.isValidCSSLength(config.gap)) {
-      errors.push({
-        code: LayoutErrorCode.INVALID_CONFIG,
-        message: `Invalid gap value: ${config.gap}`
+        message: error instanceof GridTemplateError ? error.message : `Invalid gap value: ${config.gap}`
       });
     }
 
@@ -328,31 +336,6 @@ export class LayoutValidator {
 
   // Private helper methods
   
-  private static isValidCSSGridTemplate(value: string): boolean {
-    // Basic validation for CSS grid template values
-    // This could be expanded with more sophisticated CSS parsing
-    if (!value || value.trim() === '') return false;
-    
-    // Common valid patterns
-    const validPatterns = [
-      /^\d+px(\s+\d+px)*$/, // px values
-      /^\d+fr(\s+\d+fr)*$/, // fr values
-      /^repeat\(.+\)$/, // repeat function
-      /^minmax\(.+\)$/, // minmax function
-      /^auto$/, // auto keyword
-      /^min-content$/, // min-content
-      /^max-content$/, // max-content
-      /^\[.+\]\s*\d+(px|fr|%)/, // named lines
-    ];
-
-    return validPatterns.some(pattern => pattern.test(value)) || 
-           value.includes('repeat(') || 
-           value.includes('minmax(') ||
-           value.includes('fr') ||
-           value.includes('px') ||
-           value.includes('%');
-  }
-
   private static isValidCSSLength(value: string): boolean {
     if (!value || value.trim() === '') return false;
     
