@@ -261,7 +261,7 @@ export class TemplateExporter {
     }
     
     const target = this.resolveRasterSize(renderedTemplate, options);
-    const quality = options.quality || 80;
+    const quality = options.quality ?? 80;
     let sharpInstance = this.createRasterPipeline(svgContent, renderedTemplate, target);
     
     // JPEG requires background (no transparency)
@@ -302,7 +302,7 @@ export class TemplateExporter {
     }
     
     const target = this.resolveRasterSize(renderedTemplate, options);
-    const quality = options.quality || 80;
+    const quality = options.quality ?? 80;
     let sharpInstance = this.createRasterPipeline(svgContent, renderedTemplate, target);
     
     // Add background if specified
@@ -585,11 +585,11 @@ export class TemplateExporter {
           message: `Quality option not supported for ${options.format} format`,
           suggestions: ['Quality is only supported for JPEG and WebP formats']
         });
-      } else if (options.quality < 0 || options.quality > 100) {
+      } else if (!Number.isInteger(options.quality) || options.quality < 1 || options.quality > 100) {
         errors.push({
           code: TemplateErrorCode.EXPORT_ERROR,
-          message: 'Quality must be between 0 and 100',
-          suggestions: ['Set quality to a value between 0 and 100']
+          message: 'Quality must be a whole number between 1 and 100',
+          suggestions: ['Set quality to a whole number between 1 and 100']
         });
       }
     }
