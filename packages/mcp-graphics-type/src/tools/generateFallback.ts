@@ -12,6 +12,7 @@ import {
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
 import { parseFont } from '../util/parseFont.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 type GenericFamily = SystemFontStack['genericFamily'];
 type TargetPlatform = SystemFontStack['platform'];
@@ -46,76 +47,7 @@ interface ExecutableTool extends Tool {
 export const generateFallbackTool: ExecutableTool = {
   name: 'type.generateFallback',
   description: 'Generate optimal system font fallback stacks based on primary font characteristics and target platforms',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      primaryFont: {
-        oneOf: [
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'file' },
-              path: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'path']
-          },
-          {
-            type: 'object', 
-            properties: {
-              type: { const: 'buffer' },
-              data: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'data']
-          },
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'url' },
-              url: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'url']
-          },
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'system' },
-              name: { type: 'string' }
-            },
-            required: ['type', 'name']
-          }
-        ],
-        description: 'Primary font to generate fallbacks for'
-      },
-      targetPlatforms: {
-        type: 'array',
-        items: {
-          type: 'string',
-          enum: ['windows', 'macos', 'linux', 'ios', 'android', 'web']
-        },
-        default: ['web'],
-        description: 'Target platforms for font stack'
-      },
-      textContent: {
-        type: 'string',
-        description: 'Sample text content to analyze for character coverage (optional)'
-      },
-      preferredGenericFamily: {
-        type: 'string',
-        enum: ['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui'],
-        description: 'Preferred generic font family fallback'
-      },
-      includeWebFonts: {
-        type: 'boolean',
-        default: false,
-        description: 'Include web font fallbacks in the stack'
-      }
-    },
-    required: ['primaryFont'],
-    additionalProperties: false
-  },
+  inputSchema: toolInputSchema(GenerateFallbackInputSchema),
 
   async invoke(args: unknown) {
     try {

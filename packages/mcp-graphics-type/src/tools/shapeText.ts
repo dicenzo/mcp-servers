@@ -13,6 +13,7 @@ import {
 import { loadFontBuffer } from './loadFont.js';
 import { layoutGlyphRun } from '../util/glyphRun.js';
 import { parseFont } from '../util/parseFont.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<TextToolResult>;
@@ -24,110 +25,7 @@ interface ExecutableTool extends Tool {
 export const shapeTextTool: ExecutableTool = {
   name: 'type.shapeText',
   description: 'Shape text using advanced typography with proper Unicode support, script analysis, and OpenType features',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      text: {
-        type: 'string',
-        description: 'Text to shape'
-      },
-      font: {
-        oneOf: [
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'file' },
-              path: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'path']
-          },
-          {
-            type: 'object', 
-            properties: {
-              type: { const: 'buffer' },
-              data: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'data']
-          },
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'url' },
-              url: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'url']
-          },
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'system' },
-              name: { type: 'string' }
-            },
-            required: ['type', 'name']
-          }
-        ],
-        description: 'Font to use for shaping'
-      },
-      options: {
-        type: 'object',
-        properties: {
-          direction: {
-            type: 'string',
-            enum: ['ltr', 'rtl', 'ttb', 'btt'],
-            default: 'ltr',
-            description: 'Text direction'
-          },
-          script: {
-            type: 'string',
-            default: 'latn',
-            description: 'Script code (ISO 15924)'
-          },
-          language: {
-            type: 'string',
-            default: 'und',
-            description: 'Language code (ISO 639)'
-          },
-          features: {
-            type: 'object',
-            additionalProperties: {
-              oneOf: [
-                { type: 'boolean' },
-                { type: 'number' }
-              ]
-            },
-            description: 'OpenType features to enable/disable'
-          },
-          fontSize: {
-            type: 'number',
-            minimum: 1,
-            default: 16,
-            description: 'Font size in pixels'
-          },
-          letterSpacing: {
-            type: 'number',
-            default: 0,
-            description: 'Additional letter spacing'
-          },
-          wordSpacing: {
-            type: 'number',
-            default: 0,
-            description: 'Additional word spacing'
-          },
-          variations: {
-            type: 'object',
-            additionalProperties: { type: 'number' },
-            description: 'Variable font axis values'
-          }
-        },
-        additionalProperties: false
-      }
-    },
-    required: ['text', 'font'],
-    additionalProperties: false
-  },
+  inputSchema: toolInputSchema(ShapeTextInputSchema),
 
   async invoke(args: unknown) {
     try {

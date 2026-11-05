@@ -12,6 +12,7 @@ import { loadFontBuffer } from './loadFont.js';
 import { fontLineGap } from '../util/fontMetrics.js';
 import { layoutGlyphRun } from '../util/glyphRun.js';
 import { parseFont } from '../util/parseFont.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<TextToolResult>;
@@ -23,99 +24,7 @@ interface ExecutableTool extends Tool {
 export const measureTextTool: ExecutableTool = {
   name: 'type.measureText',
   description: 'Measure text dimensions and provide detailed typography metrics including baselines, bounding boxes, and character-level metrics',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      text: {
-        type: 'string',
-        description: 'Text to measure'
-      },
-      font: {
-        oneOf: [
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'file' },
-              path: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'path']
-          },
-          {
-            type: 'object', 
-            properties: {
-              type: { const: 'buffer' },
-              data: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'data']
-          },
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'url' },
-              url: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'url']
-          },
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'system' },
-              name: { type: 'string' }
-            },
-            required: ['type', 'name']
-          }
-        ],
-        description: 'Font to use for measurement'
-      },
-      fontSize: {
-        type: 'number',
-        minimum: 1,
-        description: 'Font size in pixels'
-      },
-      options: {
-        type: 'object',
-        properties: {
-          letterSpacing: {
-            type: 'number',
-            default: 0,
-            description: 'Additional letter spacing'
-          },
-          wordSpacing: {
-            type: 'number',
-            default: 0,
-            description: 'Additional word spacing'
-          },
-          direction: {
-            type: 'string',
-            enum: ['ltr', 'rtl'],
-            default: 'ltr',
-            description: 'Text direction'
-          },
-          script: {
-            type: 'string',
-            default: 'latn',
-            description: 'Script code'
-          },
-          language: {
-            type: 'string',
-            default: 'und',
-            description: 'Language code'
-          },
-          includeCharacterMetrics: {
-            type: 'boolean',
-            default: false,
-            description: 'Include per-character metrics'
-          }
-        },
-        additionalProperties: false
-      }
-    },
-    required: ['text', 'font', 'fontSize'],
-    additionalProperties: false
-  },
+  inputSchema: toolInputSchema(MeasureTextInputSchema),
 
   async invoke(args: unknown) {
     try {

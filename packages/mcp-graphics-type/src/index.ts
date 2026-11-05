@@ -4,7 +4,9 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
+  ErrorCode,
   ListToolsRequestSchema,
+  McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { loadFontTool } from './tools/loadFont.js';
@@ -71,12 +73,28 @@ class TypographyServer {
           case 'type.validateFont':
             return await validateFontTool.invoke(args);
           default:
-            throw new Error(`Unknown tool: ${name}`);
+            throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }
       } catch (error) {
+        // Unknown tools stay protocol errors. The tools catch their own failures, so
+        // this only reports something unexpected, still as a tool error.
+        if (error instanceof McpError) {
+          throw error;
+        }
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.error(`[MCP Typography] Tool error for ${name}: ${errorMessage}`);
-        throw new Error(`Tool execution failed: ${errorMessage}`);
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              error: true,
+              message: `Tool execution failed: ${errorMessage}`,
+              tool: name,
+              timestamp: new Date().toISOString()
+            }, null, 2)
+          }],
+          isError: true
+        };
       }
     });
   }
