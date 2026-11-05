@@ -375,14 +375,19 @@ export const TemplateMetadataSchema = z.object({
   updatedAt: z.string()
 });
 
+/** Max template layout width / height in px */
+export const MAX_LAYOUT_DIMENSION = 10000;
+
+const LayoutDimensionSchema = z.number().min(1).max(MAX_LAYOUT_DIMENSION);
+
 export const TemplateSchema = z.object({
   id: z.string(),
   metadata: TemplateMetadataSchema,
   variables: z.array(VariableDefinitionSchema).describe('Template variables'),
   components: z.array(z.any().meta(advertisedComponent)).describe('Template components'),
   layout: z.object({
-    width: z.number().min(1).describe('Template width'),
-    height: z.number().min(1).describe('Template height'),
+    width: LayoutDimensionSchema.describe('Template width'),
+    height: LayoutDimensionSchema.describe('Template height'),
     background: z.string().optional().describe('Background color')
   }).describe('Template layout configuration'),
   extends: z.string().optional().describe('Parent template ID for inheritance'),
@@ -392,15 +397,12 @@ export const TemplateSchema = z.object({
 /** Max export width / height in px */
 export const MAX_EXPORT_DIMENSION = 8192;
 
-/** Max template layout width / height in px */
-export const MAX_LAYOUT_DIMENSION = 10000;
-
 /** Max length of caller-supplied rendered SVG / HTML (matches the engine's output limit) */
 export const MAX_RENDERED_CONTENT_LENGTH = 5_000_000;
 
 export const ExportOptionsSchema = z.object({
   format: z.nativeEnum(ExportFormat).describe('Export format'),
-  quality: z.number().min(0).max(100).optional().describe('Quality for JPEG/WebP (0-100, default 80)'),
+  quality: z.number().int().min(1).max(100).optional().describe('Quality for JPEG/WebP (1-100, default 80)'),
   width: z.number().min(1).max(MAX_EXPORT_DIMENSION).optional().describe('Output width in pixels'),
   height: z.number().min(1).max(MAX_EXPORT_DIMENSION).optional().describe('Output height in pixels'),
   scale: z.number().min(0.1).max(10).optional().describe('Scaling factor (default 1)'),
@@ -505,7 +507,6 @@ export const TemplateValidateInputSchema = z.object({
   }).prefault({}).describe('Validation options')
 });
 
-const LayoutDimensionSchema = z.number().min(1).max(MAX_LAYOUT_DIMENSION);
 
 /** Max components in one composition, the same cap TemplateValidator puts on a template */
 export const MAX_COMPOSE_COMPONENTS = 1000;

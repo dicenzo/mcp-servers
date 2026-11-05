@@ -6,7 +6,7 @@ import {
 } from '../types/template.js';
 import { TemplateValidator, PerformanceValidator } from '../util/validation.js';
 import { generateId } from '../util/helpers.js';
-import { failureResult } from '../util/toolResult.js';
+import { failureResult, invalidInputResult } from '../util/toolResult.js';
 import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
@@ -23,9 +23,11 @@ export const templateCreateTool: ExecutableTool = {
 
   async invoke(args: unknown) {
     try {
-      // Validate input
-      const validatedInput = TemplateCreateInputSchema.parse(args);
-      const { template } = validatedInput;
+      const parsedArgs = TemplateCreateInputSchema.safeParse(args);
+      if (!parsedArgs.success) {
+        return invalidInputResult('template.create', parsedArgs.error);
+      }
+      const { template } = parsedArgs.data;
 
       // Generate ID and timestamps
       const now = new Date().toISOString();
