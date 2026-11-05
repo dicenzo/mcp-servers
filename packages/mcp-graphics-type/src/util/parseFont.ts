@@ -68,7 +68,8 @@ function decodeWoff(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   if (44 + numTables * 20 > bytes.length) {
     throw invalid('table directory is truncated');
   }
-  const pad4 = (n: number) => (n + 3) & ~3;
+  // Plain arithmetic: `(n + 3) & ~3` is 32-bit and wraps for lengths near 2^32
+  const pad4 = (n: number) => Math.ceil(n / 4) * 4;
   const tables = Array.from({ length: numTables }, (_, i) => {
     const entry = 44 + i * 20;
     return {
@@ -81,7 +82,7 @@ function decodeWoff(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   });
   const headerSize = 12 + numTables * 16;
   const total = tables.reduce((sum, table) => sum + pad4(table.origLength), headerSize);
-  if (total > LIMIT) {
+  if (total > LIMIT || tables.some(table => table.origLength > LIMIT)) {
     throw tooLarge('WOFF');
   }
 
@@ -106,7 +107,7 @@ function decodeWoff(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
     let data: Uint8Array = stored;
     if (table.compLength < table.origLength) {
       try {
-        data = zlib.inflateSync(stored, { maxOutputLength: table.origLength });
+        data = zlib.inflateSync(stored, { maxOutputLength: Math.min(table.origLength, LIMIT) });
       } catch (error) {
         throw invalid(error instanceof Error ? error.message : 'a table failed to decompress');
       }

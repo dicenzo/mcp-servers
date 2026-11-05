@@ -187,7 +187,11 @@ const pairKey = (left: number, right: number) => left * 0x10000 + right;
 
 /**
  * Reads horizontal format 0 pairs from a `kern` table, either the OpenType
- * version 0 or the Apple version 1 layout. Malformed tables give no pairs.
+ * version 0 or the Apple version 1 layout. Each subtable's pairs must lie inside
+ * the subtable, so overlapping subtables can't make the same bytes count many
+ * times; the one exception is the last OpenType subtable, which may run to the
+ * end of the table (fonts with more than ~10900 pairs overflow its 16-bit length,
+ * which HarfBuzz allows for too). Malformed tables give the pairs read so far.
  */
 export function parseKernTable(table: Uint8Array): Map<number, number> | undefined {
   const pairs = new Map<number, number>();
@@ -195,27 +199,30 @@ export function parseKernTable(table: Uint8Array): Map<number, number> | undefin
   try {
     const apple = view.getUint16(0) === 1;
     const numTables = apple ? view.getUint32(4) : view.getUint16(2);
+    const headerSize = apple ? 8 : 6;
     let offset = apple ? 8 : 4;
-    for (let i = 0; i < numTables && offset < table.length; i++) {
+    for (let i = 0; i < numTables && offset + headerSize + 8 <= table.length; i++) {
       const length = apple ? view.getUint32(offset) : view.getUint16(offset + 2);
+      const last = i === numTables - 1;
+      const end = !apple && last ? table.length : offset + length;
+      if (length < headerSize + 8 || end > table.length) {
+        break;
+      }
       const coverage = view.getUint16(offset + 4);
       const format = apple ? coverage & 0xff : coverage >> 8;
       // OpenType: bit 0 horizontal, 1 minimum, 2 cross-stream, 3 override.
       // Apple: 0x8000 vertical, 0x4000 cross-stream, 0x2000 variation.
       const usable = apple ? (coverage & 0xe000) === 0 : (coverage & 0x07) === 0x01;
       const override = !apple && (coverage & 0x08) !== 0;
-      const data = offset + (apple ? 8 : 6);
+      const data = offset + headerSize;
       if (format === 0 && usable) {
-        const nPairs = view.getUint16(data);
+        const nPairs = Math.min(view.getUint16(data), Math.floor((end - data - 8) / 6));
         for (let p = 0; p < nPairs; p++) {
           const pair = data + 8 + p * 6;
           const key = pairKey(view.getUint16(pair), view.getUint16(pair + 2));
           const value = view.getInt16(pair + 4);
           pairs.set(key, override ? value : (pairs.get(key) ?? 0) + value);
         }
-      }
-      if (length === 0) {
-        break;
       }
       offset += length;
     }

@@ -1,6 +1,8 @@
 import { describe, test, expect } from '@jest/globals';
 import { measureTextTool } from '../../src/tools/measureText.js';
 import { shapeTextTool } from '../../src/tools/shapeText.js';
+import { toSfnt } from '../../src/util/parseFont.js';
+import { parseKernTable } from '../../src/util/shaping.js';
 import { buildShapingFont, buildTestFont, toBuffer, toWoff } from '../fixtures/buildTestFont.js';
 
 type ToolResult = { content: { text: string }[]; isError?: boolean };
@@ -135,5 +137,42 @@ describe('type.measureText measures shaped text', () => {
   test('reads WOFF fonts', async () => {
     const metrics = await measure('AB', {}, asInput(toWoff(toBuffer(buildTestFont()))));
     expect(metrics.width).toBe(1200);
+  });
+});
+
+describe('font tables are bounded before they are decoded', () => {
+  test('a WOFF table length near 2^32 is rejected without inflating', async () => {
+    const woff = toWoff(buildShapingFont());
+    woff.writeUInt32BE(0xfffffffd, 44 + 12); // first table's origLength
+    const started = performance.now();
+    await expect(toSfnt(woff)).rejects.toThrow(/decompress to more than/);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  test('overlapping kern subtables are not read past their own length', () => {
+    // 2000 subtables of length 6 that each claim 65535 pairs, all of which lie inside the table
+    const table = Buffer.alloc(4 + 2000 * 6 + 8 + 65535 * 6, 0xff);
+    table.writeUInt16BE(0, 0);
+    table.writeUInt16BE(2000, 2);
+    for (let i = 0; i < 2000; i++) {
+      const offset = 4 + i * 6;
+      table.writeUInt16BE(6, offset + 2);
+      table.writeUInt16BE(0x0001, offset + 4);
+    }
+    const started = performance.now();
+    parseKernTable(new Uint8Array(table));
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  test('a well-formed kern subtable still gives its pairs', () => {
+    const table = Buffer.alloc(4 + 14 + 6);
+    table.writeUInt16BE(1, 2);
+    table.writeUInt16BE(14 + 6, 6);
+    table.writeUInt16BE(0x0001, 8);
+    table.writeUInt16BE(1, 10);
+    table.writeUInt16BE(3, 18);
+    table.writeUInt16BE(4, 20);
+    table.writeInt16BE(-80, 22);
+    expect([...parseKernTable(new Uint8Array(table))!]).toEqual([[3 * 0x10000 + 4, -80]]);
   });
 });
