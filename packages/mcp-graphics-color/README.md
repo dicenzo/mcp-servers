@@ -88,6 +88,10 @@ Alongside `result.colors`, the response includes:
 
 Every tool returns `{ "success": true, "result": ..., "metadata": ... }` on success. On failure it returns `{ "success": false, "error": { "code", "message", "details", "suggestions" } }`, where `code` is a value such as `INVALID_COLOR` and `suggestions` lists ways to fix the input.
 
+Over MCP, a successful call's text content is `result` as JSON. A failed call (including invalid input) is returned as a tool result with `isError: true` and the `error` object as its text, so the client passes it to the model. Only an unknown tool name is a JSON-RPC error (`-32601`).
+
+Each tool's advertised `inputSchema` is generated from the zod schema its handler validates with (`src/util/toolSchema.ts`), so the types, limits, defaults and descriptions a client sees are the ones enforced. Checks that span several fields, such as `lockedColors` leaving room within `count`, can't be expressed in JSON Schema and are only enforced.
+
 ## Requirements
 
 - Node.js 18 or later
@@ -135,7 +139,7 @@ This server reads no environment variables.
 
 ## Known issues
 
-- Last verified test run: build passes; all 392 tests pass (11 of 11 suites).
+- Last verified test run: build passes; all 403 tests pass (12 of 12 suites).
 - Contrast (in `color.contrast`, `color.lintBrand` and `color.validateAccessibility`) compares the unrounded WCAG ratio with thresholds, so 4.4993:1 fails AA. Reported ratios are truncated to 2 decimals (4.4993 shows as 4.49). A translucent foreground is composited over the background, a translucent background over white, and out-of-gamut colors are clipped to sRGB first, as their hex is.
 - A few tests assert wall-clock limits (for example, a batch of conversions under 50ms) and can fail on a slow or heavily loaded machine.
 - `package.json` lists chroma-js, colorjs.io, delta-e and wcag-contrast as dependencies, but the source imports none of them. Color math uses culori, and APCA uses `apca-w3`.
