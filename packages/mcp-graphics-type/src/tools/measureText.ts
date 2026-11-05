@@ -37,9 +37,7 @@ export const measureTextTool: ExecutableTool = {
         TypographyValidator.validateTextInput(input.text);
         
         // Validate script and language if provided
-        if (input.options?.script && input.options?.language) {
-          TypographyValidator.validateScriptLanguage(input.options.script, input.options.language);
-        }
+        TypographyValidator.validateScriptLanguage(input.options?.script, input.options?.language);
         
         // Load font
         const fontBuffer = await loadFontBuffer(input.font);

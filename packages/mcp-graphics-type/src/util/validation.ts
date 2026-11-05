@@ -198,32 +198,34 @@ export class TypographyValidator {
   }
 
   /**
-   * Validates script and language codes
+   * Validates script and language codes, each only when given
    */
-  static validateScriptLanguage(script: string, language: string): void {
-    // Script codes are 4 characters
-    if (script.length !== 4) {
+  static validateScriptLanguage(script?: string, language?: string): void {
+    // ISO 15924 script codes are 4 letters
+    if (script !== undefined && !/^[A-Za-z]{4}$/.test(script)) {
       throw new Error(JSON.stringify({
         code: TypographyErrorCode.INVALID_INPUT,
-        message: `Invalid script code length: ${script}`,
-        details: { script, expectedLength: 4 },
+        message: `Invalid script code: ${script}`,
+        details: { script, expected: '4 letters' },
         suggestions: [
-          'Use ISO 15924 script codes (4 characters)',
+          'Use ISO 15924 script codes (4 letters)',
           'Common examples: "latn", "arab", "cyrl", "grek"'
         ]
       }));
     }
 
-    // Language codes are typically 2-3 characters, 'und' for undefined
-    if (language.length < 2 || language.length > 3) {
+    // BCP 47 tags: a 2-3 letter ISO 639 language, then optional subtags such
+    // as script and region ("zh-Hant-TW"), within the 35 characters RFC 5646
+    // asks implementations to support
+    if (language !== undefined && (language.length > 35 || !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(language))) {
       throw new Error(JSON.stringify({
         code: TypographyErrorCode.INVALID_INPUT,
-        message: `Invalid language code length: ${language}`,
-        details: { language, expectedLength: '2-3 characters' },
+        message: `Invalid language tag: ${language}`,
+        details: { language, expected: 'BCP 47 tag starting with a 2-3 letter language code' },
         suggestions: [
-          'Use ISO 639 language codes (2-3 characters)',
-          'Use "und" for undefined language',
-          'Common examples: "en", "fr", "de", "zh"'
+          'Use an ISO 639 code ("en", "fr", "zh") or a BCP 47 tag ("en-US", "zh-Hant-TW")',
+          'Separate subtags with "-", not "_"',
+          'Use "und" for undefined language'
         ]
       }));
     }

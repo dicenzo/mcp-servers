@@ -41,9 +41,7 @@ export const shapeTextTool: ExecutableTool = {
           if (input.options.features) {
             TypographyValidator.validateFeatureTags(input.options.features);
           }
-          if (input.options.script && input.options.language) {
-            TypographyValidator.validateScriptLanguage(input.options.script, input.options.language);
-          }
+          TypographyValidator.validateScriptLanguage(input.options.script, input.options.language);
         }
         
         // Load font
