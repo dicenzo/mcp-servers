@@ -12,6 +12,7 @@ import {
   AccessibilityContext,
   DEFAULT_MAX_DELTA_E
 } from '../types/color.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 /**
  * MCP Tool: color.lintBrand
@@ -400,18 +401,5 @@ function getRequiredContrastRatio(textSize: 'normal' | 'large', level: 'AA' | 'A
 export const colorLintBrandTool = {
   name: 'color.lintBrand',
   description: 'Validate brand color palette consistency, accessibility compliance, and adherence to brand guidelines',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      palette: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 20 },
-      rules: {
-        type: 'object',
-        properties: {
-          minContrast: { type: 'number', minimum: 1, maximum: 21 },
-          maxDeltaE: { type: 'number', minimum: 0, maximum: 100, default: DEFAULT_MAX_DELTA_E, description: 'CIEDE2000 tolerance for allowed/forbidden color matching' }
-        }
-      }
-    },
-    required: ['palette', 'rules']
-  }
+  inputSchema: toolInputSchema(ColorBrandLintInputSchema)
 };

@@ -19,22 +19,6 @@ export const ColorInputSchema = z.union([
 
 export type ColorInput = z.infer<typeof ColorInputSchema>;
 
-/** JSON Schema equivalent of ColorInputSchema, for MCP tool definitions */
-export const colorInputJsonSchema = {
-  oneOf: [
-    { type: 'string', minLength: 3, maxLength: 50 },
-    {
-      type: 'object',
-      properties: {
-        space: { enum: ['srgb', 'oklch', 'oklab', 'hsl', 'hsla', 'rgb', 'rgba', 'lab', 'lch'] },
-        values: { type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 4 },
-        alpha: { type: 'number', minimum: 0, maximum: 1 }
-      },
-      required: ['space', 'values']
-    }
-  ]
-};
-
 /**
  * Standardized color output format
  */
@@ -240,18 +224,28 @@ const PercentSchema = z.number().min(0).max(100);
 export const ColorPaletteInputSchema = z.object({
   baseColor: ColorInputSchema,
   harmony: z.enum(['monochromatic', 'analogous', 'complementary', 'triadic', 'tetradic', 'split-complementary']),
-  count: z.number().int().min(2).max(20).default(5),
-  space: z.enum(['oklch', 'hsl', 'lab']).default('oklch').optional(),
+  count: z.number().int().min(2).max(20).default(5)
+    .describe('Total colors, including any lockedColors'),
+  space: z.enum(['oklch', 'hsl', 'lab']).default('oklch').optional()
+    .describe('Space the harmony is computed in; lab uses its polar form (LCH)'),
   options: z.object({
-    saturationRange: z.tuple([PercentSchema, PercentSchema]).optional(),
-    lightnessRange: z.tuple([PercentSchema, PercentSchema]).optional(),
+    saturationRange: z.tuple([PercentSchema, PercentSchema]).optional()
+      .describe('[first, last] chroma in percent of the space maximum (OKLCH 0.4, LCH 150, HSL 100%), spread evenly across the generated colors'),
+    lightnessRange: z.tuple([PercentSchema, PercentSchema]).optional()
+      .describe('[first, last] lightness in percent, spread evenly across the generated colors'),
     hueShift: z.number().min(-360).max(360).optional()
+      .describe('Degrees to rotate every generated color')
   }).optional(),
-  lockedColors: z.array(ColorInputSchema).max(10).optional(),
-  minDeltaE: z.number().min(0).max(50).optional(),
-  scale: z.boolean().default(false).optional(),
-  exports: z.array(z.enum(['css', 'tailwind', 'tokens'])).max(3).optional(),
+  lockedColors: z.array(ColorInputSchema).max(10).optional()
+    .describe('Existing colors to keep unchanged (appended after the generated colors); generated colors avoid duplicating them. Must be fewer than count.'),
+  minDeltaE: z.number().min(0).max(50).optional()
+    .describe('Minimum CIEDE2000 distance between generated colors (about 5 is clearly different, 10+ is distinct at a glance). Applied before options.'),
+  scale: z.boolean().default(false).optional()
+    .describe('Also return a 50-950 OKLCH scale for each harmony hue and locked color'),
+  exports: z.array(z.enum(['css', 'tailwind', 'tokens'])).max(3).optional()
+    .describe('Also return the palette as CSS custom properties, a Tailwind theme.extend.colors object, and/or W3C design tokens'),
   exportPrefix: z.string().regex(/^[a-z][a-z0-9-]*$/).max(40).default('color').optional()
+    .describe('Prefix for CSS variable and token names')
 }).refine(
   input => (input.lockedColors?.length ?? 0) < input.count,
   { message: 'lockedColors must leave at least one slot for the base color (fewer locked colors than count)', path: ['lockedColors'] }
@@ -267,7 +261,8 @@ export const DEFAULT_MAX_DELTA_E = 3;
 
 // Brand color matching tool
 export const BrandPaletteEntrySchema = z.union([
-  ColorInputSchema,
+  // Spread rather than nested, so the advertised schema is one flat anyOf
+  ...ColorInputSchema.options,
   z.object({
     name: z.string().min(1).max(100),
     color: ColorInputSchema
@@ -279,9 +274,11 @@ export type BrandPaletteEntry = z.infer<typeof BrandPaletteEntrySchema>;
 export const ColorBrandMatchInputSchema = z.object({
   targetColor: ColorInputSchema,
   brandPalette: z.array(BrandPaletteEntrySchema).min(1).max(50),
-  maxDeltaE: z.number().min(0).max(100).default(DEFAULT_MAX_DELTA_E).optional(),
+  maxDeltaE: z.number().min(0).max(100).default(DEFAULT_MAX_DELTA_E).optional()
+    .describe('CIEDE2000 distance at or below which a match counts as within threshold (about 1 is just noticeable, 2-3 is close)'),
   includeAlternatives: z.boolean().default(true).optional(),
   maxAlternatives: z.number().int().min(0).max(49).default(3).optional()
+    .describe('How many runner-up matches to return')
 });
 
 export type ColorBrandMatchInput = z.infer<typeof ColorBrandMatchInputSchema>;
@@ -293,7 +290,8 @@ export const ColorBrandLintInputSchema = z.object({
     minContrast: z.number().min(1).max(21).optional(),
     allowedColors: z.array(ColorInputSchema).optional(),
     forbiddenColors: z.array(ColorInputSchema).optional(),
-    maxDeltaE: z.number().min(0).max(100).default(DEFAULT_MAX_DELTA_E).optional(),
+    maxDeltaE: z.number().min(0).max(100).default(DEFAULT_MAX_DELTA_E).optional()
+      .describe('CIEDE2000 tolerance for allowed/forbidden color matching'),
     requiredAccessibility: z.object({
       textSize: z.enum(['normal', 'large']).default('normal'),
       level: z.enum(['AA', 'AAA']).default('AA')

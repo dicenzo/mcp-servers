@@ -299,9 +299,23 @@ describe('MCP Color Server', () => {
       };
       (colorConvert as jest.Mock<AnyFunction>).mockResolvedValue(mockError);
 
-      await expect(callToolHandler({
+      // A tool failure is a result the model can read, not a JSON-RPC error
+      const result = await callToolHandler({
         params: { name: 'color.convert', arguments: { color: 'invalid' } }
-      })).rejects.toThrow(McpError);
+      });
+
+      expect(result.isError).toBe(true);
+      expect(JSON.parse(result.content[0].text)).toEqual(mockError.error);
+    });
+
+    test('does not flag successful results as errors', async () => {
+      (colorConvert as jest.Mock<AnyFunction>).mockResolvedValue({ success: true, result: {} });
+
+      const result = await callToolHandler({
+        params: { name: 'color.convert', arguments: {} }
+      });
+
+      expect(result.isError).toBeUndefined();
     });
 
     test('logs successful tool usage', async () => {
@@ -337,9 +351,14 @@ describe('MCP Color Server', () => {
     test('handles exceptions during tool execution', async () => {
       (colorConvert as jest.Mock<AnyFunction>).mockRejectedValue(new Error('Unexpected error'));
 
-      await expect(callToolHandler({
+      const result = await callToolHandler({
         params: { name: 'color.convert', arguments: {} }
-      })).rejects.toThrow(McpError);
+      });
+
+      expect(result.isError).toBe(true);
+      expect(JSON.parse(result.content[0].text)).toEqual(
+        expect.objectContaining({ code: 'PROCESSING_FAILED', message: 'Unexpected error' })
+      );
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         expect.stringMatching(/\[ERROR\] Tool color\.convert failed after \d+\.\d+ms/),

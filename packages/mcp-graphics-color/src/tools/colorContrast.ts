@@ -5,6 +5,7 @@ import {
   ContrastReport,
   ColorErrorCode,
 } from '../types/color.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 /**
  * MCP Tool: color.contrast
@@ -192,20 +193,5 @@ function calculateWCAGCompliance(
 export const colorContrastTool = {
   name: 'color.contrast',
   description: 'Check WCAG contrast ratios between foreground and background colors for accessibility compliance',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      foreground: { type: 'string' },
-      background: { type: 'string' },
-      algorithm: { enum: ['wcag', 'apca'], default: 'wcag' },
-      context: {
-        type: 'object',
-        properties: {
-          textSize: { enum: ['normal', 'large'], default: 'normal' },
-          level: { enum: ['AA', 'AAA'], default: 'AA' }
-        }
-      }
-    },
-    required: ['foreground', 'background']
-  }
+  inputSchema: toolInputSchema(ColorContrastInputSchema)
 };

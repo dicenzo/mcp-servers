@@ -7,9 +7,9 @@ import {
   ColorErrorCode,
   Color,
   ColorInput,
-  colorInputJsonSchema,
   DEFAULT_MAX_DELTA_E
 } from '../types/color.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 /**
  * MCP Tool: color.generatePalette
@@ -527,42 +527,5 @@ function paletteWarnings({ baseColor, harmony, generated, swatches, shortfall, c
 export const colorGeneratePaletteTool = {
   name: 'color.generatePalette',
   description: 'Generate a harmonious palette from a base color (monochromatic, analogous, complementary, triadic, tetradic, split-complementary). Hues are rotated in the chosen space (OKLCH by default, which keeps lightness perceptually even) and mapped into the sRGB gamut. The base color is always included; extra colors are tints and shades of the harmony hues. Each color comes with a swatch: a role name (base, complement, triad-1, base-lighter-1 ...), WCAG contrast on white and black with the readable text color, how much chroma was lost to the gamut, and its nearest neighbour (CIEDE2000). Optional: lockedColors to keep existing brand colors and build around them, minDeltaE to keep colors apart, scale for Tailwind-style 50-950 ramps, and exports as CSS variables, Tailwind colors or W3C design tokens. Grey base colors fall back to a monochromatic ramp; warnings explain any departure from the request. Options: hueShift rotates every generated color; lightnessRange and saturationRange (percent) replace lightness and chroma, spread from the first color to the last.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      baseColor: colorInputJsonSchema,
-      harmony: { enum: ['monochromatic', 'analogous', 'complementary', 'triadic', 'tetradic', 'split-complementary'] },
-      count: { type: 'integer', minimum: 2, maximum: 20, default: 5, description: 'Total colors, including any lockedColors' },
-      space: { enum: ['oklch', 'hsl', 'lab'], default: 'oklch', description: 'Space the harmony is computed in; lab uses its polar form (LCH)' },
-      options: {
-        type: 'object',
-        properties: {
-          hueShift: { type: 'number', minimum: -360, maximum: 360, description: 'Degrees to rotate every generated color' },
-          lightnessRange: {
-            type: 'array', items: { type: 'number', minimum: 0, maximum: 100 }, minItems: 2, maxItems: 2,
-            description: '[first, last] lightness in percent, spread evenly across the generated colors'
-          },
-          saturationRange: {
-            type: 'array', items: { type: 'number', minimum: 0, maximum: 100 }, minItems: 2, maxItems: 2,
-            description: '[first, last] chroma in percent of the space maximum (OKLCH 0.4, LCH 150, HSL 100%), spread evenly across the generated colors'
-          }
-        }
-      },
-      lockedColors: {
-        type: 'array', items: colorInputJsonSchema, maxItems: 10,
-        description: 'Existing colors to keep unchanged (appended after the generated colors); generated colors avoid duplicating them. Must be fewer than count.'
-      },
-      minDeltaE: {
-        type: 'number', minimum: 0, maximum: 50,
-        description: 'Minimum CIEDE2000 distance between generated colors (about 5 is clearly different, 10+ is distinct at a glance). Applied before options.'
-      },
-      scale: { type: 'boolean', default: false, description: 'Also return a 50-950 OKLCH scale for each harmony hue and locked color' },
-      exports: {
-        type: 'array', items: { enum: ['css', 'tailwind', 'tokens'] }, maxItems: 3,
-        description: 'Also return the palette as CSS custom properties, a Tailwind theme.extend.colors object, and/or W3C design tokens'
-      },
-      exportPrefix: { type: 'string', pattern: '^[a-z][a-z0-9-]*$', maxLength: 40, default: 'color', description: 'Prefix for CSS variable and token names' }
-    },
-    required: ['baseColor', 'harmony']
-  }
+  inputSchema: toolInputSchema(ColorPaletteInputSchema)
 };
