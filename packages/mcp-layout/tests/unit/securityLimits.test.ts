@@ -261,12 +261,14 @@ describe('Security limits', () => {
       expect(result.error).toMatch(/<=1000 items/);
     });
 
-    it('layout.measure rejects a nested layout with more than 1000 elements', async () => {
+    it('layout.measure rejects more than 1000 computed element positions', async () => {
+      const positions = ids(tooMany).map(({ id }) => ({ id, bounds: { x: 0, y: 0, width: 1, height: 1 } }));
       const result = await invokeTool(measureTool, {
-        layout: { type: 'grid', config: { columns: '1fr', rows: 'auto', gap: '0' }, elements: ids(tooMany), bounds },
+        layout: { type: 'grid', bounds, computedGrid: { elementPositions: positions } },
         elements: [{ id: 'a' }]
       });
       expect(result.success).toBe(false);
+      expect(result.error).toMatch(/<=1000 items/);
     });
 
     it('layout.responsive rejects more than 1000 elements', async () => {

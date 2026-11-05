@@ -17,6 +17,8 @@ It runs over stdio and works with any MCP client, including Claude Code and Clau
 
 Each tool's advertised `inputSchema` is generated from the zod schema its handler validates with (`src/types/layout.ts`, via `src/util/toolSchema.ts`), so clients see the limits, defaults and descriptions that are enforced. A failed call returns `{ "success": false, "error", ... }` with `isError: true`; an unknown tool name is a JSON-RPC error (`-32601`).
 
+Layouts passed back in advertise only what the tool reads. `layout.measure` takes `type`, `bounds` and the `computedGrid`/`computedFlex` element positions; `layout.responsive` takes the grid or flex `config`, `elements` and `bounds`, and recomputes positions per breakpoint. Either tool accepts the whole `layout` returned by `layout.createGrid` or `layout.createFlex`, and ignores the fields it doesn't read.
+
 ## Requirements
 
 - Node.js 18 or later
@@ -64,7 +66,7 @@ This server reads no environment variables.
 
 ## Known issues
 
-- Last verified test run: build passes; 137 of 140 tests pass, 0 fail, 3 skipped.
+- Last verified test run: build passes; 140 of 143 tests pass, 0 fail, 3 skipped.
 - `layout.createGrid` places elements by `gridArea`, line numbers or names, `gridColumn`/`gridRow` shorthands (`'1 / 3'`, `'span 2'`) and auto-placement in `autoFlow` order, adding implicit tracks sized by `autoRows`/`autoColumns`. `dense` packing is treated as sparse, and `justifySelf`/`alignSelf` are ignored (elements fill their cells).
 - Grid templates accept `px`, `em`/`rem` (16px), `%`, `fr`, `auto`, `min-content`/`max-content`, `minmax()`, `repeat(n | auto-fill | auto-fit, …)` and `[line names]`; the same parser validates them, so anything else is rejected with the offending token. `vh`/`vw`/`ch`/`ex` are rejected because the engine has no viewport or font. Content-sized tracks use a 100px estimate; with no `fr` tracks, `auto` tracks share the leftover space. `gap` takes one or two values (row, column), and `rowGap`/`columnGap` override it. `auto-fit` doesn't collapse empty tracks (it behaves like `auto-fill`).
 - `layout.createFlex` and `layout.addConstraints` return the placeholder `"CSS generation temporarily disabled"` instead of CSS, and `layout.measure` returns a fixed `accessibilityAnalysis` stub (its touch-target check is never called). The 3 skipped tests cover those outputs.

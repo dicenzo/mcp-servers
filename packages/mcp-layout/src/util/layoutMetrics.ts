@@ -1,5 +1,5 @@
 import {
-  Layout,
+  MeasuredLayout,
   LayoutMetrics,
   Rectangle,
   LayoutElement,
@@ -15,7 +15,7 @@ export class LayoutMetricsCalculator {
    * Calculate comprehensive metrics for a layout
    */
   static calculateMetrics(
-    layout: Layout,
+    layout: MeasuredLayout,
     elements: LayoutElement[],
     monitor?: PerformanceMonitor
   ): LayoutMetrics {
@@ -68,7 +68,7 @@ export class LayoutMetricsCalculator {
    * Calculate bounds-related metrics
    */
   private static calculateBoundsMetrics(
-    layout: Layout,
+    layout: MeasuredLayout,
     elements: LayoutElement[],
     monitor?: PerformanceMonitor
   ): {
@@ -128,7 +128,7 @@ export class LayoutMetricsCalculator {
    * Calculate element distribution metrics
    */
   private static calculateDistributionMetrics(
-    layout: Layout,
+    layout: MeasuredLayout,
     elements: LayoutElement[],
     monitor?: PerformanceMonitor
   ): {
@@ -222,7 +222,7 @@ export class LayoutMetricsCalculator {
    * Calculate spacing and alignment metrics
    */
   private static calculateSpacingMetrics(
-    layout: Layout,
+    layout: MeasuredLayout,
     elements: LayoutElement[],
     monitor?: PerformanceMonitor
   ): {
@@ -331,7 +331,7 @@ export class LayoutMetricsCalculator {
    * Calculate efficiency metrics
    */
   private static calculateEfficiencyMetrics(
-    layout: Layout,
+    layout: MeasuredLayout,
     elements: LayoutElement[],
     _monitor?: PerformanceMonitor
   ): {
@@ -400,7 +400,7 @@ export class LayoutMetricsCalculator {
    * Calculate accessibility metrics
    */
   private static calculateAccessibilityMetrics(
-    layout: Layout,
+    layout: MeasuredLayout,
     elements: LayoutElement[],
     monitor?: PerformanceMonitor
   ): {
@@ -471,7 +471,7 @@ export class LayoutMetricsCalculator {
    * Get element positions from layout
    */
   private static getElementPositions(
-    layout: Layout,
+    layout: MeasuredLayout,
     elements: LayoutElement[] = []
   ): Array<{ elementId: string; bounds: Rectangle }> {
     const positions: Array<{ elementId: string; bounds: Rectangle }> = [];
@@ -608,7 +608,7 @@ export class LayoutMetricsCalculator {
    * Generate layout quality report
    */
   static generateQualityReport(
-    layout: Layout,
+    layout: MeasuredLayout,
     elements: LayoutElement[],
     monitor?: PerformanceMonitor
   ): {

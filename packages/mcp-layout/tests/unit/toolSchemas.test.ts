@@ -141,3 +141,52 @@ describe('isError', () => {
     expect(isError).toBeUndefined();
   });
 });
+
+describe('layouts passed back in advertise only the fields each tool reads', () => {
+  const size = (tool: { inputSchema: unknown }) => JSON.stringify(tool.inputSchema).length;
+  const gridLayout = async () => (await call(createGridTool, {
+    config: { columns: '1fr 1fr', rows: 'auto' },
+    elements: [{ id: 'a' }, { id: 'b' }],
+    bounds
+  })).result.layout;
+
+  test('layout.measure takes a layout of type, bounds and computed positions', async () => {
+    const variants = properties(measureTool).layout.anyOf as JsonSchema[];
+    for (const variant of variants) {
+      expect(variant.properties).not.toHaveProperty('config');
+      expect(variant.properties).not.toHaveProperty('elements');
+      expect(variant.required).toEqual(['type', 'bounds']);
+    }
+    expect(size(measureTool)).toBeLessThan(5500);
+
+    const { isError, result } = await call(measureTool, {
+      layout: {
+        type: 'grid',
+        bounds,
+        computedGrid: { elementPositions: [{ id: 'a', bounds: { x: 0, y: 0, width: 400, height: 100 } }] }
+      },
+      elements: [{ id: 'a' }]
+    });
+    expect(isError).toBeUndefined();
+    expect(result.success).toBe(true);
+  });
+
+  test('layout.measure still accepts the full layout returned by layout.createGrid', async () => {
+    const { isError, result } = await call(measureTool, { layout: await gridLayout(), elements: [{ id: 'a' }, { id: 'b' }] });
+    expect(isError).toBeUndefined();
+    expect(result.metrics.elementCount).toBe(2);
+  });
+
+  test('layout.responsive takes a base layout without computed positions', async () => {
+    const variants = properties(responsiveTool).baseLayout.anyOf as JsonSchema[];
+    expect(variants.map(variant => Object.keys(variant.properties).sort())).toEqual([
+      ['bounds', 'config', 'elements', 'type'],
+      ['bounds', 'config', 'elements', 'type']
+    ]);
+    expect(size(responsiveTool)).toBeLessThan(10500);
+
+    const { isError, result } = await call(responsiveTool, { elements: [{ id: 'a' }, { id: 'b' }], baseLayout: await gridLayout() });
+    expect(isError).toBeUndefined();
+    expect(result.success).toBe(true);
+  });
+});
