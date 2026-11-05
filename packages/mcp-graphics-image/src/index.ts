@@ -17,18 +17,10 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
-  ErrorCode,
   ListToolsRequestSchema,
-  McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 
-// Import all image tools
-import { imageConvert, imageConvertTool } from './tools/imageConvert.js';
-import { imageResize, imageResizeTool } from './tools/imageResize.js';
-import { imageCrop, imageCropTool } from './tools/imageCrop.js';
-import { imageFilter, imageFilterTool } from './tools/imageFilter.js';
-import { imageOptimize, imageOptimizeTool } from './tools/imageOptimize.js';
-import { imageComposite, imageCompositeTool } from './tools/imageComposite.js';
+import { callTool, tools } from './callTool.js';
 
 /**
  * MCP Graphics Image Server
@@ -56,84 +48,12 @@ class McpGraphicsImageServer {
 
   private setupToolHandlers(): void {
     // Register all image processing tools
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return {
-        tools: [
-          imageConvertTool,
-          imageResizeTool,
-          imageCropTool,
-          imageFilterTool,
-          imageOptimizeTool,
-          imageCompositeTool
-        ],
-      };
-    });
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
     // Handle tool execution
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params;
-
-      try {
-        let result;
-
-        switch (name) {
-          case 'image.convert':
-            result = await imageConvert(args);
-            break;
-          case 'image.resize':
-            result = await imageResize(args);
-            break;
-          case 'image.crop':
-            result = await imageCrop(args);
-            break;
-          case 'image.filter':
-            result = await imageFilter(args);
-            break;
-          case 'image.optimize':
-            result = await imageOptimize(args);
-            break;
-          case 'image.composite':
-            result = await imageComposite(args);
-            break;
-          default:
-            throw new McpError(
-              ErrorCode.MethodNotFound,
-              `Unknown tool: ${name}`
-            );
-        }
-
-        // Handle structured error responses
-        if (result && typeof result === 'object' && 'success' in result && result.success === false) {
-          throw new McpError(
-            ErrorCode.InternalError,
-            result.error.message,
-            result.error.details
-          );
-        }
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      } catch (error) {
-        // Log error details for debugging (to stderr, not stdout to avoid MCP protocol issues)
-        console.error(`[MCP Image Server] Tool execution error for ${name}:`, error);
-
-        if (error instanceof McpError) {
-          throw error;
-        }
-
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Image processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          { tool: name }
-        );
-      }
-    });
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) =>
+      callTool(request.params.name, request.params.arguments)
+    );
   }
 
   private setupErrorHandling(): void {

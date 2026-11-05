@@ -27,11 +27,14 @@ export const MEMORY_LIMITS = {
 export const ImageInputSchema = z.object({
   data: z.string()
     .min(1, 'Image data cannot be empty')
-    .max(MEMORY_LIMITS.MAX_BASE64_LENGTH, 'Image data exceeds maximum size'),
-  format: z.enum(SupportedImageFormats),
-  width: z.number().int().positive().max(MEMORY_LIMITS.MAX_DIMENSION).optional(),
-  height: z.number().int().positive().max(MEMORY_LIMITS.MAX_DIMENSION).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional()
+    .max(MEMORY_LIMITS.MAX_BASE64_LENGTH, 'Image data exceeds maximum size')
+    .describe('Base64 encoded image data'),
+  format: z.enum(SupportedImageFormats).describe('Current image format'),
+  width: z.number().int().positive().max(MEMORY_LIMITS.MAX_DIMENSION).optional()
+    .describe('Image width in pixels (optional)'),
+  height: z.number().int().positive().max(MEMORY_LIMITS.MAX_DIMENSION).optional()
+    .describe('Image height in pixels (optional)'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Additional image metadata (optional)')
 });
 
 export type ImageInput = z.infer<typeof ImageInputSchema>;
@@ -101,7 +104,7 @@ export type CompositeLayer = z.infer<typeof CompositeLayerSchema>;
 export const CompositionConfigSchema = z.object({
   width: z.number().int().positive().max(MEMORY_LIMITS.MAX_DIMENSION),
   height: z.number().int().positive().max(MEMORY_LIMITS.MAX_DIMENSION),
-  background: z.string().optional(), // Hex color or 'transparent'
+  background: z.string().optional().describe('Background color (hex) or "transparent"'),
   layers: z.array(CompositeLayerSchema).min(1).max(MEMORY_LIMITS.MAX_COMPOSITE_LAYERS)
 });
 

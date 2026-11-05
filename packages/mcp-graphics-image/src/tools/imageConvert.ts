@@ -7,6 +7,7 @@ import {
   ImageFormat,
   ImageErrorCode
 } from '../types/image.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 /**
  * MCP Tool: image.convert
@@ -16,9 +17,10 @@ import {
 // Input schema for format conversion
 export const ImageConvertInputSchema = z.object({
   image: ImageInputSchema,
-  format: z.enum(SupportedImageFormats),
-  quality: z.number().int().min(10).max(100).optional(),
-  preserveMetadata: z.boolean().default(true)
+  format: z.enum(SupportedImageFormats).describe('Target format for conversion'),
+  quality: z.number().int().min(10).max(100).optional()
+    .describe('Output quality for lossy formats (10-100, default: 85)'),
+  preserveMetadata: z.boolean().default(true).describe('Whether to preserve EXIF and other metadata')
 });
 
 export type ImageConvertInput = z.infer<typeof ImageConvertInputSchema>;
@@ -158,39 +160,5 @@ function isLossyFormat(format: ImageFormat): boolean {
 export const imageConvertTool = {
   name: 'image.convert',
   description: 'Convert images between different formats (PNG, JPEG, WebP, AVIF, etc.) with quality control and optimization',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      image: {
-        type: 'object',
-        properties: {
-          data: { type: 'string', description: 'Base64 encoded image data' },
-          format: { 
-            enum: [...SupportedImageFormats], 
-            description: 'Current image format' 
-          },
-          width: { type: 'number', description: 'Image width in pixels (optional)' },
-          height: { type: 'number', description: 'Image height in pixels (optional)' },
-          metadata: { type: 'object', description: 'Additional image metadata (optional)' }
-        },
-        required: ['data', 'format']
-      },
-      format: { 
-        enum: [...SupportedImageFormats], 
-        description: 'Target format for conversion' 
-      },
-      quality: { 
-        type: 'number', 
-        minimum: 10, 
-        maximum: 100, 
-        description: 'Output quality for lossy formats (10-100, default: 85)' 
-      },
-      preserveMetadata: { 
-        type: 'boolean', 
-        default: true, 
-        description: 'Whether to preserve EXIF and other metadata' 
-      }
-    },
-    required: ['image', 'format']
-  }
+  inputSchema: toolInputSchema(ImageConvertInputSchema)
 };
