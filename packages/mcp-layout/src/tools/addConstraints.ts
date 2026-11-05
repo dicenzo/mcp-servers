@@ -1,16 +1,15 @@
 import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { 
-  LayoutElementListSchema,
-  LayoutConstraintListSchema,
+import {
+  AddConstraintsInputSchema,
   MAX_CONSTRAINTS,
-  RectangleSchema,
   LayoutElement,
-  LayoutConstraint,
-  Rectangle
+  LayoutConstraint
 } from '../types/layout.js';
 import { ConstraintSolver } from '../util/constraintSolver.js';
 import { PerformanceMonitor } from '../util/performance.js';
 import { LayoutValidator } from '../util/validation.js';
+import { failureResult } from '../util/toolResult.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
@@ -24,193 +23,15 @@ interface ExecutableTool extends Tool {
 export const addConstraintsTool: ExecutableTool = {
   name: 'layout.addConstraints',
   description: 'Apply constraint-based positioning to layout elements',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      elements: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'string',
-              description: 'Unique identifier for the element'
-            },
-            type: {
-              type: 'string',
-              enum: ['div', 'span', 'text', 'image', 'svg'],
-              default: 'div',
-              description: 'Element type for rendering context'
-            },
-            bounds: {
-              type: 'object',
-              properties: {
-                x: { type: 'number' },
-                y: { type: 'number' },
-                width: { type: 'number', minimum: 0 },
-                height: { type: 'number', minimum: 0 }
-              },
-              description: 'Initial element bounds (optional, will be calculated if not provided)'
-            },
-            content: {
-              type: 'object',
-              description: 'Element content for size calculation and rendering'
-            },
-            styles: {
-              type: 'object',
-              additionalProperties: { type: 'string' },
-              description: 'CSS styles to apply to the element'
-            },
-            children: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Child element IDs for hierarchical layouts'
-            },
-            constraints: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  type: {
-                    type: 'string',
-                    enum: ['position', 'size', 'spacing', 'alignment'],
-                    description: 'Type of constraint to apply'
-                  },
-                  element: {
-                    type: 'string',
-                    description: 'Target element ID for this constraint'
-                  },
-                  property: {
-                    type: 'string',
-                    description: 'Property to constrain (e.g., "x", "width", "center-x")'
-                  },
-                  value: {
-                    oneOf: [
-                      { type: 'number' },
-                      { type: 'string' }
-                    ],
-                    description: 'Constraint value'
-                  },
-                  relation: {
-                    type: 'string',
-                    enum: ['equal', 'greater', 'less'],
-                    description: 'Relationship type for the constraint'
-                  },
-                  target: {
-                    type: 'string',
-                    description: 'Reference element ID for relative constraints'
-                  },
-                  priority: {
-                    type: 'number',
-                    minimum: 0,
-                    maximum: 1000,
-                    default: 500,
-                    description: 'Constraint priority (higher = more important)'
-                  }
-                },
-                required: ['type', 'element', 'property', 'value']
-              },
-              description: 'Constraints to apply to this element'
-            }
-          },
-          required: ['id']
-        },
-        minItems: 1,
-        description: 'Array of elements to position with constraints'
-      },
-      constraints: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            type: {
-              type: 'string',
-              enum: ['position', 'size', 'spacing', 'alignment'],
-              description: 'Type of constraint to apply'
-            },
-            element: {
-              type: 'string',
-              description: 'Target element ID for this constraint'
-            },
-            property: {
-              type: 'string',
-              description: 'Property to constrain (e.g., "x", "width", "center-x")'
-            },
-            value: {
-              oneOf: [
-                { type: 'number' },
-                { type: 'string' }
-              ],
-              description: 'Constraint value'
-            },
-            relation: {
-              type: 'string',
-              enum: ['equal', 'greater', 'less'],
-              description: 'Relationship type for the constraint'
-            },
-            target: {
-              type: 'string',
-              description: 'Reference element ID for relative constraints'
-            },
-            priority: {
-              type: 'number',
-              minimum: 0,
-              maximum: 1000,
-              default: 500,
-              description: 'Constraint priority (higher = more important)'
-            }
-          },
-          required: ['type', 'element', 'property', 'value']
-        },
-        description: 'Global constraints to apply across elements'
-      },
-      bounds: {
-        type: 'object',
-        properties: {
-          x: { type: 'number', description: 'Container X position' },
-          y: { type: 'number', description: 'Container Y position' },
-          width: { type: 'number', minimum: 1, description: 'Container width' },
-          height: { type: 'number', minimum: 1, description: 'Container height' }
-        },
-        required: ['x', 'y', 'width', 'height'],
-        description: 'Container bounds for constraint solving'
-      },
-      maxIterations: {
-        type: 'number',
-        minimum: 1,
-        maximum: 10000,
-        default: 1000,
-        description: 'Maximum constraint solving iterations'
-      },
-      convergenceThreshold: {
-        type: 'number',
-        minimum: 0.001,
-        maximum: 10,
-        default: 0.1,
-        description: 'Convergence threshold for constraint solving'
-      }
-    },
-    required: ['elements', 'bounds']
-  },
+  inputSchema: toolInputSchema(AddConstraintsInputSchema),
 
   async invoke(args: unknown): Promise<CallToolResult> {
     const monitor = new PerformanceMonitor();
     monitor.start('constraint-solving');
 
     try {
-      // Parse and validate inputs
-      const input = args as {
-        elements: LayoutElement[];
-        constraints?: LayoutConstraint[];
-        bounds: Rectangle;
-        maxIterations?: number;
-        convergenceThreshold?: number;
-      };
-
-      // Validate with Zod schemas
-      const elements = LayoutElementListSchema.parse(input.elements);
-      const bounds = RectangleSchema.parse(input.bounds);
-      const globalConstraints = LayoutConstraintListSchema.parse(input.constraints || []);
+      // Validate with the same schema the tool advertises
+      const { elements, bounds, constraints: globalConstraints } = AddConstraintsInputSchema.parse(args);
 
       // Collect all constraints from elements and global constraints
       const allConstraints: LayoutConstraint[] = [...globalConstraints];
@@ -230,21 +51,15 @@ export const addConstraintsTool: ExecutableTool = {
 
       const allErrors = [...constraintErrors, ...boundsErrors];
       if (allErrors.length > 0) {
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: 'Validation failed',
-              details: allErrors.map(e => ({
-                code: e.code,
-                message: e.message,
-                element: e.element,
-                constraint: e.constraint
-              }))
-            }, null, 2)
-          }]
-        };
+        return failureResult({
+          error: 'Validation failed',
+          details: allErrors.map(e => ({
+            code: e.code,
+            message: e.message,
+            element: e.element,
+            constraint: e.constraint
+          }))
+        });
       }
 
       // Solve constraints
@@ -292,18 +107,10 @@ export const addConstraintsTool: ExecutableTool = {
     } catch (error) {
       console.error('[MCP Layout] Constraint solving error:', error);
       
-      const errorResult = {
-        success: false,
+      return failureResult({
         error: error instanceof Error ? error.message : String(error),
         performance: monitor.snapshot()
-      };
-
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify(errorResult, null, 2)
-        }]
-      };
+      });
     }
   },
 

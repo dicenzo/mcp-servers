@@ -1,13 +1,14 @@
 import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { 
-  LayoutSchema,
-  LayoutElementListSchema,
+import {
+  MeasureInputSchema,
   Layout,
   LayoutElement,
   LayoutMetrics
 } from '../types/layout.js';
 import { LayoutMetricsCalculator } from '../util/layoutMetrics.js';
 import { PerformanceMonitor } from '../util/performance.js';
+import { failureResult } from '../util/toolResult.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
@@ -21,97 +22,15 @@ interface ExecutableTool extends Tool {
 export const measureTool: ExecutableTool = {
   name: 'layout.measure',
   description: 'Calculate comprehensive metrics and quality analysis for a layout',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      layout: {
-        oneOf: [
-          {
-            type: 'object',
-            properties: {
-              type: { type: 'string', enum: ['grid'] },
-              config: { type: 'object' },
-              elements: { type: 'array' },
-              bounds: { type: 'object' },
-              computedGrid: { type: 'object' }
-            },
-            required: ['type', 'config', 'elements', 'bounds']
-          },
-          {
-            type: 'object',
-            properties: {
-              type: { type: 'string', enum: ['flex'] },
-              config: { type: 'object' },
-              elements: { type: 'array' },
-              bounds: { type: 'object' },
-              computedFlex: { type: 'object' }
-            },
-            required: ['type', 'config', 'elements', 'bounds']
-          }
-        ],
-        description: 'Layout to analyze'
-      },
-      elements: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            type: {
-              type: 'string',
-              enum: ['div', 'span', 'text', 'image', 'svg'],
-              default: 'div'
-            },
-            bounds: {
-              type: 'object',
-              properties: {
-                x: { type: 'number' },
-                y: { type: 'number' },
-                width: { type: 'number', minimum: 0 },
-                height: { type: 'number', minimum: 0 }
-              }
-            },
-            content: { type: 'object' },
-            styles: { type: 'object' }
-          },
-          required: ['id']
-        },
-        description: 'Elements with their computed positions'
-      },
-      includeQualityReport: {
-        type: 'boolean',
-        default: true,
-        description: 'Include detailed quality analysis and recommendations'
-      },
-      includeAccessibilityCheck: {
-        type: 'boolean',
-        default: true,
-        description: 'Include accessibility metrics analysis'
-      },
-      includePerformanceAnalysis: {
-        type: 'boolean',
-        default: true,
-        description: 'Include performance optimization suggestions'
-      }
-    },
-    required: ['layout', 'elements']
-  },
+  inputSchema: toolInputSchema(MeasureInputSchema),
 
   async invoke(args: unknown): Promise<CallToolResult> {
     const monitor = new PerformanceMonitor();
     monitor.start('layout-measurement');
 
     try {
-      const input = args as {
-        layout: Layout;
-        elements: LayoutElement[];
-        includeQualityReport?: boolean;
-        includeAccessibilityCheck?: boolean;
-        includePerformanceAnalysis?: boolean;
-      };
-
-      const layout = LayoutSchema.parse(input.layout);
-      const elements = LayoutElementListSchema.parse(input.elements);
+      const input = MeasureInputSchema.parse(args);
+      const { layout, elements } = input;
 
       // Calculate basic metrics
       const metrics = LayoutMetricsCalculator.calculateMetrics(layout, elements, monitor);
@@ -125,13 +44,13 @@ export const measureTool: ExecutableTool = {
       };
 
       // Add quality report if requested
-      if (input.includeQualityReport !== false) {
+      if (input.includeQualityReport) {
         const qualityReport = LayoutMetricsCalculator.generateQualityReport(layout, elements, monitor);
         result.qualityReport = qualityReport;
       }
 
       // Add performance analysis if requested
-      if (input.includePerformanceAnalysis !== false) {
+      if (input.includePerformanceAnalysis) {
         result.performanceAnalysis = {
           renderingComplexity: { score: 0, factors: {}, category: 'low' as const },
           memoryFootprint: { estimatedBytes: 0, breakdown: {}, category: 'light' as const },
@@ -140,7 +59,7 @@ export const measureTool: ExecutableTool = {
       }
 
       // Add accessibility analysis if requested
-      if (input.includeAccessibilityCheck !== false) {
+      if (input.includeAccessibilityCheck) {
         result.accessibilityAnalysis = {
           touchTargetCompliance: { compliant: 0, nonCompliant: [], complianceRate: 1 },
           keyboardNavigationFlow: { hasTabOrder: false, logicalFlow: true, issues: [] },
@@ -166,16 +85,10 @@ export const measureTool: ExecutableTool = {
     } catch (error) {
       console.error('[MCP Layout] Measurement error:', error);
       
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            success: false,
-            error: error instanceof Error ? error.message : String(error),
-            performance: monitor.snapshot()
-          }, null, 2)
-        }]
-      };
+      return failureResult({
+        error: error instanceof Error ? error.message : String(error),
+        performance: monitor.snapshot()
+      });
     }
   },
 

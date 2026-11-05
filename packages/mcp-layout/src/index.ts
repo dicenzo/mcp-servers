@@ -4,7 +4,9 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
+  ErrorCode,
   ListToolsRequestSchema,
+  McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { createGridTool } from './tools/createGrid.js';
@@ -13,6 +15,7 @@ import { addConstraintsTool } from './tools/addConstraints.js';
 import { autoLayoutTool } from './tools/autoLayout.js';
 import { responsiveTool } from './tools/responsive.js';
 import { measureTool } from './tools/measure.js';
+import { failureResult } from './util/toolResult.js';
 
 /**
  * MCP Server for layout computation, CSS Grid, Flexbox, and constraint-based positioning
@@ -83,24 +86,21 @@ class LayoutServer {
           return await measureTool.invoke(args);
             
         default:
-          throw new Error(`Unknown tool: ${name}`);
+          throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }
       } catch (error) {
+        // Unknown tools stay protocol errors; anything a tool throws is a tool error
+        if (error instanceof McpError) {
+          throw error;
+        }
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.error(`[MCP Layout] Tool error for ${name}: ${errorMessage}`);
         
-        // Return structured error response
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: `Tool execution failed: ${errorMessage}`,
-              tool: name,
-              timestamp: new Date().toISOString()
-            }, null, 2)
-          }]
-        };
+        return failureResult({
+          error: `Tool execution failed: ${errorMessage}`,
+          tool: name,
+          timestamp: new Date().toISOString()
+        });
       }
     });
   }

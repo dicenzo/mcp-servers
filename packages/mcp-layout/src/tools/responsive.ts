@@ -1,14 +1,12 @@
 import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { 
-  LayoutElementListSchema,
-  BreakpointListSchema,
-  LayoutSchema,
-  LayoutElement,
-  Breakpoint,
-  Layout,
+import {
+  ResponsiveInputSchema,
+  Breakpoint
 } from '../types/layout.js';
 import { ResponsiveEngine } from '../util/responsiveEngine.js';
 import { PerformanceMonitor } from '../util/performance.js';
+import { failureResult } from '../util/toolResult.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
@@ -20,109 +18,25 @@ interface ExecutableTool extends Tool {
 export const responsiveTool: ExecutableTool = {
   name: 'layout.responsive',
   description: 'Create responsive layout that adapts across multiple breakpoints',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      elements: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            type: {
-              type: 'string',
-              enum: ['div', 'span', 'text', 'image', 'svg'],
-              default: 'div'
-            },
-            content: { type: 'object' }
-          },
-          required: ['id']
-        },
-        minItems: 1
-      },
-      baseLayout: {
-        oneOf: [
-          {
-            type: 'object',
-            properties: {
-              type: { type: 'string', enum: ['grid'] },
-              config: { type: 'object' },
-              elements: { type: 'array' },
-              bounds: { type: 'object' }
-            },
-            required: ['type', 'config', 'elements', 'bounds']
-          },
-          {
-            type: 'object',
-            properties: {
-              type: { type: 'string', enum: ['flex'] },
-              config: { type: 'object' },
-              elements: { type: 'array' },
-              bounds: { type: 'object' }
-            },
-            required: ['type', 'config', 'elements', 'bounds']
-          }
-        ]
-      },
-      breakpoints: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            name: { type: 'string' },
-            minWidth: { type: 'number', minimum: 0 },
-            maxWidth: { type: 'number', minimum: 0 },
-            columns: { type: 'number', minimum: 1 },
-            gutter: { type: 'number', minimum: 0 }
-          },
-          required: ['name', 'minWidth']
-        }
-      },
-      generateOptimal: {
-        type: 'boolean',
-        default: false,
-        description: 'Generate optimal breakpoints automatically'
-      },
-      minViewport: {
-        type: 'number',
-        default: 320,
-        minimum: 200
-      },
-      maxViewport: {
-        type: 'number',
-        default: 1920,
-        minimum: 800
-      }
-    },
-    required: ['elements', 'baseLayout']
-  },
+  inputSchema: toolInputSchema(ResponsiveInputSchema),
 
   async invoke(args: unknown): Promise<CallToolResult> {
     const monitor = new PerformanceMonitor();
     monitor.start('responsive-layout');
 
     try {
-      const input = args as {
-        elements: LayoutElement[];
-        baseLayout: Layout;
-        breakpoints?: Breakpoint[];
-        generateOptimal?: boolean;
-        minViewport?: number;
-        maxViewport?: number;
-      };
-
-      const elements = LayoutElementListSchema.parse(input.elements);
-      const baseLayout = LayoutSchema.parse(input.baseLayout);
+      const input = ResponsiveInputSchema.parse(args);
+      const { elements, baseLayout } = input;
 
       let breakpoints: Breakpoint[];
       if (input.generateOptimal) {
         breakpoints = ResponsiveEngine.generateOptimalBreakpoints(
           elements,
-          input.minViewport || 320,
-          input.maxViewport || 1920
+          input.minViewport,
+          input.maxViewport
         );
       } else if (input.breakpoints) {
-        breakpoints = BreakpointListSchema.parse(input.breakpoints);
+        breakpoints = input.breakpoints;
       } else {
         // Use default breakpoints
         breakpoints = [
@@ -166,16 +80,10 @@ export const responsiveTool: ExecutableTool = {
     } catch (error) {
       console.error('[MCP Layout] Responsive layout error:', error);
       
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            success: false,
-            error: error instanceof Error ? error.message : String(error),
-            performance: monitor.snapshot()
-          }, null, 2)
-        }]
-      };
+      return failureResult({
+        error: error instanceof Error ? error.message : String(error),
+        performance: monitor.snapshot()
+      });
     }
   }
 };
