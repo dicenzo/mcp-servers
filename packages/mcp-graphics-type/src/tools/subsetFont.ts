@@ -12,12 +12,11 @@ import {
   SubsetFontInputSchema, 
   SubsetFontInput, 
   FontSubset,
-  TypographyErrorCode,
-  MAX_CODEPOINT,
-  MAX_UNICODE_RANGES
+  TypographyErrorCode
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
 import { parseFont } from '../util/parseFont.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<TextToolResult>;
@@ -29,112 +28,7 @@ interface ExecutableTool extends Tool {
 export const subsetFontTool: ExecutableTool = {
   name: 'type.subsetFont',
   description: 'Create optimized font subsets containing only specified characters for web optimization',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      font: {
-        oneOf: [
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'file' },
-              path: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'path']
-          },
-          {
-            type: 'object', 
-            properties: {
-              type: { const: 'buffer' },
-              data: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'data']
-          },
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'url' },
-              url: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'url']
-          },
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'system' },
-              name: { type: 'string' }
-            },
-            required: ['type', 'name']
-          }
-        ],
-        description: 'Font to subset'
-      },
-      options: {
-        type: 'object',
-        properties: {
-          characters: {
-            type: 'string',
-            description: 'Characters to include in subset'
-          },
-          unicodeRanges: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                start: { type: 'integer', minimum: 0, maximum: MAX_CODEPOINT },
-                end: { type: 'integer', minimum: 0, maximum: MAX_CODEPOINT }
-              },
-              required: ['start', 'end']
-            },
-            maxItems: MAX_UNICODE_RANGES,
-            description: 'Unicode ranges to include'
-          },
-          features: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'OpenType features to preserve'
-          },
-          hinting: {
-            type: 'boolean',
-            default: true,
-            description: 'Preserve font hinting'
-          },
-          desubroutinize: {
-            type: 'boolean',
-            default: false,
-            description: 'Remove subroutines (reduces size but may affect quality)'
-          },
-          removeKerning: {
-            type: 'boolean',
-            default: false,
-            description: 'Remove kerning information'
-          },
-          removeNames: {
-            type: 'boolean',
-            default: false,
-            description: 'Remove font name table'
-          },
-          removeLayout: {
-            type: 'boolean',
-            default: false,
-            description: 'Remove OpenType layout tables'
-          },
-          optimize: {
-            type: 'boolean',
-            default: true,
-            description: 'Apply additional optimizations'
-          }
-        },
-        required: ['characters'],
-        additionalProperties: false
-      }
-    },
-    required: ['font', 'options'],
-    additionalProperties: false
-  },
+  inputSchema: toolInputSchema(SubsetFontInputSchema),
 
   async invoke(args: unknown) {
     try {

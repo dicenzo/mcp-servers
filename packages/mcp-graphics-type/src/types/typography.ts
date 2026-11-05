@@ -1,26 +1,32 @@
 import { z } from 'zod';
 
 // Font Input Types
+const fontSourceType = <T extends 'file' | 'buffer' | 'url' | 'system'>(type: T) => z.literal(type).describe('Font input type');
+const fontFormat = () => z.enum(['ttf', 'otf', 'woff', 'woff2']).optional().describe('Font format hint (optional)');
+
 export const FontInputSchema = z.union([
   z.object({
-    type: z.literal('file'),
-    path: z.string(),
-    format: z.enum(['ttf', 'otf', 'woff', 'woff2']).optional()
+    type: fontSourceType('file'),
+    path: z.string()
+      .describe('Path to a .ttf/.otf/.ttc/.otc/.woff/.woff2 file in a system font directory or a directory listed in MCP_FONT_DIRS (for file type; a collection loads its first font)'),
+    format: fontFormat()
   }),
   z.object({
-    type: z.literal('buffer'),
+    type: fontSourceType('buffer'),
     // A Buffer from in-process callers, or base64 text (what JSON tool arguments carry).
-    data: z.union([z.instanceof(Buffer), z.string()]),
-    format: z.enum(['ttf', 'otf', 'woff', 'woff2']).optional()
+    // The advertised schema leaves the Buffer out.
+    data: z.union([z.instanceof(Buffer), z.string()]).describe('Base64 encoded font data (for buffer type)'),
+    format: fontFormat()
   }),
   z.object({
-    type: z.literal('url'),
-    url: z.string().url(),
-    format: z.enum(['ttf', 'otf', 'woff', 'woff2']).optional()
+    type: fontSourceType('url'),
+    url: z.string().url().describe('Public https:// URL to a font file, no redirects (for url type)'),
+    format: fontFormat()
   }),
   z.object({
-    type: z.literal('system'),
+    type: fontSourceType('system'),
     name: z.string()
+      .describe('Installed font\'s family, full or PostScript name, e.g. "Georgia", "Georgia Bold" or "Georgia-Bold" (for system type). A family name loads its regular style')
   })
 ]);
 
@@ -69,14 +75,15 @@ export const FontMetadataSchema = z.object({
 
 // Text Shaping Types
 export const ShapingOptionsSchema = z.object({
-  direction: z.enum(['ltr', 'rtl', 'ttb', 'btt']).default('ltr'),
-  script: z.string().default('latn'),
-  language: z.string().default('und'),
-  features: z.record(z.string(), z.union([z.boolean(), z.number()])).optional(),
-  fontSize: z.number().positive().default(16),
-  letterSpacing: z.number().default(0),
-  wordSpacing: z.number().default(0),
-  variations: z.record(z.string(), z.number()).optional()
+  direction: z.enum(['ltr', 'rtl', 'ttb', 'btt']).default('ltr').describe('Text direction'),
+  script: z.string().default('latn').describe('Script code (ISO 15924)'),
+  language: z.string().default('und').describe('Language code (ISO 639)'),
+  features: z.record(z.string(), z.union([z.boolean(), z.number()])).optional()
+    .describe('OpenType features to enable/disable'),
+  fontSize: z.number().positive().default(16).describe('Font size in pixels'),
+  letterSpacing: z.number().default(0).describe('Additional letter spacing'),
+  wordSpacing: z.number().default(0).describe('Additional word spacing'),
+  variations: z.record(z.string(), z.number()).optional().describe('Variable font axis values')
 });
 
 export const GlyphInfoSchema = z.object({
@@ -150,18 +157,18 @@ export const MAX_CODEPOINT = 0x10FFFF;
 export const MAX_UNICODE_RANGES = 256;
 
 export const FontSubsetOptionsSchema = z.object({
-  characters: z.string(),
+  characters: z.string().describe('Characters to include in subset'),
   unicodeRanges: z.array(z.object({
     start: z.number().int().min(0).max(MAX_CODEPOINT),
     end: z.number().int().min(0).max(MAX_CODEPOINT)
-  })).max(MAX_UNICODE_RANGES).optional(),
-  features: z.array(z.string()).optional(),
-  hinting: z.boolean().default(true),
-  desubroutinize: z.boolean().default(false),
-  removeKerning: z.boolean().default(false),
-  removeNames: z.boolean().default(false),
-  removeLayout: z.boolean().default(false),
-  optimize: z.boolean().default(true)
+  })).max(MAX_UNICODE_RANGES).optional().describe('Unicode ranges to include'),
+  features: z.array(z.string()).optional().describe('OpenType features to preserve'),
+  hinting: z.boolean().default(true).describe('Preserve font hinting'),
+  desubroutinize: z.boolean().default(false).describe('Remove subroutines (reduces size but may affect quality)'),
+  removeKerning: z.boolean().default(false).describe('Remove kerning information'),
+  removeNames: z.boolean().default(false).describe('Remove font name table'),
+  removeLayout: z.boolean().default(false).describe('Remove OpenType layout tables'),
+  optimize: z.boolean().default(true).describe('Apply additional optimizations')
 });
 
 export const FontSubsetSchema = z.object({
@@ -250,47 +257,49 @@ export const FontValidationReportSchema = z.object({
 export const LoadFontInputSchema = FontInputSchema;
 
 export const ShapeTextInputSchema = z.object({
-  text: z.string(),
-  font: FontInputSchema,
+  text: z.string().describe('Text to shape'),
+  font: FontInputSchema.describe('Font to use for shaping'),
   options: ShapingOptionsSchema.optional()
 });
 
 export const MeasureTextInputSchema = z.object({
-  text: z.string(),
-  font: FontInputSchema,
-  fontSize: z.number().positive(),
+  text: z.string().describe('Text to measure'),
+  font: FontInputSchema.describe('Font to use for measurement'),
+  fontSize: z.number().positive().describe('Font size in pixels'),
   options: z.object({
-    letterSpacing: z.number().default(0),
-    wordSpacing: z.number().default(0),
-    direction: z.enum(['ltr', 'rtl']).default('ltr'),
-    script: z.string().default('latn'),
-    language: z.string().default('und'),
-    includeCharacterMetrics: z.boolean().default(false)
+    letterSpacing: z.number().default(0).describe('Additional letter spacing'),
+    wordSpacing: z.number().default(0).describe('Additional word spacing'),
+    direction: z.enum(['ltr', 'rtl']).default('ltr').describe('Text direction'),
+    script: z.string().default('latn').describe('Script code'),
+    language: z.string().default('und').describe('Language code'),
+    includeCharacterMetrics: z.boolean().default(false).describe('Include per-character metrics')
   }).optional()
 });
 
 export const SubsetFontInputSchema = z.object({
-  font: FontInputSchema,
+  font: FontInputSchema.describe('Font to subset'),
   options: FontSubsetOptionsSchema
 });
 
 export const GenerateFallbackInputSchema = z.object({
-  primaryFont: FontInputSchema,
-  targetPlatforms: z.array(z.enum(['windows', 'macos', 'linux', 'ios', 'android', 'web'])).default(['web']),
-  textContent: z.string().optional(),
-  preferredGenericFamily: z.enum(['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui']).optional(),
-  includeWebFonts: z.boolean().default(false)
+  primaryFont: FontInputSchema.describe('Primary font to generate fallbacks for'),
+  targetPlatforms: z.array(z.enum(['windows', 'macos', 'linux', 'ios', 'android', 'web'])).default(['web'])
+    .describe('Target platforms for font stack'),
+  textContent: z.string().optional().describe('Sample text content to analyze for character coverage (optional)'),
+  preferredGenericFamily: z.enum(['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui']).optional()
+    .describe('Preferred generic font family fallback'),
+  includeWebFonts: z.boolean().default(false).describe('Include web font fallbacks in the stack')
 });
 
 export const ValidateFontInputSchema = z.object({
-  font: FontInputSchema,
+  font: FontInputSchema.describe('Font to validate'),
   options: z.object({
-    checkLicense: z.boolean().default(true),
-    checkPerformance: z.boolean().default(true),
-    checkCompatibility: z.boolean().default(true),
-    targetPlatforms: z.array(z.string()).default(['web']),
-    maxFileSize: z.number().optional(),
-    requiredFeatures: z.array(z.string()).optional()
+    checkLicense: z.boolean().default(true).describe('Check font license and embedding permissions'),
+    checkPerformance: z.boolean().default(true).describe('Analyze font performance characteristics'),
+    checkCompatibility: z.boolean().default(true).describe('Test compatibility across platforms and browsers'),
+    targetPlatforms: z.array(z.string()).default(['web']).describe('Platforms to test compatibility for'),
+    maxFileSize: z.number().optional().describe('Maximum acceptable file size in bytes'),
+    requiredFeatures: z.array(z.string()).optional().describe('OpenType features that must be present')
   }).optional()
 });
 
