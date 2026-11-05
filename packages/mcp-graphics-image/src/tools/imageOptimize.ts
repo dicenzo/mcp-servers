@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ImageUtils } from '../util/imageUtils.js';
 import { toImageError } from '../util/imageError.js';
 import { ImageInputSchema, OptimizationOptionsSchema, ImageErrorCode } from '../types/image.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 export const ImageOptimizeInputSchema = z.object({
   image: ImageInputSchema,
@@ -37,29 +38,5 @@ export async function imageOptimize(input: unknown) {
 export const imageOptimizeTool = {
   name: 'image.optimize',
   description: 'Optimize images for web delivery with size/quality balance',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      image: {
-        type: 'object',
-        properties: {
-          data: { type: 'string', description: 'Base64 encoded image data' },
-          format: { enum: ['png', 'jpeg', 'jpg', 'webp', 'avif', 'gif', 'tiff'] }
-        },
-        required: ['data', 'format']
-      },
-      options: {
-        type: 'object',
-        properties: {
-          target: { enum: ['web', 'print', 'mobile', 'thumbnail'] },
-          maxFileSize: { type: 'number', minimum: 1024 },
-          quality: { type: 'number', minimum: 10, maximum: 100 },
-          progressive: { type: 'boolean' },
-          lossless: { type: 'boolean' }
-        },
-        required: ['target']
-      }
-    },
-    required: ['image', 'options']
-  }
+  inputSchema: toolInputSchema(ImageOptimizeInputSchema)
 };
