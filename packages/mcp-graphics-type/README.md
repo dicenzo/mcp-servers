@@ -13,7 +13,7 @@ It runs over stdio and works with any MCP client, including Claude Code and Clau
 | `type.measureText` | Measure shaped text: dimensions, baselines, bounding boxes, and per-glyph metrics. |
 | `type.subsetFont` | Produce a font subset that contains only the given characters. |
 | `type.generateFallback` | Suggest a system font fallback stack for a primary font and target platforms. |
-| `type.validateFont` | Check a font file (TTF, OTF, WOFF, WOFF2) for missing tables and compatibility issues. Collections (`.ttc`) are reported as unsupported; load one face with a `system` source instead. |
+| `type.validateFont` | Check a font file (TTF, OTF, WOFF, WOFF2) for missing tables, embedding permissions (decoded `fsType`), Unicode block coverage and browser/OS support (including colour-font formats). Collections (`.ttc`) are reported as unsupported; load one face with a `system` source instead. |
 
 ## Requirements
 
@@ -89,7 +89,7 @@ Font sources are restricted because tool arguments come from a model and may be 
 
 ## Known issues
 
-- Last verified test run: build passes; 215 of 218 tests pass, 0 fail, 3 skipped.
+- Last verified test run: build passes; 231 of 234 tests pass, 0 fail, 3 skipped.
 - Tests use a small font generated at test time with opentype.js (`tests/fixtures/buildTestFont.ts`). `tests/jest.setup.ts` writes it to a temp directory and lists that directory in `MCP_FONT_DIRS`. No font files are checked in.
 - Skipped: loading a font from a public URL (needs the network), loading a system font (depends on which fonts are installed), and creating a subset (needs `python3` with fontTools). The end-to-end test also leaves out its subset step when fontTools is missing.
 - `type.subsetFont` was verified by hand with fontTools installed (subset of a generated font succeeded); the automated subset tests still skip when fontTools is missing.

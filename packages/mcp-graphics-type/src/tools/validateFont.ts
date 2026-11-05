@@ -7,9 +7,9 @@ import {
   ValidateFontInputSchema, 
   ValidateFontInput, 
   FontValidationReport,
-  TypographyErrorCode,
-  UNICODE_BLOCKS 
+  TypographyErrorCode
 } from '../types/typography.js';
+import { UNICODE_BLOCKS, UNICODE_VERSION } from '../util/unicodeBlocks.js';
 import { loadFontBuffer } from './loadFont.js';
 import { parseFont, toSfnt } from '../util/parseFont.js';
 import { toolInputSchema } from '../util/toolSchema.js';
@@ -116,14 +116,7 @@ export const validateFontTool: ExecutableTool = {
 async function performFontValidation(
   fontBuffer: Buffer,
   loadTime: number,
-  options: {
-    checkLicense?: boolean;
-    checkPerformance?: boolean;
-    checkCompatibility?: boolean;
-    targetPlatforms?: string[];
-    maxFileSize?: number;
-    requiredFeatures?: string[];
-  }
+  options: ValidateFontInput['options']
 ): Promise<FontValidationReport> {
   try {
     const errors: Array<{
@@ -150,11 +143,11 @@ async function performFontValidation(
 
     // Parse font using opentype.js
     let font: Font;
-    let tableTags: Set<string>;
+    let tables: SfntTables;
     
     try {
       const sfnt = await toSfnt(fontBuffer);
-      tableTags = sfntTableTags(sfnt);
+      tables = sfntTables(sfnt);
       font = await parseFont(sfnt);
     } catch (parseError) {
       errors.push({
@@ -173,7 +166,7 @@ async function performFontValidation(
     const version = font.names.version?.en || 'Unknown';
     
     // Validate font structure
-    const structureValidation = validateFontStructure(font, tableTags);
+    const structureValidation = validateFontStructure(font, tables);
     errors.push(...structureValidation.errors);
     warnings.push(...structureValidation.warnings);
     
@@ -202,7 +195,7 @@ async function performFontValidation(
     }
     
     // Analyze font metadata
-    const metadata = analyzeFontMetadata(font);
+    const metadata = analyzeFontMetadata(font, format, tables);
     
     // Performance analysis
     const performance = options.checkPerformance ? analyzePerformance(font, fontBuffer, loadTime) : {
@@ -213,16 +206,9 @@ async function performFontValidation(
     };
     
     // Compatibility analysis
-    const compatibility = options.checkCompatibility ? 
-      analyzeCompatibility(font, fontBuffer, options.targetPlatforms || ['web']) : {
-        webBrowsers: {},
-        operatingSystems: {},
-        unicodeSupport: {
-          version: 'Unknown',
-          supportedBlocks: [],
-          missingBlocks: []
-        }
-      };
+    const compatibility = options.checkCompatibility
+      ? analyzeCompatibility(font, format, tables, options.targetPlatforms ?? ['web'])
+      : { webBrowsers: {}, operatingSystems: {}, unicodeSupport: emptyUnicodeSupport(), notes: [] };
     
     // License analysis
     if (options.checkLicense) {
@@ -232,7 +218,7 @@ async function performFontValidation(
     }
     
     // Generate recommendations
-    const additionalRecommendations = generateRecommendations(font, fontBuffer, performance, compatibility);
+    const additionalRecommendations = generateRecommendations(font, format, tables, performance, compatibility.notes);
     recommendations.push(...additionalRecommendations);
     
     const validationReport: FontValidationReport = {
@@ -243,7 +229,11 @@ async function performFontValidation(
       warnings,
       metadata,
       performance,
-      compatibility,
+      compatibility: {
+        webBrowsers: compatibility.webBrowsers,
+        operatingSystems: compatibility.operatingSystems,
+        unicodeSupport: compatibility.unicodeSupport
+      },
       recommendations
     };
     
@@ -265,7 +255,7 @@ async function performFontValidation(
 /**
  * Validates font structure and required tables
  */
-function validateFontStructure(font: Font, tableTags: Set<string>): {
+function validateFontStructure(font: Font, tables: SfntTables): {
   errors: Array<{ code: string; message: string; severity: 'error' | 'warning' | 'info'; location?: string }>;
   warnings: Array<{ code: string; message: string; recommendation?: string }>;
 } {
@@ -277,7 +267,7 @@ function validateFontStructure(font: Font, tableTags: Set<string>): {
   const requiredTables = ['cmap', 'head', 'hhea', 'hmtx', 'maxp', 'name', 'OS/2', 'post'];
   
   for (const tableName of requiredTables) {
-    if (!tableTags.has(tableName)) {
+    if (!tables.has(tableName)) {
       errors.push({
         code: 'MISSING_REQUIRED_TABLE',
         message: `Missing required table: ${tableName}`,
@@ -335,23 +325,17 @@ function validateFontStructure(font: Font, tableTags: Set<string>): {
 /**
  * Analyzes font metadata for completeness
  */
-function analyzeFontMetadata(font: Font): {
-  hasValidTables: boolean;
-  hasKerningInfo: boolean;
-  hasOpenTypeFeatures: boolean;
-  hasVariationAxes: boolean;
-  isWebOptimized: boolean;
-  hasLicense: boolean;
-  hasEmbeddingPermissions: boolean;
-} {
+function analyzeFontMetadata(font: Font, format: FontFormat, tables: SfntTables): FontValidationReport['metadata'] {
+  const embedding = decodeEmbedding(font);
   return {
     hasValidTables: Boolean(font.tables.head && font.tables.hhea && font.tables.cmap),
     hasKerningInfo: Boolean(font.tables.kern || (font.tables.gpos && hasKerningInGPOS(font.tables.gpos))),
     hasOpenTypeFeatures: Boolean(font.tables.gsub || font.tables.gpos),
     hasVariationAxes: Boolean(font.tables.fvar),
-    isWebOptimized: isWebOptimized(font),
+    isWebOptimized: isWebOptimized(format, tables),
     hasLicense: Boolean(font.names.license),
-    hasEmbeddingPermissions: Boolean(font.tables.os2 && font.tables.os2.fsType !== undefined)
+    hasEmbeddingPermissions: embedding ? embedding.usage === 'installable' || embedding.usage === 'editable' : false,
+    ...(embedding && { embedding })
   };
 }
 
@@ -396,43 +380,82 @@ function analyzePerformance(font: Font, fontBuffer: Buffer, loadTime: number): {
 /**
  * Analyzes font compatibility across platforms and browsers
  */
-function analyzeCompatibility(font: Font, fontBuffer: Buffer, _platforms: string[]): {
+type Platform = NonNullable<ValidateFontInput['options']>['targetPlatforms'][number];
+
+const OPERATING_SYSTEMS: Record<Exclude<Platform, 'web'>, string> = {
+  windows: 'Windows',
+  macos: 'macOS',
+  linux: 'Linux',
+  ios: 'iOS',
+  android: 'Android'
+};
+
+/**
+ * Colour-font formats that some current browsers don't render. Container
+ * formats (TTF, OTF, WOFF, WOFF2) and variable fonts load in all of them.
+ */
+const COLOR_FORMAT_GAPS: Array<{ format: string; present: (tables: SfntTables) => boolean; unsupported: string[] }> = [
+  { format: 'OpenType-SVG (SVG table)', present: tables => tables.has('SVG '), unsupported: ['Chrome', 'Edge'] },
+  { format: 'COLR version 1', present: tables => colrVersion(tables) >= 1, unsupported: ['Safari'] },
+  { format: 'CBDT bitmaps', present: tables => tables.has('CBDT'), unsupported: ['Safari'] },
+  { format: 'sbix bitmaps', present: tables => tables.has('sbix'), unsupported: ['Firefox'] }
+];
+
+function colrVersion(tables: SfntTables): number {
+  const colr = tables.get('COLR');
+  return colr && colr.length >= 2 ? colr.readUInt16BE(0) : 0;
+}
+
+function analyzeCompatibility(font: Font, format: FontFormat, tables: SfntTables, platforms: Platform[]): {
   webBrowsers: Record<string, boolean>;
   operatingSystems: Record<string, boolean>;
-  unicodeSupport: {
-    version: string;
-    supportedBlocks: string[];
-    missingBlocks: string[];
-  };
+  unicodeSupport: FontValidationReport['compatibility']['unicodeSupport'];
+  notes: string[];
 } {
-  const format = detectFontFormat(fontBuffer);
-  
-  // Web browser compatibility
-  const webBrowsers: Record<string, boolean> = {
-    'Chrome': true, // Supports all formats
-    'Firefox': format !== 'woff2' || true, // Modern Firefox supports WOFF2
-    'Safari': format === 'ttf' || format === 'otf' || format === 'woff',
-    'Edge': true,
-    'Internet Explorer': format === 'ttf' || format === 'otf'
-  };
-  
-  // Operating system compatibility
-  const operatingSystems: Record<string, boolean> = {
-    'Windows': format === 'ttf' || format === 'otf',
-    'macOS': true,
-    'Linux': format === 'ttf' || format === 'otf',
-    'iOS': format !== 'woff2',
-    'Android': format === 'ttf' || format === 'otf'
-  };
-  
-  // Unicode support analysis
-  const unicodeSupport = analyzeUnicodeSupport(font);
-  
-  return {
-    webBrowsers,
-    operatingSystems,
-    unicodeSupport
-  };
+  const notes: string[] = [];
+  const webBrowsers: Record<string, boolean> = {};
+  if (platforms.includes('web')) {
+    for (const browser of ['Chrome', 'Edge', 'Firefox', 'Safari']) {
+      webBrowsers[browser] = format !== 'ttc' && format !== 'unknown';
+    }
+    for (const gap of COLOR_FORMAT_GAPS) {
+      if (gap.present(tables)) {
+        gap.unsupported.forEach(browser => { webBrowsers[browser] = false; });
+        notes.push(`${gap.format} colour glyphs don't render in ${gap.unsupported.join(' or ')}; provide a COLR v0 or monochrome fallback`);
+      }
+    }
+  }
+
+  // Desktop and mobile systems install TrueType/OpenType files; WOFF/WOFF2 are web-only
+  const installable = format === 'ttf' || format === 'otf' || format === 'ttc';
+  const operatingSystems: Record<string, boolean> = {};
+  for (const platform of platforms) {
+    if (platform !== 'web') {
+      operatingSystems[OPERATING_SYSTEMS[platform]] = installable;
+    }
+  }
+  if (!installable && Object.keys(operatingSystems).length > 0) {
+    notes.push(`${format.toUpperCase()} is a web format and can't be installed; ship the TTF/OTF for ${Object.keys(operatingSystems).join(', ')}`);
+  }
+
+  return { webBrowsers, operatingSystems, unicodeSupport: analyzeUnicodeSupport(font), notes };
+}
+
+/**
+ * Decodes OS/2 fsType. Bits 1-3 are the usage permission (the least
+ * restrictive wins when several are set, per the OpenType OS/2 spec); bit 8
+ * forbids subsetting and bit 9 allows embedding bitmaps only.
+ */
+function decodeEmbedding(font: Font): FontValidationReport['metadata']['embedding'] {
+  const fsType = font.tables.os2?.fsType;
+  if (typeof fsType !== 'number') {
+    return undefined;
+  }
+  const usage = fsType & 0x0008 ? 'editable'
+    : fsType & 0x0004 ? 'previewPrint'
+      : fsType & 0x0002 ? 'restricted'
+        : 'installable';
+  return { fsType, usage, noSubsetting: Boolean(fsType & 0x0100), bitmapOnly: Boolean(fsType & 0x0200) };
 }
 
 /**
@@ -455,28 +478,33 @@ function analyzeLicense(font: Font): {
   }
   
   // Check embedding permissions
-  if (font.tables.os2 && font.tables.os2.fsType !== undefined) {
-    const fsType = font.tables.os2.fsType;
-    
-    if (fsType === 2) {
-      warnings.push({
-        code: 'RESTRICTED_LICENSE',
-        message: 'Font has restricted embedding permissions',
-        recommendation: 'Check license terms for web use restrictions'
-      });
-    } else if (fsType === 4) {
-      warnings.push({
-        code: 'PRINT_PREVIEW_ONLY',
-        message: 'Font is restricted to print and preview embedding',
-        recommendation: 'May not be suitable for web use'
-      });
-    } else if (fsType === 8) {
-      warnings.push({
-        code: 'EDITABLE_EMBEDDING_ONLY',
-        message: 'Font allows editable embedding only',
-        recommendation: 'Check if this meets your use case requirements'
-      });
-    }
+  const embedding = decodeEmbedding(font);
+  if (embedding?.usage === 'restricted') {
+    warnings.push({
+      code: 'EMBEDDING_RESTRICTED',
+      message: 'Font must not be embedded (fsType: restricted license)',
+      recommendation: 'Get permission from the foundry before embedding it in documents or serving it on the web'
+    });
+  } else if (embedding?.usage === 'previewPrint') {
+    warnings.push({
+      code: 'EMBEDDING_PREVIEW_PRINT',
+      message: 'Font may be embedded only for preview and print (read-only documents)',
+      recommendation: 'May not be suitable for web use; check the license terms'
+    });
+  }
+  if (embedding?.noSubsetting) {
+    warnings.push({
+      code: 'EMBEDDING_NO_SUBSETTING',
+      message: 'Font must not be subset before embedding (fsType bit 8)',
+      recommendation: 'Embed the whole font; type.subsetFont output would break this term'
+    });
+  }
+  if (embedding?.bitmapOnly) {
+    warnings.push({
+      code: 'EMBEDDING_BITMAP_ONLY',
+      message: 'Only the bitmaps in this font may be embedded (fsType bit 9)',
+      recommendation: 'Outlines cannot be embedded; check the license before serving it as a web font'
+    });
   }
   
   return { warnings, recommendations };
@@ -487,9 +515,10 @@ function analyzeLicense(font: Font): {
  */
 function generateRecommendations(
   font: Font,
-  fontBuffer: Buffer,
+  format: FontFormat,
+  tables: SfntTables,
   performance: FontValidationReport['performance'],
-  compatibility: FontValidationReport['compatibility']
+  compatibilityNotes: string[]
 ): string[] {
   const recommendations: string[] = [];
   
@@ -498,7 +527,6 @@ function generateRecommendations(
     recommendations.push('Consider font subsetting to reduce file size for web use');
   }
   
-  const format = detectFontFormat(fontBuffer);
   if (performance.fileSize > 100 * 1024 && format !== 'woff' && format !== 'woff2') {
     recommendations.push('Consider using WOFF/WOFF2 compression for web deployment');
   }
@@ -512,14 +540,13 @@ function generateRecommendations(
     recommendations.push('High complexity font - test loading performance on target devices');
   }
   
-  // Compatibility recommendations
-  const unsupportedBrowsers = Object.entries(compatibility.webBrowsers)
-    .filter(([_, supported]) => !supported)
-    .map(([browser]) => browser);
-    
-  if (unsupportedBrowsers.length > 0) {
-    recommendations.push(`Consider providing fallback formats for: ${unsupportedBrowsers.join(', ')}`);
+  const legacyTables = LEGACY_HINTING_TABLES.filter(tag => tables.has(tag));
+  if (legacyTables.length > 0) {
+    recommendations.push(`Remove the legacy hinting tables browsers ignore (${legacyTables.join(', ')}) before serving it on the web`);
   }
+
+  // Compatibility recommendations
+  recommendations.push(...compatibilityNotes);
   
   // Feature recommendations
   const features = extractFeatures(font);
@@ -533,7 +560,9 @@ function generateRecommendations(
 /**
  * Helper functions
  */
-function detectFontFormat(buffer: Buffer): NonNullable<FontValidationReport['format']> {
+type FontFormat = NonNullable<FontValidationReport['format']>;
+
+function detectFontFormat(buffer: Buffer): FontFormat {
   switch (buffer.toString('latin1', 0, 4)) {
     case 'wOFF': return 'woff';
     case 'wOF2': return 'woff2';
@@ -579,20 +608,29 @@ function checkFontFile(buffer: Buffer): FontValidationReport['errors'][number] |
   }
 }
 
+/** An sfnt's tables by tag */
+type SfntTables = Map<string, Buffer>;
+
 /**
- * Tags in an sfnt's table directory, bounded by the data actually present
+ * Reads an sfnt's table directory. Records whose data runs past the end of
+ * the file are left out.
  */
-function sfntTableTags(sfnt: Uint8Array): Set<string> {
+function sfntTables(sfnt: Uint8Array): SfntTables {
   const data = Buffer.from(sfnt.buffer, sfnt.byteOffset, sfnt.byteLength);
-  const tags = new Set<string>();
+  const tables: SfntTables = new Map();
   if (data.length < 12) {
-    return tags;
+    return tables;
   }
   const numTables = Math.min(data.readUInt16BE(4), Math.floor((data.length - 12) / 16));
   for (let i = 0; i < numTables; i++) {
-    tags.add(data.toString('latin1', 12 + i * 16, 16 + i * 16));
+    const record = 12 + i * 16;
+    const offset = data.readUInt32BE(record + 8);
+    const length = data.readUInt32BE(record + 12);
+    if (offset + length <= data.length) {
+      tables.set(data.toString('latin1', record, record + 4), data.subarray(offset, offset + length));
+    }
   }
-  return tags;
+  return tables;
 }
 
 function extractFeatures(font: Font): string[] {
@@ -617,47 +655,65 @@ function hasKerningInGPOS(gposTable: LayoutTable): boolean {
   return Boolean(gposTable.features?.some(record => record.tag === 'kern'));
 }
 
-function isWebOptimized(font: Font): boolean {
-  // Check for web optimization indicators
-  const hasWebOptimizations = Boolean(
-    font.tables.os2 && // Has OS/2 table for web metrics
-    font.tables.cmap && // Has character mapping
-    font.names.license // Has license info
-  );
-  
-  return hasWebOptimizations;
+/** Device-specific hinting tables that browsers don't use */
+const LEGACY_HINTING_TABLES = ['hdmx', 'VDMX', 'LTSH'];
+
+function isWebOptimized(format: FontFormat, tables: SfntTables): boolean {
+  return (format === 'woff' || format === 'woff2') && !LEGACY_HINTING_TABLES.some(tag => tables.has(tag));
 }
 
-function analyzeUnicodeSupport(font: Font): {
-  version: string;
-  supportedBlocks: string[];
-  missingBlocks: string[];
-} {
-  const supportedBlocks: string[] = [];
-  const missingBlocks: string[] = [];
-  
-  // Analyze character coverage (simplified)
-  if (font.tables.cmap) {
-    // Check basic Latin coverage
-    const hasBasicLatin = font.hasChar && font.hasChar('A'); // opentype.js takes a character, not a code point
-    if (hasBasicLatin) {
-      supportedBlocks.push('Basic Latin');
+const BLOCK_STARTS = UNICODE_BLOCKS.map(([, start]) => start);
+const COUNTABLE = /[^\p{Cc}\p{Cs}\p{Co}\p{Cn}]/u;
+
+/** The UNICODE_BLOCKS index whose range holds a code point, or -1 */
+function blockIndex(codePoint: number): number {
+  let low = 0;
+  let high = BLOCK_STARTS.length - 1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (BLOCK_STARTS[mid] <= codePoint) {
+      low = mid + 1;
     } else {
-      missingBlocks.push('Basic Latin');
+      high = mid - 1;
     }
-    
-    // Add more Unicode block analysis as needed
-    UNICODE_BLOCKS.slice(0, 10).forEach(block => {
-      if (!supportedBlocks.includes(block)) {
-        missingBlocks.push(block);
-      }
-    });
   }
-  
+  return high >= 0 && codePoint <= UNICODE_BLOCKS[high][2] ? high : -1;
+}
+
+function emptyUnicodeSupport(): FontValidationReport['compatibility']['unicodeSupport'] {
+  return { version: UNICODE_VERSION, supportedBlocks: [], missingBlocks: [], blocks: [] };
+}
+
+/**
+ * Counts the characters the cmap maps in each Unicode block. Controls,
+ * private use and unassigned code points are not counted.
+ */
+function analyzeUnicodeSupport(font: Font): FontValidationReport['compatibility']['unicodeSupport'] {
+  const covered = new Map<number, number>();
+  for (const key of Object.keys(font.tables.cmap?.glyphIndexMap ?? {})) {
+    const codePoint = Number(key);
+    if (codePoint > 0x10FFFF || !COUNTABLE.test(String.fromCodePoint(codePoint))) {
+      continue;
+    }
+    const index = blockIndex(codePoint);
+    if (index >= 0) {
+      covered.set(index, (covered.get(index) ?? 0) + 1);
+    }
+  }
+
+  const blocks = [...covered.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([index, count]) => {
+      const [name, , , total] = UNICODE_BLOCKS[index];
+      const mapped = Math.min(count, total);
+      return { name, covered: mapped, total, percent: Math.round((mapped / total) * 1000) / 10 };
+    });
+
   return {
-    version: 'Unicode 15.0', // Default assumption
-    supportedBlocks,
-    missingBlocks: missingBlocks.slice(0, 5) // Limit to prevent overflow
+    version: UNICODE_VERSION,
+    supportedBlocks: blocks.filter(block => block.covered === block.total).map(block => block.name),
+    missingBlocks: blocks.filter(block => block.covered < block.total).map(block => block.name),
+    blocks
   };
 }
 
@@ -691,11 +747,7 @@ function createFailedValidationReport(
     compatibility: {
       webBrowsers: {},
       operatingSystems: {},
-      unicodeSupport: {
-        version: 'Unknown',
-        supportedBlocks: [],
-        missingBlocks: []
-      }
+      unicodeSupport: emptyUnicodeSupport()
     },
     recommendations
   };
