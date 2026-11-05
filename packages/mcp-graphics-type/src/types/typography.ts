@@ -79,7 +79,7 @@ export const ShapingOptionsSchema = z.object({
     .describe('Paragraph direction. When omitted it comes from the first strong character; mixed-direction text is reordered with the Unicode bidi algorithm either way'),
   script: z.string().optional()
     .describe('Script code (ISO 15924) to shape the whole text as. When omitted each run of one script is shaped as that script'),
-  language: z.string().default('und').describe('Language code (ISO 639), for language-specific forms'),
+  language: z.string().default('und').describe('BCP 47 language tag ("en", "en-US", "zh-Hant-TW"), for language-specific forms'),
   features: z.record(z.string(), z.union([z.boolean(), z.number()])).optional()
     .describe('OpenType features to enable/disable, such as { "liga": false, "smcp": true, "salt": 2 }. Defaults are the script\'s usual features (ligatures, kerning, contextual forms)'),
   fontSize: z.number().positive().default(16).describe('Font size in pixels'),
@@ -281,7 +281,7 @@ export const MeasureTextInputSchema = z.object({
     direction: z.enum(['ltr', 'rtl']).optional()
       .describe('Paragraph direction. When omitted it comes from the first strong character'),
     script: z.string().optional().describe('Script code (ISO 15924) to shape the whole text as. When omitted it comes from the text'),
-    language: z.string().default('und').describe('Language code (ISO 639)'),
+    language: z.string().default('und').describe('BCP 47 language tag ("en", "en-US")'),
     includeCharacterMetrics: z.boolean().default(false).describe('Include per-character metrics')
   }).optional()
 });

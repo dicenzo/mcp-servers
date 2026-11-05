@@ -211,6 +211,13 @@ describe('TypographyValidator', () => {
         TypographyValidator.validateScriptLanguage('latn', 'e');
       }).toThrow();
     });
+
+    test('should accept BCP 47 language tags with subtags', () => {
+      expect(() => {
+        TypographyValidator.validateScriptLanguage('latn', 'en-US');
+        TypographyValidator.validateScriptLanguage(undefined, 'zh-Hant-TW');
+      }).not.toThrow();
+    });
   });
 });
 

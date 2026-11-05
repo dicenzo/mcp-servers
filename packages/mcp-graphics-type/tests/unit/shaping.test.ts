@@ -106,6 +106,26 @@ describe('type.shapeText shapes with HarfBuzz', () => {
     const response = await shapeTextTool.invoke({ text: 'fi', font, options: { features: { ligature: true } } }) as ToolResult;
     expect(response.isError).toBe(true);
   });
+
+  test.each(['en-US', 'zh-Hant-TW', 'sr-Latn'])('accepts the BCP 47 language tag %p', async language => {
+    const response = await shapeTextTool.invoke({ text: 'fi', font, options: { script: 'latn', language } }) as ToolResult;
+    expect(response.isError).toBeUndefined();
+    expect(resultOf(response).shapedText.language).toBe(language);
+  });
+
+  test.each(['e', 'en_US', 'en-', 'x'.repeat(40)])('rejects the malformed language tag %p, with or without a script', async language => {
+    for (const options of [{ language }, { script: 'latn', language }]) {
+      const response = await shapeTextTool.invoke({ text: 'fi', font, options }) as ToolResult;
+      expect(response.isError).toBe(true);
+    }
+  });
+
+  test('rejects a script that is not four letters, with or without a language', async () => {
+    for (const options of [{ script: 'lat' }, { script: 'lat1', language: 'en' }]) {
+      const response = await shapeTextTool.invoke({ text: 'fi', font, options }) as ToolResult;
+      expect(response.isError).toBe(true);
+    }
+  });
 });
 
 describe('type.measureText measures shaped text', () => {
