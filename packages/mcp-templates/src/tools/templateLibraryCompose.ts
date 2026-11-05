@@ -7,12 +7,15 @@ import {
   TemplateMetadata,
   Layout,
   Position,
-  Style
+  Style,
+  TemplateLibraryComposeInputSchema
 } from '../types/template.js';
 import { findComponent } from './templateLibraryAdd.js';
 import { TemplateValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
 import { generateId, getCurrentTimestamp, deepClone } from '../util/helpers.js';
+import { failureResult } from '../util/toolResult.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
@@ -71,200 +74,7 @@ interface ComposeTool extends ExecutableTool {
 export const templateLibraryComposeTool: ComposeTool = {
   name: 'template.library.compose',
   description: 'Create template from library components with specified layout',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      components: {
-        type: 'array',
-        items: {
-          oneOf: [
-            {
-              type: 'string',
-              description: 'Component ID from library'
-            },
-            {
-              type: 'object',
-              properties: {
-                id: {
-                  type: 'string',
-                  description: 'Component ID from library'
-                },
-                position: {
-                  type: 'object',
-                  properties: {
-                    x: { type: 'number' },
-                    y: { type: 'number' },
-                    width: { type: 'number', minimum: 0 },
-                    height: { type: 'number', minimum: 0 }
-                  },
-                  description: 'Override component position'
-                },
-                style: {
-                  type: 'object',
-                  description: 'Override component style'
-                },
-                variables: {
-                  type: 'object',
-                  description: 'Component-specific variables'
-                }
-              },
-              required: ['id']
-            }
-          ]
-        },
-        minItems: 1,
-        description: 'Component IDs or component configurations to include'
-      },
-      layout: {
-        type: 'object',
-        properties: {
-          type: {
-            enum: ['absolute', 'grid', 'flex', 'constraint'],
-            default: 'absolute',
-            description: 'Layout system to use'
-          },
-          config: {
-            type: 'object',
-            properties: {
-              rows: {
-                type: 'number',
-                minimum: 1,
-                description: 'Grid rows'
-              },
-              columns: {
-                type: 'number',
-                minimum: 1,
-                description: 'Grid columns'
-              },
-              gap: {
-                type: 'number',
-                minimum: 0,
-                description: 'Grid/flex gap'
-              },
-              direction: {
-                enum: ['row', 'column'],
-                description: 'Flex direction'
-              },
-              justify: {
-                enum: ['start', 'center', 'end', 'space-between'],
-                description: 'Flex justify content'
-              },
-              align: {
-                enum: ['start', 'center', 'end', 'stretch'],
-                description: 'Flex align items'
-              }
-            },
-            description: 'Layout configuration'
-          },
-          width: {
-            type: 'number',
-            minimum: 1,
-            maximum: 10000,
-            description: 'Template width'
-          },
-          height: {
-            type: 'number',
-            minimum: 1,
-            maximum: 10000,
-            description: 'Template height'
-          },
-          background: {
-            type: 'string',
-            description: 'Template background color'
-          }
-        },
-        required: ['width', 'height'],
-        description: 'Template layout configuration'
-      },
-      variables: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            name: {
-              type: 'string',
-              pattern: '^[a-zA-Z_][a-zA-Z0-9_]*$'
-            },
-            type: {
-              enum: ['string', 'number', 'boolean', 'color', 'image', 'font', 'array', 'object']
-            },
-            required: {
-              type: 'boolean'
-            },
-            default: {},
-            description: {
-              type: 'string'
-            }
-          },
-          required: ['name', 'type', 'required']
-        },
-        description: 'Template variables'
-      },
-      metadata: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            minLength: 1,
-            description: 'Template name'
-          },
-          version: {
-            type: 'string',
-            default: '1.0.0',
-            description: 'Template version'
-          },
-          description: {
-            type: 'string',
-            description: 'Template description'
-          },
-          author: {
-            type: 'string',
-            description: 'Template author'
-          },
-          category: {
-            type: 'string',
-            description: 'Template category'
-          },
-          tags: {
-            type: 'array',
-            items: {
-              type: 'string'
-            },
-            description: 'Template tags'
-          }
-        },
-        required: ['name'],
-        description: 'Template metadata'
-      },
-      options: {
-        type: 'object',
-        properties: {
-          autoLayout: {
-            type: 'boolean',
-            default: false,
-            description: 'Auto-arrange components using layout system'
-          },
-          mergeVariables: {
-            type: 'boolean',
-            default: true,
-            description: 'Merge variables from component dependencies'
-          },
-          validateComposition: {
-            type: 'boolean',
-            default: true,
-            description: 'Validate composed template'
-          },
-          resolveDependencies: {
-            type: 'boolean',
-            default: true,
-            description: 'Auto-include component dependencies'
-          }
-        },
-        description: 'Composition options'
-      }
-    },
-    required: ['components', 'layout', 'metadata']
-  },
+  inputSchema: toolInputSchema(TemplateLibraryComposeInputSchema),
 
   async invoke(args: unknown) {
     const monitor = PerformanceMonitor.getInstance();
@@ -273,14 +83,18 @@ export const templateLibraryComposeTool: ComposeTool = {
     monitor.startOperation(operationId, 'template.library.compose');
     
     try {
-      // Parse input
+      // Validate with the same schema the tool advertises
+      const parsedArgs = TemplateLibraryComposeInputSchema.safeParse(args);
+      if (!parsedArgs.success) {
+        throw new Error(`Invalid input: ${parsedArgs.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
+      }
       const {
         components: componentSpecs,
         layout: layoutSpec,
         variables = [],
         metadata,
         options = {}
-      } = args as ComposeArgs;
+      }: ComposeArgs = parsedArgs.data;
 
       // Resolve components from library
       const resolvedComponents = await templateLibraryComposeTool.resolveComponents(
@@ -291,24 +105,19 @@ export const templateLibraryComposeTool: ComposeTool = {
       if (resolvedComponents.length === 0) {
         const duration = monitor.endOperation(operationId);
         
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: 'No components could be resolved from library',
-              code: TemplateErrorCode.COMPONENT_NOT_FOUND,
-              suggestions: [
-                'Check that component IDs exist in the library',
-                'Verify component library is properly initialized',
-                'Use template.library.add to add components first'
-              ],
-              performance: {
-                composeTime: duration
-              }
-            }, null, 2)
-          }]
-        };
+        return failureResult({
+          success: false,
+          error: 'No components could be resolved from library',
+          code: TemplateErrorCode.COMPONENT_NOT_FOUND,
+          suggestions: [
+            'Check that component IDs exist in the library',
+            'Verify component library is properly initialized',
+            'Use template.library.add to add components first'
+          ],
+          performance: {
+            composeTime: duration
+          }
+        });
       }
 
       // Apply layout system
@@ -345,22 +154,17 @@ export const templateLibraryComposeTool: ComposeTool = {
         if (!validationReport.valid) {
           const duration = monitor.endOperation(operationId);
           
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                success: false,
-                error: 'Composed template validation failed',
-                details: {
-                  errors: validationReport.errors,
-                  warnings: validationReport.warnings
-                },
-                performance: {
-                  composeTime: duration
-                }
-              }, null, 2)
-            }]
-          };
+          return failureResult({
+            success: false,
+            error: 'Composed template validation failed',
+            details: {
+              errors: validationReport.errors,
+              warnings: validationReport.warnings
+            },
+            performance: {
+              composeTime: duration
+            }
+          });
         }
       }
 
@@ -430,12 +234,7 @@ export const templateLibraryComposeTool: ComposeTool = {
         ]
       };
 
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify(errorResult, null, 2)
-        }]
-      };
+      return failureResult(errorResult);
     }
   },
 

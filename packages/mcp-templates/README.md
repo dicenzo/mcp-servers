@@ -66,6 +66,8 @@ This server reads no environment variables.
 
 - Puppeteer downloads a Chromium build during `yarn install`. PNG and PDF export need it.
 
+- Each tool's advertised `inputSchema` is generated from the zod schema it validates with (`src/util/toolSchema.ts`), so clients see the limits, defaults and descriptions that are enforced. Template components are parsed as any value and checked one at a time (so `template.validate` reports every problem); their advertised shape is generated from `BaseComponentSchema`. A failed call returns `{ "success": false, "error", ... }` with `isError: true`; an invalid template passed to `template.validate` is a successful call whose report says it is invalid. Only an unknown tool name is a JSON-RPC error (`-32601`).
+
 ## Limits
 
 Templates and variables come from the caller, so the server bounds the work one request can cause. These limits apply even when `validateVariables` is `false`.
@@ -79,7 +81,7 @@ Templates and variables come from the caller, so the server bounds the work one 
 
 ## Known issues
 
-- Last verified test run: build passes; 115 of 115 tests pass.
+- Last verified test run: build passes; 132 of 132 tests pass.
 
 
 ## License

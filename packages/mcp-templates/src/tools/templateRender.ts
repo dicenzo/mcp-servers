@@ -11,6 +11,8 @@ import { TemplateEngine } from '../engine/templateEngine.js';
 import { TemplateValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
 import { rejectTemplateId } from '../util/helpers.js';
+import { failureResult } from '../util/toolResult.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
@@ -22,47 +24,7 @@ interface ExecutableTool extends Tool {
 export const templateRenderTool: ExecutableTool = {
   name: 'template.render',
   description: 'Render template with provided variables to SVG/HTML output',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      template: {
-        type: 'object',
-        description: 'Template to render: the `template` object returned by template.create or template.library.compose, or an inline template definition'
-      },
-      variables: {
-        type: 'object',
-        description: 'Variable values for template substitution',
-        additionalProperties: true
-      },
-      format: {
-        enum: ['svg', 'png', 'jpeg', 'pdf', 'html', 'webp'],
-        default: 'svg',
-        description: 'Output format'
-      },
-      options: {
-        type: 'object',
-        properties: {
-          includeMetadata: {
-            type: 'boolean',
-            default: true,
-            description: 'Include rendering metadata in output'
-          },
-          optimizeOutput: {
-            type: 'boolean',
-            default: true,
-            description: 'Apply output optimizations'
-          },
-          validateVariables: {
-            type: 'boolean',
-            default: true,
-            description: 'Validate variables before rendering'
-          }
-        },
-        description: 'Rendering options'
-      }
-    },
-    required: ['template', 'variables']
-  },
+  inputSchema: toolInputSchema(TemplateRenderInputSchema),
 
   async invoke(args: unknown) {
     const monitor = PerformanceMonitor.getInstance();
@@ -76,7 +38,7 @@ export const templateRenderTool: ExecutableTool = {
       const validatedInput = TemplateRenderInputSchema.parse(args);
       const { variables, format = ExportFormat.SVG } = validatedInput;
       const template = validatedInput.template as Template;
-      const options = validatedInput.options || {};
+      const { options } = validatedInput;
 
       // Validate template if requested
       if (options.validateVariables !== false) {
@@ -85,22 +47,17 @@ export const templateRenderTool: ExecutableTool = {
         if (!validationReport.valid) {
           const duration = monitor.endOperation(operationId);
           
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                success: false,
-                error: 'Template validation failed',
-                details: {
-                  errors: validationReport.errors,
-                  warnings: validationReport.warnings
-                },
-                performance: {
-                  renderTime: duration
-                }
-              }, null, 2)
-            }]
-          };
+          return failureResult({
+            success: false,
+            error: 'Template validation failed',
+            details: {
+              errors: validationReport.errors,
+              warnings: validationReport.warnings
+            },
+            performance: {
+              renderTime: duration
+            }
+          });
         }
       }
 
@@ -188,12 +145,7 @@ export const templateRenderTool: ExecutableTool = {
         ]
       };
 
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify(errorResult, null, 2)
-        }]
-      };
+      return failureResult(errorResult);
     }
   }
 };

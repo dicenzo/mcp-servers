@@ -50,16 +50,17 @@ export const ValidationRuleSchema: z.ZodType<ValidationRule> = z.object({
 
 export const VariableDefinitionSchema: z.ZodType<VariableDefinition> = z.lazy(() => 
   z.object({
-    name: z.string(),
-    type: z.nativeEnum(VariableType),
-    required: z.boolean(),
-    default: z.any().optional(),
-    description: z.string().optional(),
-    validation: z.array(ValidationRuleSchema).optional(),
-    items: VariableDefinitionSchema.optional(),
-    properties: z.record(z.string(), VariableDefinitionSchema).optional()
+    name: z.string().describe('Variable name'),
+    type: z.nativeEnum(VariableType).describe('Variable type'),
+    required: z.boolean().describe('Whether variable is required'),
+    default: z.any().optional().describe('Default value for variable'),
+    description: z.string().optional().describe('Variable description'),
+    validation: z.array(ValidationRuleSchema).optional().describe('Validation rules'),
+    items: VariableDefinitionSchema.optional().describe('Definition of each item (array variables)'),
+    properties: z.record(z.string(), VariableDefinitionSchema).optional().describe('Definitions of the properties (object variables)')
   })
-);
+// Named, so advertised schemas refer to the recursive definition as #/$defs/VariableDefinition
+).meta({ id: 'VariableDefinition' });
 
 // ==================== Template Component Types ====================
 
@@ -340,22 +341,35 @@ export const StyleSchema = z.object({
 }).catchall(z.any());
 
 export const BaseComponentSchema = z.object({
-  id: z.string(),
-  type: z.nativeEnum(ComponentType),
-  position: PositionSchema,
-  style: StyleSchema.optional(),
-  visible: z.boolean().optional(),
-  conditional: z.string().optional(),
-  repeat: z.string().optional()
+  id: z.string().describe('Component ID'),
+  type: z.nativeEnum(ComponentType).describe('Component type'),
+  position: PositionSchema.describe('Component position and size'),
+  style: StyleSchema.optional().describe('Component styling'),
+  visible: z.boolean().optional().describe('Component visibility (default true)'),
+  conditional: z.string().optional().describe('Conditional rendering expression'),
+  repeat: z.string().optional().describe('Loop/repeat expression')
 });
 
+/**
+ * The advertised shape of a template component. Components are parsed as any
+ * value and checked one at a time by TemplateValidator, so template.validate
+ * can report every problem instead of failing on the first; this tells clients
+ * the shape those checks expect (type-specific fields such as `content` are
+ * allowed on top).
+ */
+const advertisedComponent = (() => {
+  const json = z.toJSONSchema(BaseComponentSchema, { io: 'input' });
+  delete json.$schema;
+  return json;
+})();
+
 export const TemplateMetadataSchema = z.object({
-  name: z.string(),
-  version: z.string(),
-  description: z.string().optional(),
-  author: z.string().optional(),
-  category: z.string().optional(),
-  tags: z.array(z.string()).optional(),
+  name: z.string().describe('Template name'),
+  version: z.string().describe('Template version'),
+  description: z.string().optional().describe('Template description'),
+  author: z.string().optional().describe('Template author'),
+  category: z.string().optional().describe('Template category'),
+  tags: z.array(z.string()).optional().describe('Template tags'),
   preview: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string()
@@ -364,15 +378,15 @@ export const TemplateMetadataSchema = z.object({
 export const TemplateSchema = z.object({
   id: z.string(),
   metadata: TemplateMetadataSchema,
-  variables: z.array(VariableDefinitionSchema),
-  components: z.array(z.any()), // Will be validated separately based on type
+  variables: z.array(VariableDefinitionSchema).describe('Template variables'),
+  components: z.array(z.any().meta(advertisedComponent)).describe('Template components'),
   layout: z.object({
-    width: z.number().min(1),
-    height: z.number().min(1),
-    background: z.string().optional()
-  }),
-  extends: z.string().optional(),
-  partials: z.record(z.string(), z.any()).optional()
+    width: z.number().min(1).describe('Template width'),
+    height: z.number().min(1).describe('Template height'),
+    background: z.string().optional().describe('Background color')
+  }).describe('Template layout configuration'),
+  extends: z.string().optional().describe('Parent template ID for inheritance'),
+  partials: z.record(z.string(), z.any()).optional().describe('Reusable sub-templates')
 });
 
 /** Max export width / height in px */
@@ -385,14 +399,14 @@ export const MAX_LAYOUT_DIMENSION = 10000;
 export const MAX_RENDERED_CONTENT_LENGTH = 5_000_000;
 
 export const ExportOptionsSchema = z.object({
-  format: z.nativeEnum(ExportFormat),
-  quality: z.number().min(0).max(100).optional(),
-  width: z.number().min(1).max(MAX_EXPORT_DIMENSION).optional(),
-  height: z.number().min(1).max(MAX_EXPORT_DIMENSION).optional(),
-  scale: z.number().min(0.1).max(10).optional(),
-  background: z.string().optional(),
-  pageSize: z.enum(['A4', 'A3', 'Letter', 'Legal']).optional(),
-  margin: z.number().optional()
+  format: z.nativeEnum(ExportFormat).describe('Export format'),
+  quality: z.number().min(0).max(100).optional().describe('Quality for JPEG/WebP (0-100, default 80)'),
+  width: z.number().min(1).max(MAX_EXPORT_DIMENSION).optional().describe('Output width in pixels'),
+  height: z.number().min(1).max(MAX_EXPORT_DIMENSION).optional().describe('Output height in pixels'),
+  scale: z.number().min(0.1).max(10).optional().describe('Scaling factor (default 1)'),
+  background: z.string().optional().describe('Background color (for formats that support transparency)'),
+  pageSize: z.enum(['A4', 'A3', 'Letter', 'Legal']).optional().describe('Page size for PDF export'),
+  margin: z.number().min(0).optional().describe('Margin for PDF export (in points)')
 });
 
 /** Schema for caller-supplied, already-rendered templates passed to template.export */
@@ -457,29 +471,82 @@ export const TemplateCreateInputSchema = z.object({
 });
 
 export const TemplateRenderInputSchema = z.object({
-  template: TemplateSchema,
-  variables: z.record(z.string(), z.any()),
-  format: z.nativeEnum(ExportFormat).optional(),
+  template: TemplateSchema
+    .describe('Template to render: the `template` object returned by template.create or template.library.compose, or an inline template definition'),
+  variables: z.record(z.string(), z.any()).describe('Variable values for template substitution'),
+  format: z.nativeEnum(ExportFormat).default(ExportFormat.SVG).describe('Output format'),
   options: z.object({
-    includeMetadata: z.boolean().optional(),
-    optimizeOutput: z.boolean().optional(),
-    validateVariables: z.boolean().optional()
-  }).optional()
+    includeMetadata: z.boolean().default(true).describe('Include rendering metadata in output'),
+    optimizeOutput: z.boolean().default(true).describe('Apply output optimizations'),
+    validateVariables: z.boolean().default(true).describe('Validate variables before rendering')
+  }).prefault({}).describe('Rendering options')
 });
 
 export const TemplateExportInputSchema = z.object({
-  template: z.any(),
-  variables: z.record(z.string(), z.any()).optional(),
-  options: ExportOptionsSchema
+  // Either a rendered template or a definition; templateExport tells them apart (and explains
+  // what to pass instead of an id), so it is parsed as any value and advertised as an object
+  template: z.any().meta({
+    type: 'object',
+    description: 'A rendered template from template.render, or a template definition (such as the `template` returned by template.create) to render with `variables`'
+  }),
+  variables: z.record(z.string(), z.any()).optional()
+    .describe('Variables for template rendering (if template not already rendered)'),
+  options: ExportOptionsSchema.describe('Export options')
 });
 
 export const TemplateValidateInputSchema = z.object({
-  template: TemplateSchema,
-  variables: z.record(z.string(), z.any()).optional(),
+  template: TemplateSchema.describe('Template to validate'),
+  variables: z.record(z.string(), z.any()).optional().describe('Optional variables to validate against template'),
   options: z.object({
-    strict: z.boolean().optional(),
-    checkPerformance: z.boolean().optional(),
-    validateReferences: z.boolean().optional(),
-    includeWarnings: z.boolean().optional()
-  }).optional()
+    strict: z.boolean().default(false).describe('Enable strict validation mode'),
+    checkPerformance: z.boolean().default(true).describe('Check performance constraints'),
+    validateReferences: z.boolean().default(true).describe('Validate variable references in components'),
+    includeWarnings: z.boolean().default(true).describe('Include warnings in validation report')
+  }).prefault({}).describe('Validation options')
+});
+
+const LayoutDimensionSchema = z.number().min(1).max(MAX_LAYOUT_DIMENSION);
+
+/** Max components in one composition, the same cap TemplateValidator puts on a template */
+export const MAX_COMPOSE_COMPONENTS = 1000;
+
+/** A library component ID, or an ID with position and style overrides */
+const ComposeComponentSchema = z.union([
+  z.string().describe('Component ID from library'),
+  z.looseObject({
+    id: z.string().describe('Component ID from library'),
+    position: PositionSchema.partial().optional().describe('Override component position'),
+    style: StyleSchema.optional().describe('Override component style'),
+    variables: z.record(z.string(), z.any()).optional().describe('Component-specific variables')
+  })
+]);
+
+export const TemplateLibraryComposeInputSchema = z.object({
+  components: z.array(ComposeComponentSchema).min(1).max(MAX_COMPOSE_COMPONENTS)
+    .describe('Component IDs or component configurations to include'),
+  layout: z.object({
+    type: z.enum(['absolute', 'grid', 'flex', 'constraint']).default('absolute').describe('Layout system to use'),
+    config: z.object({
+      rows: z.number().int().min(1).optional().describe('Grid rows'),
+      columns: z.number().int().min(1).optional().describe('Grid columns'),
+      gap: z.number().min(0).optional().describe('Grid/flex gap'),
+      direction: z.enum(['row', 'column']).optional().describe('Flex direction'),
+      justify: z.enum(['start', 'center', 'end', 'space-between']).optional().describe('Flex justify content'),
+      align: z.enum(['start', 'center', 'end', 'stretch']).optional().describe('Flex align items')
+    }).optional().describe('Layout configuration'),
+    width: LayoutDimensionSchema.describe('Template width'),
+    height: LayoutDimensionSchema.describe('Template height'),
+    background: z.string().optional().describe('Template background color')
+  }).describe('Template layout configuration'),
+  variables: z.array(VariableDefinitionSchema).optional().describe('Template variables'),
+  metadata: TemplateMetadataSchema.omit({ createdAt: true, updatedAt: true }).extend({
+    name: z.string().min(1).describe('Template name'),
+    version: z.string().default('1.0.0').describe('Template version')
+  }).describe('Template metadata'),
+  options: z.object({
+    resolveDependencies: z.boolean().default(true).describe('Auto-include component dependencies'),
+    autoLayout: z.boolean().default(false).describe('Auto-arrange components using layout system'),
+    mergeVariables: z.boolean().default(true).describe('Merge variables from component dependencies'),
+    validateComposition: z.boolean().default(true).describe('Validate composed template')
+  }).optional().describe('Composition options')
 });
