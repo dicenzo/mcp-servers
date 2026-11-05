@@ -13,6 +13,8 @@ import { TemplateExporter } from '../util/export.js';
 import { templateRender } from './templateRender.js';
 import { PerformanceMonitor } from '../util/performance.js';
 import { formatBytes, rejectTemplateId } from '../util/helpers.js';
+import { failureResult } from '../util/toolResult.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
@@ -24,71 +26,7 @@ interface ExecutableTool extends Tool {
 export const templateExportTool: ExecutableTool = {
   name: 'template.export',
   description: 'Export rendered template to multiple formats (SVG, PNG, PDF, HTML, etc.)',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      template: {
-        type: 'object',
-        description: 'A rendered template from template.render, or a template definition (such as the `template` returned by template.create) to render with `variables`'
-      },
-      variables: {
-        type: 'object',
-        description: 'Variables for template rendering (if template not already rendered)',
-        additionalProperties: true
-      },
-      options: {
-        type: 'object',
-        properties: {
-          format: {
-            enum: ['svg', 'png', 'jpeg', 'pdf', 'html', 'webp'],
-            default: 'png',
-            description: 'Export format'
-          },
-          quality: {
-            type: 'number',
-            minimum: 0,
-            maximum: 100,
-            default: 80,
-            description: 'Quality for JPEG/WebP (0-100)'
-          },
-          width: {
-            type: 'number',
-            minimum: 1,
-            maximum: 8192,
-            description: 'Output width in pixels'
-          },
-          height: {
-            type: 'number',
-            minimum: 1,
-            maximum: 8192,
-            description: 'Output height in pixels'
-          },
-          scale: {
-            type: 'number',
-            minimum: 0.1,
-            maximum: 10,
-            default: 1,
-            description: 'Scaling factor'
-          },
-          background: {
-            type: 'string',
-            description: 'Background color (for formats that support transparency)'
-          },
-          pageSize: {
-            enum: ['A4', 'A3', 'Letter', 'Legal'],
-            description: 'Page size for PDF export'
-          },
-          margin: {
-            type: 'number',
-            minimum: 0,
-            description: 'Margin for PDF export (in points)'
-          }
-        },
-        description: 'Export options'
-      }
-    },
-    required: ['template', 'options']
-  },
+  inputSchema: toolInputSchema(TemplateExportInputSchema),
 
   async invoke(args: unknown) {
     const monitor = PerformanceMonitor.getInstance();
@@ -106,21 +44,16 @@ export const templateExportTool: ExecutableTool = {
       if (validationErrors.length > 0) {
         const duration = monitor.endOperation(operationId);
         
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: 'Invalid export options',
-              details: {
-                errors: validationErrors
-              },
-              performance: {
-                exportTime: duration
-              }
-            }, null, 2)
-          }]
-        };
+        return failureResult({
+          success: false,
+          error: 'Invalid export options',
+          details: {
+            errors: validationErrors
+          },
+          performance: {
+            exportTime: duration
+          }
+        });
       }
 
       // Determine if we have a rendered template or need to render
@@ -204,12 +137,7 @@ export const templateExportTool: ExecutableTool = {
           ]
         };
 
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify(errorResult, null, 2)
-          }]
-        };
+        return failureResult(errorResult);
       }
 
     } catch (error) {
@@ -230,12 +158,7 @@ export const templateExportTool: ExecutableTool = {
         ]
       };
 
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify(errorResult, null, 2)
-        }]
-      };
+      return failureResult(errorResult);
     }
   }
 };

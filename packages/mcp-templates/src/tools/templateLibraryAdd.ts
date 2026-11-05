@@ -11,6 +11,8 @@ import {
 import { z } from 'zod';
 import { PerformanceMonitor } from '../util/performance.js';
 import { generateId, getCurrentTimestamp } from '../util/helpers.js';
+import { failureResult } from '../util/toolResult.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
@@ -31,28 +33,28 @@ export const MAX_LIBRARY_ITEM_BYTES = 256 * 1024;
  * Structural schema for template.library.add input. Always enforced (the
  * `validate` option only toggles the friendlier semantic checks below).
  */
-const LibraryAddArgsSchema = z.object({
+export const LibraryAddArgsSchema = z.object({
   component: z.object({
-    name: z.string().max(100),
-    description: z.string().max(500).optional(),
-    category: z.string().max(100),
-    tags: z.array(z.string().max(50)).max(20).optional(),
+    name: z.string().min(1).max(100).describe('Component name'),
+    description: z.string().max(500).optional().describe('Component description'),
+    category: z.string().max(100).describe('Component category'),
+    tags: z.array(z.string().max(50)).max(20).optional().describe('Component tags for searchability'),
     component: z.object({
-      id: z.string().max(200),
-      type: z.nativeEnum(ComponentType),
+      id: z.string().max(200).describe('Component ID'),
+      type: z.nativeEnum(ComponentType).describe('Component type'),
       position: PositionSchema
-    }).passthrough(),
-    preview: z.string().max(MAX_LIBRARY_ITEM_BYTES).optional(),
-    version: z.string().max(50).optional(),
-    author: z.string().max(200).optional(),
-    dependencies: z.array(z.string().max(200)).max(50).optional()
-  }),
-  library: z.string().max(64).regex(/^[a-zA-Z0-9-_]+$/).optional(),
+    }).passthrough().describe('Component definition'),
+    preview: z.string().max(MAX_LIBRARY_ITEM_BYTES).optional().describe('Base64 preview image or SVG'),
+    version: z.string().max(50).default('1.0.0').describe('Component version'),
+    author: z.string().max(200).optional().describe('Component author'),
+    dependencies: z.array(z.string().max(200)).max(50).optional().describe('Required component dependencies')
+  }).describe('Component library item to add'),
+  library: z.string().max(64).regex(/^[a-zA-Z0-9-_]+$/).default('default').describe('Library name to add component to'),
   options: z.object({
-    validate: z.boolean().optional(),
-    overwrite: z.boolean().optional(),
-    generatePreview: z.boolean().optional()
-  }).optional()
+    validate: z.boolean().default(true).describe('Validate component before adding'),
+    overwrite: z.boolean().default(false).describe('Overwrite existing component with same name'),
+    generatePreview: z.boolean().default(false).describe('Auto-generate preview image')
+  }).prefault({}).describe('Add operation options')
 });
 
 // In-memory component library storage (in production, this would be persistent)
@@ -175,115 +177,7 @@ async function generatePreview(_component: TemplateComponent): Promise<string | 
 export const templateLibraryAddTool: ExecutableTool = {
   name: 'template.library.add',
   description: 'Add component to reusable component library',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      component: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            minLength: 1,
-            maxLength: 100,
-            description: 'Component name'
-          },
-          description: {
-            type: 'string',
-            maxLength: 500,
-            description: 'Component description'
-          },
-          category: {
-            type: 'string',
-            description: 'Component category'
-          },
-          tags: {
-            type: 'array',
-            items: {
-              type: 'string',
-              maxLength: 50
-            },
-            maxItems: 20,
-            description: 'Component tags for searchability'
-          },
-          component: {
-            type: 'object',
-            properties: {
-              id: {
-                type: 'string',
-                description: 'Component ID'
-              },
-              type: {
-                enum: ['text', 'image', 'shape', 'group', 'svg', 'html'],
-                description: 'Component type'
-              },
-              position: {
-                type: 'object',
-                properties: {
-                  x: { type: 'number' },
-                  y: { type: 'number' },
-                  width: { type: 'number', minimum: 0 },
-                  height: { type: 'number', minimum: 0 }
-                },
-                required: ['x', 'y', 'width', 'height']
-              }
-            },
-            required: ['id', 'type', 'position'],
-            description: 'Component definition'
-          },
-          preview: {
-            type: 'string',
-            description: 'Base64 preview image or SVG'
-          },
-          version: {
-            type: 'string',
-            default: '1.0.0',
-            description: 'Component version'
-          },
-          author: {
-            type: 'string',
-            description: 'Component author'
-          },
-          dependencies: {
-            type: 'array',
-            items: {
-              type: 'string'
-            },
-            description: 'Required component dependencies'
-          }
-        },
-        required: ['name', 'category', 'component'],
-        description: 'Component library item to add'
-      },
-      library: {
-        type: 'string',
-        default: 'default',
-        pattern: '^[a-zA-Z0-9-_]+$',
-        description: 'Library name to add component to'
-      },
-      options: {
-        type: 'object',
-        properties: {
-          overwrite: {
-            type: 'boolean',
-            default: false,
-            description: 'Overwrite existing component with same name'
-          },
-          validate: {
-            type: 'boolean',
-            default: true,
-            description: 'Validate component before adding'
-          },
-          generatePreview: {
-            type: 'boolean',
-            default: false,
-            description: 'Auto-generate preview image'
-          }
-        },
-        description: 'Add operation options'
-      }
-    },
-    required: ['component']
-  },
+  inputSchema: toolInputSchema(LibraryAddArgsSchema),
 
   async invoke(args: unknown) {
     const monitor = PerformanceMonitor.getInstance();
@@ -297,7 +191,7 @@ export const templateLibraryAddTool: ExecutableTool = {
       if (!parsedArgs.success) {
         throw new Error(`Invalid input: ${parsedArgs.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
       }
-      const { library: libraryName = 'default', options = {} } = parsedArgs.data;
+      const { library: libraryName, options } = parsedArgs.data;
       // The schema checks structure; per-type component fields are checked semantically below
       const componentData = parsedArgs.data.component as unknown as LibraryComponentInput;
 
@@ -311,21 +205,16 @@ export const templateLibraryAddTool: ExecutableTool = {
         if (validationErrors.length > 0) {
           const duration = monitor.endOperation(operationId);
           
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                success: false,
-                error: 'Component validation failed',
-                details: {
-                  errors: validationErrors
-                },
-                performance: {
-                  addTime: duration
-                }
-              }, null, 2)
-            }]
-          };
+          return failureResult({
+            success: false,
+            error: 'Component validation failed',
+            details: {
+              errors: validationErrors
+            },
+            performance: {
+              addTime: duration
+            }
+          });
         }
       }
 
@@ -354,24 +243,19 @@ export const templateLibraryAddTool: ExecutableTool = {
       if (existingIndex >= 0 && !options.overwrite) {
         const duration = monitor.endOperation(operationId);
         
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: `Component '${componentData.name}' already exists in library '${libraryName}'`,
-              code: TemplateErrorCode.LIBRARY_ERROR,
-              suggestions: [
-                'Use different component name',
-                'Set overwrite option to true',
-                'Use different library name'
-              ],
-              performance: {
-                addTime: duration
-              }
-            }, null, 2)
-          }]
-        };
+        return failureResult({
+          success: false,
+          error: `Component '${componentData.name}' already exists in library '${libraryName}'`,
+          code: TemplateErrorCode.LIBRARY_ERROR,
+          suggestions: [
+            'Use different component name',
+            'Set overwrite option to true',
+            'Use different library name'
+          ],
+          performance: {
+            addTime: duration
+          }
+        });
       }
 
       if (existingIndex < 0 && library.components.length >= MAX_COMPONENTS_PER_LIBRARY) {
@@ -473,12 +357,7 @@ export const templateLibraryAddTool: ExecutableTool = {
         ]
       };
 
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify(errorResult, null, 2)
-        }]
-      };
+      return failureResult(errorResult);
     }
   }
 };
