@@ -19,7 +19,6 @@ interface Transform {
   type: 'translate' | 'rotate' | 'scale' | 'skewX' | 'skewY' | 'matrix';
   values: number[];
   element?: string;
-  origin?: { x: number; y: number };
 }
 
 /**
@@ -126,7 +125,7 @@ async function applyTransformations(svgContent: string, transforms: Transform[])
  * Applies a single transformation using @svgdotjs/svg.js
  */
 async function applyTransformation(draw: Svg, transform: Transform): Promise<void> {
-  const { type, values, element, origin } = transform;
+  const { type, values, element } = transform;
   
   // Select elements to transform
   let elements: List<Element>;
@@ -144,11 +143,6 @@ async function applyTransformation(draw: Svg, transform: Transform): Promise<voi
   
   // Apply transformation to selected elements
   elements.each((el: Element) => {
-    
-    // Set transform origin if specified
-    if (origin) {
-      el.transform({ origin: [origin.x, origin.y] });
-    }
     
     // Apply the specific transformation
     switch (type) {

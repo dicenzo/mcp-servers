@@ -1,5 +1,5 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { optimize } from 'svgo';
+import { optimize, Config } from 'svgo';
 import { 
   SVGOptimizeInputSchema, 
   SVGOptimizeInput, 
@@ -108,57 +108,40 @@ export const svgOptimizeTool: ExecutableTool = {
 };
 
 /**
- * Builds SVGO configuration from input options
+ * Builds SVGO configuration from input options. Every option names plugins in
+ * preset-default, which SVGO only lets you override, not add to: `false` turns
+ * a plugin off, and leaving it unset keeps it on with its default params.
  */
-function buildSVGOConfig(options: {
-  precision?: number;
-  removeComments?: boolean;
-  removeEmptyElements?: boolean;
-  removeUnusedDefs?: boolean;
-  minifyStyles?: boolean;
-  mergePaths?: boolean;
-  removeMetadata?: boolean;
-  removeViewBox?: boolean;
-  aggressive?: boolean;
-}): any {
-  const plugins: any[] = [
-    // Use preset-default as base
-    {
-      name: 'preset-default',
-      params: {
-        overrides: {
-          // Configure specific plugins within preset-default
-          cleanupNumericValues: {
-            floatPrecision: options.precision || 3
-          },
-          removeComments: options.removeComments !== false,
-          removeEmptyElements: options.removeEmptyElements !== false,
-          removeUnusedNS: options.removeUnusedDefs !== false,
-          minifyStyles: options.minifyStyles !== false,
-          mergePaths: options.mergePaths !== false,
-          removeMetadata: options.removeMetadata || false,
-          removeViewBox: options.removeViewBox || false
-        }
-      }
-    },
-    // Always on: strips <script>, on* handlers and javascript: links (disabled by default in SVGO)
-    'removeScriptElement'
-  ];
-
-  // Advanced optimizations for aggressive compression - add as simple strings for v3
-  if (options.aggressive) {
-    plugins.push(
-      'removeTitle',
-      'removeDesc', 
-      'removeDoctype',
-      'removeXMLProcInst',
-      'removeEditorsNSData'
-    );
-  }
-
+function buildSVGOConfig(options: Partial<NonNullable<SVGOptimizeInput['options']>>): Config {
+  const keepUnless = (enabled: boolean) => (enabled ? undefined : false);
+  const removeEmptyElements = options.removeEmptyElements !== false;
+  const removeUnusedDefs = options.removeUnusedDefs !== false;
   return {
     multipass: true,
-    plugins
+    plugins: [
+      {
+        name: 'preset-default',
+        params: {
+          overrides: {
+            cleanupNumericValues: {
+              floatPrecision: options.precision ?? 3
+            },
+            removeComments: keepUnless(options.removeComments !== false),
+            removeEmptyContainers: keepUnless(removeEmptyElements),
+            removeEmptyText: keepUnless(removeEmptyElements),
+            // removeHiddenElems also drops unreferenced definitions, with no param to stop it
+            removeUselessDefs: keepUnless(removeUnusedDefs),
+            removeHiddenElems: keepUnless(removeUnusedDefs),
+            minifyStyles: keepUnless(options.minifyStyles !== false),
+            mergePaths: keepUnless(options.mergePaths !== false),
+            removeMetadata: keepUnless(options.removeMetadata === true),
+            removeViewBox: keepUnless(options.removeViewBox === true)
+          }
+        }
+      },
+      // Always on: strips <script>, on* handlers and javascript: links (disabled by default in SVGO)
+      'removeScriptElement'
+    ]
   };
 }
 
