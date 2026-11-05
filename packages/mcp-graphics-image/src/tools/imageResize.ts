@@ -8,6 +8,7 @@ import {
   ResizeMethod,
   ImageErrorCode
 } from '../types/image.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 /**
  * MCP Tool: image.resize
@@ -17,9 +18,9 @@ import {
 export const ImageResizeInputSchema = z.object({
   image: ImageInputSchema,
   dimensions: DimensionsSchema,
-  method: z.enum(ResizeMethods).default('lanczos'),
-  preserveAspectRatio: z.boolean().default(true),
-  allowEnlargement: z.boolean().default(false)
+  method: z.enum(ResizeMethods).default('lanczos').describe('Interpolation method for resizing'),
+  preserveAspectRatio: z.boolean().default(true).describe('Maintain original aspect ratio'),
+  allowEnlargement: z.boolean().default(false).describe('Allow upscaling beyond original dimensions')
 });
 
 export type ImageResizeInput = z.infer<typeof ImageResizeInputSchema>;
@@ -124,44 +125,5 @@ export async function imageResize(input: unknown): Promise<ImageResizeResponse> 
 export const imageResizeTool = {
   name: 'image.resize',
   description: 'Resize images to specified dimensions with quality preservation using various interpolation methods',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      image: {
-        type: 'object',
-        properties: {
-          data: { type: 'string', description: 'Base64 encoded image data' },
-          format: { 
-            enum: ['png', 'jpeg', 'jpg', 'webp', 'avif', 'gif', 'tiff'], 
-            description: 'Image format' 
-          }
-        },
-        required: ['data', 'format']
-      },
-      dimensions: {
-        type: 'object',
-        properties: {
-          width: { type: 'number', minimum: 1, maximum: 8192 },
-          height: { type: 'number', minimum: 1, maximum: 8192 }
-        },
-        required: ['width', 'height']
-      },
-      method: { 
-        enum: [...ResizeMethods], 
-        default: 'lanczos',
-        description: 'Interpolation method for resizing' 
-      },
-      preserveAspectRatio: { 
-        type: 'boolean', 
-        default: true,
-        description: 'Maintain original aspect ratio' 
-      },
-      allowEnlargement: { 
-        type: 'boolean', 
-        default: false,
-        description: 'Allow upscaling beyond original dimensions' 
-      }
-    },
-    required: ['image', 'dimensions']
-  }
+  inputSchema: toolInputSchema(ImageResizeInputSchema)
 };

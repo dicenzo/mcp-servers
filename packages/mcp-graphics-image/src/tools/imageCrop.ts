@@ -6,6 +6,7 @@ import {
   RectangleSchema,
   ImageErrorCode
 } from '../types/image.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 export const ImageCropInputSchema = z.object({
   image: ImageInputSchema,
@@ -84,31 +85,5 @@ export async function imageCrop(input: unknown): Promise<ImageCropResponse> {
 export const imageCropTool = {
   name: 'image.crop',
   description: 'Crop images to specified rectangular bounds',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      image: {
-        type: 'object',
-        properties: {
-          data: { type: 'string', description: 'Base64 encoded image data' },
-          format: { 
-            enum: ['png', 'jpeg', 'jpg', 'webp', 'avif', 'gif', 'tiff'], 
-            description: 'Image format' 
-          }
-        },
-        required: ['data', 'format']
-      },
-      bounds: {
-        type: 'object',
-        properties: {
-          x: { type: 'number', minimum: 0 },
-          y: { type: 'number', minimum: 0 },
-          width: { type: 'number', minimum: 1 },
-          height: { type: 'number', minimum: 1 }
-        },
-        required: ['x', 'y', 'width', 'height']
-      }
-    },
-    required: ['image', 'bounds']
-  }
+  inputSchema: toolInputSchema(ImageCropInputSchema)
 };
