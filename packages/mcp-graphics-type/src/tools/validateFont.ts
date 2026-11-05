@@ -11,7 +11,7 @@ import {
   UNICODE_BLOCKS 
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
-import { parseFont } from '../util/parseFont.js';
+import { parseFont, toSfnt } from '../util/parseFont.js';
 import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
@@ -42,7 +42,7 @@ export const validateFontTool: ExecutableTool = {
         const validationReport = await performFontValidation(
           fontBuffer, 
           loadTime,
-          input.options || {}
+          input.options
         );
         
         return {
@@ -141,11 +141,21 @@ async function performFontValidation(
     
     const recommendations: string[] = [];
     
+    // Files the parser can't read are reported as such, not as broken fonts
+    const fileError = checkFontFile(fontBuffer);
+    if (fileError) {
+      errors.push(fileError);
+      return createFailedValidationReport(errors, warnings, recommendations, fontBuffer, loadTime);
+    }
+
     // Parse font using opentype.js
     let font: Font;
+    let tableTags: Set<string>;
     
     try {
-      font = await parseFont(fontBuffer);
+      const sfnt = await toSfnt(fontBuffer);
+      tableTags = sfntTableTags(sfnt);
+      font = await parseFont(sfnt);
     } catch (parseError) {
       errors.push({
         code: 'PARSE_ERROR',
@@ -163,7 +173,7 @@ async function performFontValidation(
     const version = font.names.version?.en || 'Unknown';
     
     // Validate font structure
-    const structureValidation = validateFontStructure(font);
+    const structureValidation = validateFontStructure(font, tableTags);
     errors.push(...structureValidation.errors);
     warnings.push(...structureValidation.warnings);
     
@@ -255,18 +265,19 @@ async function performFontValidation(
 /**
  * Validates font structure and required tables
  */
-function validateFontStructure(font: Font): {
+function validateFontStructure(font: Font, tableTags: Set<string>): {
   errors: Array<{ code: string; message: string; severity: 'error' | 'warning' | 'info'; location?: string }>;
   warnings: Array<{ code: string; message: string; recommendation?: string }>;
 } {
   const errors: Array<{ code: string; message: string; severity: 'error' | 'warning' | 'info'; location?: string }> = [];
   const warnings: Array<{ code: string; message: string; recommendation?: string }> = [];
   
-  // Check required tables
-  const requiredTables = ['cmap', 'head', 'hhea', 'hmtx', 'maxp', 'name', 'os2', 'post'];
+  // Check required tables against the font's table directory: font.tables only
+  // holds what opentype.js keeps (hmtx, for one, goes straight into the glyphs)
+  const requiredTables = ['cmap', 'head', 'hhea', 'hmtx', 'maxp', 'name', 'OS/2', 'post'];
   
   for (const tableName of requiredTables) {
-    if (!font.tables[tableName]) {
+    if (!tableTags.has(tableName)) {
       errors.push({
         code: 'MISSING_REQUIRED_TABLE',
         message: `Missing required table: ${tableName}`,
@@ -522,18 +533,66 @@ function generateRecommendations(
 /**
  * Helper functions
  */
-function detectFontFormat(buffer: Buffer): 'ttf' | 'otf' | 'woff' | 'woff2' {
-  const signature = buffer.subarray(0, 4);
-  
-  if (signature.equals(Buffer.from([0x77, 0x4F, 0x46, 0x46]))) {
-    return 'woff';
-  } else if (signature.equals(Buffer.from([0x77, 0x4F, 0x46, 0x32]))) {
-    return 'woff2';
-  } else if (signature.equals(Buffer.from([0x4F, 0x54, 0x54, 0x4F]))) {
-    return 'otf';
-  } else {
-    return 'ttf';
+function detectFontFormat(buffer: Buffer): NonNullable<FontValidationReport['format']> {
+  switch (buffer.toString('latin1', 0, 4)) {
+    case 'wOFF': return 'woff';
+    case 'wOF2': return 'woff2';
+    case 'OTTO': return 'otf';
+    case 'ttcf': return 'ttc';
+    case '\x00\x01\x00\x00':
+    case 'true':
+      return 'ttf';
+    default:
+      return 'unknown';
   }
+}
+
+/**
+ * The checks type.loadFont makes before parsing (empty, size cap, signature),
+ * as a report error rather than a thrown one
+ */
+function checkFontFile(buffer: Buffer): FontValidationReport['errors'][number] | undefined {
+  if (detectFontFormat(buffer) === 'ttc') {
+    return {
+      code: TypographyErrorCode.UNSUPPORTED_FORMAT,
+      message: 'This is a font collection (.ttc/.otc), which type.validateFont can\'t read. Validate one of its fonts instead, for example with a system font source, which picks the face out of the collection.',
+      severity: 'error',
+      location: 'font-data'
+    };
+  }
+  try {
+    TypographyValidator.validateFontFile(buffer);
+    return undefined;
+  } catch (error) {
+    let parsed: { code?: string; message?: string } = {};
+    try {
+      parsed = JSON.parse(error instanceof Error ? error.message : String(error));
+    } catch {
+      parsed = { message: error instanceof Error ? error.message : String(error) };
+    }
+    return {
+      code: parsed.code ?? TypographyErrorCode.FONT_LOAD_FAILED,
+      message: parsed.message ?? 'Font file could not be read',
+      severity: 'error',
+      location: 'font-data'
+    };
+  }
+}
+
+/**
+ * Tags in an sfnt's table directory, bounded by the data actually present
+ */
+function sfntTableTags(sfnt: Uint8Array): Set<string> {
+  const data = Buffer.from(sfnt.buffer, sfnt.byteOffset, sfnt.byteLength);
+  const tags = new Set<string>();
+  if (data.length < 12) {
+    return tags;
+  }
+  const numTables = Math.min(data.readUInt16BE(4), Math.floor((data.length - 12) / 16));
+  for (let i = 0; i < numTables; i++) {
+    tags.add(data.toString('latin1', 12 + i * 16, 16 + i * 16));
+  }
+  return tags;
 }
 
 function extractFeatures(font: Font): string[] {
