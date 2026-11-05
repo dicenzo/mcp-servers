@@ -1,16 +1,13 @@
 import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { 
-  FlexConfigSchema,
-  FlexElementListSchema,
-  RectangleSchema,
-  FlexConfig,
-  FlexElement,
-  Rectangle,
+import {
+  CreateFlexInputSchema,
   FlexLayout
 } from '../types/layout.js';
 import { FlexEngine } from '../util/flexEngine.js';
 import { PerformanceMonitor } from '../util/performance.js';
 import { LayoutValidator } from '../util/validation.js';
+import { failureResult } from '../util/toolResult.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
@@ -24,162 +21,15 @@ interface ExecutableTool extends Tool {
 export const createFlexTool: ExecutableTool = {
   name: 'layout.createFlex',
   description: 'Create a Flexbox layout with specified configuration and elements',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      config: {
-        type: 'object',
-        properties: {
-          direction: {
-            type: 'string',
-            enum: ['row', 'row-reverse', 'column', 'column-reverse'],
-            default: 'row',
-            description: 'flex-direction value'
-          },
-          wrap: {
-            type: 'string',
-            enum: ['nowrap', 'wrap', 'wrap-reverse'],
-            default: 'nowrap',
-            description: 'flex-wrap value'
-          },
-          justifyContent: {
-            type: 'string',
-            enum: ['flex-start', 'flex-end', 'center', 'space-between', 'space-around', 'space-evenly'],
-            default: 'flex-start',
-            description: 'justify-content value for main axis alignment'
-          },
-          alignItems: {
-            type: 'string',
-            enum: ['flex-start', 'flex-end', 'center', 'stretch', 'baseline'],
-            default: 'stretch',
-            description: 'align-items value for cross axis alignment'
-          },
-          alignContent: {
-            type: 'string',
-            enum: ['flex-start', 'flex-end', 'center', 'stretch', 'space-between', 'space-around'],
-            default: 'stretch',
-            description: 'align-content value for multi-line alignment'
-          },
-          gap: {
-            type: 'string',
-            default: '0',
-            description: 'Gap value (e.g., "16px", "1rem")'
-          },
-          rowGap: {
-            type: 'string',
-            description: 'Row-specific gap (overrides gap for rows)'
-          },
-          columnGap: {
-            type: 'string',
-            description: 'Column-specific gap (overrides gap for columns)'
-          }
-        }
-      },
-      elements: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'string',
-              description: 'Unique identifier for the element'
-            },
-            flexGrow: {
-              type: 'number',
-              minimum: 0,
-              default: 0,
-              description: 'flex-grow value - how much element should grow'
-            },
-            flexShrink: {
-              type: 'number',
-              minimum: 0,
-              default: 1,
-              description: 'flex-shrink value - how much element can shrink'
-            },
-            flexBasis: {
-              oneOf: [
-                { type: 'number', minimum: 0 },
-                { type: 'string' }
-              ],
-              default: 'auto',
-              description: 'flex-basis value - initial main size (e.g., "200px", "50%", "auto")'
-            },
-            alignSelf: {
-              type: 'string',
-              enum: ['auto', 'flex-start', 'flex-end', 'center', 'stretch', 'baseline'],
-              description: 'align-self override for individual element'
-            },
-            order: {
-              type: 'number',
-              description: 'Visual order of the element (lower numbers first)'
-            },
-            content: {
-              type: 'object',
-              description: 'Element content for size calculation and rendering'
-            },
-            minWidth: {
-              type: 'number',
-              minimum: 0,
-              description: 'Minimum width constraint in pixels'
-            },
-            minHeight: {
-              type: 'number',
-              minimum: 0,
-              description: 'Minimum height constraint in pixels'
-            },
-            maxWidth: {
-              type: 'number',
-              minimum: 0,
-              description: 'Maximum width constraint in pixels'
-            },
-            maxHeight: {
-              type: 'number',
-              minimum: 0,
-              description: 'Maximum height constraint in pixels'
-            }
-          },
-          required: ['id']
-        },
-        minItems: 1,
-        description: 'Array of elements to place in the flex container'
-      },
-      bounds: {
-        type: 'object',
-        properties: {
-          x: { type: 'number', description: 'Container X position' },
-          y: { type: 'number', description: 'Container Y position' },
-          width: { type: 'number', minimum: 1, description: 'Container width' },
-          height: { type: 'number', minimum: 1, description: 'Container height' }
-        },
-        required: ['x', 'y', 'width', 'height'],
-        description: 'Container bounds for the flex layout'
-      },
-      optimize: {
-        type: 'boolean',
-        default: true,
-        description: 'Whether to optimize the layout for performance'
-      }
-    },
-    required: ['config', 'elements', 'bounds']
-  },
+  inputSchema: toolInputSchema(CreateFlexInputSchema),
 
   async invoke(args: unknown): Promise<CallToolResult> {
     const monitor = new PerformanceMonitor();
     monitor.start('flex-creation');
 
     try {
-      // Parse and validate inputs
-      const input = args as {
-        config: FlexConfig;
-        elements: FlexElement[];
-        bounds: Rectangle;
-        optimize?: boolean;
-      };
-
-      // Validate with Zod schemas
-      const config = FlexConfigSchema.parse(input.config);
-      const elements = FlexElementListSchema.parse(input.elements);
-      const bounds = RectangleSchema.parse(input.bounds);
+      // Validate with the same schema the tool advertises
+      const { config, elements, bounds, optimize } = CreateFlexInputSchema.parse(args);
 
       // Additional validation
       const configErrors = LayoutValidator.validateFlexConfig(config);
@@ -188,27 +38,21 @@ export const createFlexTool: ExecutableTool = {
 
       const allErrors = [...configErrors, ...elementErrors, ...boundsErrors];
       if (allErrors.length > 0) {
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: 'Validation failed',
-              details: allErrors.map(e => ({
-                code: e.code,
-                message: e.message,
-                element: e.element
-              }))
-            }, null, 2)
-          }]
-        };
+        return failureResult({
+          error: 'Validation failed',
+          details: allErrors.map(e => ({
+            code: e.code,
+            message: e.message,
+            element: e.element
+          }))
+        });
       }
 
       // Create flex layout
       let layout = FlexEngine.createLayout(config, elements, bounds, monitor);
 
       // Optimize if requested
-      if (input.optimize !== false) {
+      if (optimize) {
         layout = FlexEngine.optimizeLayout(layout);
       }
 
@@ -241,18 +85,10 @@ export const createFlexTool: ExecutableTool = {
     } catch (error) {
       console.error('[MCP Layout] Flex creation error:', error);
       
-      const errorResult = {
-        success: false,
+      return failureResult({
         error: error instanceof Error ? error.message : String(error),
         performance: monitor.snapshot()
-      };
-
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify(errorResult, null, 2)
-        }]
-      };
+      });
     }
   },
 
