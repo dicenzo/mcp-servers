@@ -67,13 +67,12 @@ This server reads no environment variables.
 - Each tool's advertised `inputSchema` is generated from the zod schema it validates with (`src/util/toolSchema.ts`), so clients see the limits, defaults and descriptions that are enforced. `svg.create` group children refer to `#/$defs/SVGElement`. A failed call is a tool result with `isError: true` and `{ error, code, message, details?, suggestions?, tool }` as its text; only an unknown tool name is a JSON-RPC error (`-32601`).
 - `svgbob.to.svg` and `wireframe.to.svg` read their text the same way: CRLF, CR and LF line endings are all accepted, tabs expand to 8-column tab stops, and each character (including an emoji) takes one cell. East Asian wide characters still take one cell, not two.
 - Path data (`svg.create`, `svg.path.operations`) is checked against the full SVG path grammar, including compact forms such as `M-5-5`, `M.5.5`, `1e2` and arc flags without separators.
+- `svg.optimize` options switch plugins inside SVGO's `preset-default`: `removeEmptyElements` controls `removeEmptyContainers` and `removeEmptyText`, and `removeUnusedDefs` controls `removeUselessDefs` and `removeHiddenElems` (SVGO removes unreferenced definitions in both, so `false` also keeps hidden elements). `removeMetadata` and `removeViewBox` are off by default. `<script>`, event handlers and `javascript:` links are always removed.
 - Colours (`fill`, `stroke`, `svgbob.to.svg` colours) may be 3, 4, 6 or 8-digit hex, `rgb()`/`rgba()` with channels 0–255 or 0–100%, `hsl()`/`hsla()`, in comma or space syntax with an optional `/ alpha`, a CSS named colour, `currentColor`, `none`, `inherit`, or `url(#id)` with an optional fallback colour. Out-of-range values such as `rgb(999, 999, 999)` are rejected.
 
 ## Known issues
 
-- Last verified test run: build passes; all 338 tests in 12 suites pass.
-- `svg.optimize` passes `removeEmptyElements` and other options as `preset-default` overrides that the installed SVGO says aren't part of the preset, so those switches log warnings and may do nothing. The code also reads `removeMetadata` and `removeViewBox`, but they aren't in the input schema, so they are stripped and not offered.
-- `svg.transform` has code for a transform `origin`, but setting an origin alone doesn't move anything in svg.js, so it isn't in the input schema either.
+- Last verified test run: build passes; all 344 tests in 12 suites pass.
 - The `mermaid.to.svg` and `fabric.wireframe` tools were removed. Mermaid never loaded under the test runner, `fabric.wireframe` only returned a placeholder, and their dependencies (mermaid, fabric, canvas) carried most of the package's audit findings.
 
 ## License

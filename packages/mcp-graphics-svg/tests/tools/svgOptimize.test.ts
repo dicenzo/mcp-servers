@@ -1,4 +1,4 @@
-import { describe, test, expect } from '@jest/globals';
+import { describe, test, expect, jest } from '@jest/globals';
 import { svgOptimizeTool } from '../../src/tools/svgOptimize.js';
 import { SVG_LIMITS } from '../../src/types/svg.js';
 
@@ -474,5 +474,60 @@ describe('svg.optimize security hardening', () => {
     // SVGO converts the rect to an equivalent path
     expect(response.svg).toMatch(/<(rect|path)\b/);
     expect(response.svg).toContain('fill="red"');
+  });
+});
+
+describe('svg.optimize options map to SVGO plugins', () => {
+  const optimizeSvg = async (svg: string, options?: Record<string, unknown>) => {
+    const result = await svgOptimizeTool.invoke({ svg, options });
+    expect(result.isError).toBeUndefined();
+    return JSON.parse(result.content[0].text).svg as string;
+  };
+
+  const withEmptyText = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><g id="a"></g><text></text><rect width="2" height="2"/></svg>';
+  const withUnusedDefs = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><defs><linearGradient><stop offset="0"/></linearGradient></defs><rect width="2" height="2"/></svg>';
+  const withMetadata = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><metadata>licence</metadata><rect width="2" height="2"/></svg>';
+  const withViewBox = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 10 10"><rect width="2" height="2"/></svg>';
+
+  test('no option is reported by SVGO as outside preset-default', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      await optimizeSvg(withEmptyText);
+      await optimizeSvg(withEmptyText, {
+        removeComments: false, removeEmptyElements: false, mergePaths: false, removeUnusedDefs: false,
+        minifyStyles: false, removeMetadata: true, removeViewBox: true
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test('removeEmptyElements removes empty groups and text by default, and keeps them when false', async () => {
+    expect(await optimizeSvg(withEmptyText)).not.toMatch(/<g|<text/);
+    const kept = await optimizeSvg(withEmptyText, { removeEmptyElements: false });
+    expect(kept).toContain('<g');
+    expect(kept).toContain('<text');
+  });
+
+  test('removeUnusedDefs removes unreferenced definitions by default, and keeps them when false', async () => {
+    expect(await optimizeSvg(withUnusedDefs)).not.toContain('linearGradient');
+    expect(await optimizeSvg(withUnusedDefs, { removeUnusedDefs: false })).toContain('linearGradient');
+  });
+
+  test('removeMetadata keeps <metadata> by default, and removes it when true', async () => {
+    expect(await optimizeSvg(withMetadata)).toContain('<metadata>');
+    expect(await optimizeSvg(withMetadata, { removeMetadata: true })).not.toContain('<metadata>');
+  });
+
+  test('removeViewBox keeps viewBox by default, and removes it when true', async () => {
+    expect(await optimizeSvg(withViewBox)).toContain('viewBox');
+    expect(await optimizeSvg(withViewBox, { removeViewBox: true })).not.toContain('viewBox');
+  });
+
+  test('removeMetadata and removeViewBox are advertised', () => {
+    const options = (svgOptimizeTool.inputSchema.properties as Record<string, { properties: Record<string, { type?: string; default?: unknown }> }>).options;
+    expect(options.properties.removeMetadata).toMatchObject({ type: 'boolean', default: false });
+    expect(options.properties.removeViewBox).toMatchObject({ type: 'boolean', default: false });
   });
 });

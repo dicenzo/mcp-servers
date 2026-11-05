@@ -174,11 +174,13 @@ export const SVGOptimizeInputSchema = z.object({
     .describe('SVG content to optimize (as string). DOCTYPE/ENTITY declarations are rejected; scripts, event handlers, foreignObject and external links are removed from the output.'),
   options: z.object({
     removeComments: z.boolean().default(true).describe('Remove XML comments from SVG'),
-    removeEmptyElements: z.boolean().default(true).describe('Remove empty elements and groups'),
+    removeEmptyElements: z.boolean().default(true).describe('Remove empty groups and empty text elements'),
     mergePaths: z.boolean().default(true).describe('Merge adjacent paths when possible'),
     precision: z.number().min(1).max(10).default(3).describe('Decimal precision for numeric values'),
-    removeUnusedDefs: z.boolean().default(true).describe('Remove unused definitions'),
-    minifyStyles: z.boolean().default(true).describe('Minify CSS styles')
+    removeUnusedDefs: z.boolean().default(true).describe('Remove definitions that nothing references. False also keeps hidden elements, which SVGO removes in the same pass'),
+    minifyStyles: z.boolean().default(true).describe('Minify CSS styles'),
+    removeMetadata: z.boolean().default(false).describe('Remove <metadata> elements, which often carry licence or authorship data'),
+    removeViewBox: z.boolean().default(false).describe('Remove viewBox when it matches width and height (the SVG then no longer scales)')
   }).optional().describe('Optimization options to control the optimization process')
 });
 
