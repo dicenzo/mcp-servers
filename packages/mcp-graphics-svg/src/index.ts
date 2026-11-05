@@ -4,7 +4,9 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
+  ErrorCode,
   ListToolsRequestSchema,
+  McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { svgCreateTool } from './tools/svgCreate.js';
@@ -13,6 +15,7 @@ import { svgTransformTool } from './tools/svgTransform.js';
 import { svgPathOperationsTool } from './tools/svgPathOperations.js';
 import { wireframeToSvgTool } from './tools/wireframeToSvg.js';
 import { svgbobToSvgTool } from './tools/svgbobToSvg.js';
+import { errorResult } from './util/toolResult.js';
 
 /**
  * MCP Server for SVG graphics operations
@@ -70,12 +73,16 @@ class SVGGraphicsServer {
           case 'svgbob.to.svg':
             return await (svgbobToSvgTool as any).invoke(args);
           default:
-            throw new Error(`Unknown tool: ${name}`);
+            throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }
       } catch (error) {
+        // Unknown tools stay protocol errors; anything a tool throws is a tool error
+        if (error instanceof McpError) {
+          throw error;
+        }
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.error(`[MCP SVG Graphics] Tool error for ${name}: ${errorMessage}`);
-        throw new Error(`Tool execution failed: ${errorMessage}`);
+        return errorResult(name, error);
       }
     });
   }

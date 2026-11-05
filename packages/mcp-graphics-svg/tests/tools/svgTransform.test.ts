@@ -91,7 +91,7 @@ describe('svg.transform Tool', () => {
       expect(response.svg).toContain('skewY(10)');
     });
 
-    test('rejects matrix transformation (not in schema)', async () => {
+    test('applies matrix transformation', async () => {
       const input = {
         svg: baseSVG,
         transforms: [{
@@ -102,10 +102,9 @@ describe('svg.transform Tool', () => {
 
       const result = await svgTransformTool.invoke(input);
       
-      // Matrix is not supported in the schema, so it should error
-      expect(result.isError).toBe(true);
+      expect(result.isError).toBeUndefined();
       const response = JSON.parse(result.content[0].text);
-      expect(response.error).toBe(true);
+      expect(response.svg).toMatch(/matrix\(1,\s*0,\s*0,\s*1,\s*20,\s*30\)/);
     });
   });
 
@@ -265,12 +264,22 @@ describe('svg.transform Tool', () => {
       }
     });
 
-    test('rejects matrix type (not supported in schema)', async () => {
+    test('rejects skewX with more than 1 value instead of falling back to string transforms', async () => {
+      const result = await svgTransformTool.invoke({
+        svg: baseSVG,
+        transforms: [{ type: 'skewX', values: [10, 20] }]
+      });
+
+      expect(result.isError).toBe(true);
+      expect(JSON.parse(result.content[0].text).message).toMatch(/skewX requires 1 value/);
+    });
+
+    test('rejects a matrix with fewer than 6 values', async () => {
       const input = {
         svg: baseSVG,
         transforms: [{
           type: 'matrix',
-          values: [1, 0, 0] // Matrix type not in schema
+          values: [1, 0, 0] // a, b, c, d, e, f are all required
         }]
       };
 

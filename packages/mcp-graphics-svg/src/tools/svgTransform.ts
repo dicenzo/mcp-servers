@@ -4,11 +4,11 @@ import {
   SVGTransformInputSchema, 
   SVGTransformInput, 
   SVGErrorCode,
-  SVG_ID_PATTERN,
-  SVG_LIMITS
+  SVG_ID_PATTERN
 } from '../types/svg.js';
 import { SVGValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<any>;
@@ -28,50 +28,7 @@ interface Transform {
 export const svgTransformTool: ExecutableTool = {
   name: 'svg.transform',
   description: 'Apply geometric transformations (translate, rotate, scale, skew) to SVG elements',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      svg: {
-        type: 'string',
-        maxLength: SVG_LIMITS.MAX_SVG_LENGTH,
-        description: 'SVG content to transform'
-      },
-      transforms: {
-        type: 'array',
-        maxItems: SVG_LIMITS.MAX_TRANSFORMS,
-        items: {
-          type: 'object',
-          properties: {
-            type: {
-              enum: ['translate', 'rotate', 'scale', 'skewX', 'skewY', 'matrix'],
-              description: 'Type of transformation to apply'
-            },
-            values: {
-              type: 'array',
-              items: { type: 'number' },
-              description: 'Transformation parameters (varies by transform type)'
-            },
-            element: {
-              type: 'string',
-              maxLength: SVG_LIMITS.MAX_SHORT_STRING_LENGTH,
-              description: 'CSS selector or element ID to target (optional, applies to all if not specified). ID selectors must match #[A-Za-z_][A-Za-z0-9_.:-]*'
-            },
-            origin: {
-              type: 'object',
-              properties: {
-                x: { type: 'number' },
-                y: { type: 'number' }
-              },
-              description: 'Transform origin point'
-            }
-          },
-          required: ['type', 'values']
-        },
-        description: 'Array of transformations to apply'
-      }
-    },
-    required: ['svg', 'transforms']
-  },
+  inputSchema: toolInputSchema(SVGTransformInputSchema),
 
   async invoke(args: unknown) {
     try {
@@ -143,6 +100,11 @@ export const svgTransformTool: ExecutableTool = {
  * Applies transformations to SVG content
  */
 async function applyTransformations(svgContent: string, transforms: Transform[]): Promise<string> {
+  // Checked up front: an invalid transform must fail the call, not send it to the fallback
+  for (const transform of transforms) {
+    validateTransformParameters(transform.type, transform.values);
+  }
+
   try {
             // Parse SVG using @svgdotjs/svg.js
     const draw = SVG(svgContent) as Svg;
@@ -165,9 +127,6 @@ async function applyTransformations(svgContent: string, transforms: Transform[])
  */
 async function applyTransformation(draw: Svg, transform: Transform): Promise<void> {
   const { type, values, element, origin } = transform;
-  
-  // Validate transformation parameters
-  validateTransformParameters(type, values);
   
   // Select elements to transform
   let elements: List<Element>;

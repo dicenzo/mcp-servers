@@ -3,12 +3,15 @@ import { z } from 'zod';
 import { SVG, getWindow, registerWindow, type Container } from '@svgdotjs/svg.js';
 import { SVG_LIMITS } from '../types/svg.js';
 import { toCharGrid } from '../util/asciiGrid.js';
+import { SVGValidator } from '../util/validation.js';
+import { errorResult } from '../util/toolResult.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<any>;
 }
 
-const WireframeToSvgSchema = z.object({
+export const WireframeToSvgSchema = z.object({
   wireframe_text: z.string().max(SVG_LIMITS.MAX_TEXT_LENGTH).describe('ASCII wireframe text to convert'),
   width: z.number().default(800).describe('Output SVG width'),
   height: z.number().default(600).describe('Output SVG height'),
@@ -24,45 +27,16 @@ const WireframeToSvgSchema = z.object({
 export const wireframeToSvgTool: ExecutableTool = {
   name: 'wireframe.to.svg',
   description: 'Convert ASCII wireframes from markdown to clean SVG graphics',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      wireframe_text: {
-        type: 'string',
-        description: 'ASCII wireframe text to convert'
-      },
-      width: {
-        type: 'number',
-        default: 800,
-        description: 'Output SVG width'
-      },
-      height: {
-        type: 'number',
-        default: 600,
-        description: 'Output SVG height'
-      },
-      style: {
-        type: 'string',
-        enum: ['minimal', 'detailed', 'interactive'],
-        default: 'minimal',
-        description: 'Wireframe style'
-      },
-      colors: {
-        type: 'object',
-        properties: {
-          border: { type: 'string', default: '#333333' },
-          background: { type: 'string', default: '#ffffff' },
-          text: { type: 'string', default: '#000000' },
-          accent: { type: 'string', default: '#0066cc' }
-        },
-        description: 'Color scheme for wireframe'
-      }
-    },
-    required: ['wireframe_text']
-  },
+  inputSchema: toolInputSchema(WireframeToSvgSchema),
   invoke: async (args: unknown) => {
-    const validatedArgs = WireframeToSvgSchema.parse(args);
-    const svg = await executeWireframeToSvg(validatedArgs);
+    let svg: string;
+    try {
+      const validatedArgs = SVGValidator.validateInput(WireframeToSvgSchema, args);
+      svg = await executeWireframeToSvg(validatedArgs);
+    } catch (error) {
+      console.error('[wireframe.to.svg] Error:', error);
+      return errorResult('wireframe.to.svg', error);
+    }
     return {
       content: [
         {

@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { SVG_LIMITS } from '../types/svg.js';
 import { SVGValidator, escapeXML } from '../util/validation.js';
 import { toCharGrid } from '../util/asciiGrid.js';
+import { errorResult } from '../util/toolResult.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<any>;
@@ -21,7 +23,7 @@ const colorString = z
     }
   }, { message: 'Invalid color format' });
 
-const SvgbobToSvgSchema = z.object({
+export const SvgbobToSvgSchema = z.object({
   ascii_art: z.string().max(SVG_LIMITS.MAX_TEXT_LENGTH).describe('ASCII art to convert to SVG'),
   scale: z.number().default(1).describe('Scale factor for the output'),
   stroke_width: z.number().default(2).describe('Stroke width for lines'),
@@ -35,55 +37,16 @@ const SvgbobToSvgSchema = z.object({
 export const svgbobToSvgTool: ExecutableTool = {
   name: 'svgbob.to.svg',
   description: 'Convert ASCII art diagrams to SVG using svgbob-style rendering',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      ascii_art: {
-        type: 'string',
-        maxLength: SVG_LIMITS.MAX_TEXT_LENGTH,
-        description: 'ASCII art to convert to SVG'
-      },
-      scale: {
-        type: 'number',
-        default: 1,
-        description: 'Scale factor for the output'
-      },
-      stroke_width: {
-        type: 'number',
-        default: 2,
-        description: 'Stroke width for lines'
-      },
-      background: {
-        type: 'string',
-        default: 'transparent',
-        description: 'Background color'
-      },
-      stroke_color: {
-        type: 'string',
-        default: '#000000',
-        description: 'Stroke color'
-      },
-      font_family: {
-        type: 'string',
-        default: 'monospace',
-        description: 'Font family for text'
-      },
-      font_size: {
-        type: 'number',
-        default: 14,
-        description: 'Font size for text'
-      },
-      fill_color: {
-        type: 'string',
-        default: 'none',
-        description: 'Fill color for shapes'
-      }
-    },
-    required: ['ascii_art']
-  },
+  inputSchema: toolInputSchema(SvgbobToSvgSchema),
   invoke: async (args: unknown) => {
-    const validatedArgs = SvgbobToSvgSchema.parse(args);
-    const svg = await executeSvgbobToSvg(validatedArgs);
+    let svg: string;
+    try {
+      const validatedArgs = SVGValidator.validateInput(SvgbobToSvgSchema, args);
+      svg = await executeSvgbobToSvg(validatedArgs);
+    } catch (error) {
+      console.error('[svgbob.to.svg] Error:', error);
+      return errorResult('svgbob.to.svg', error);
+    }
     return {
       content: [
         {
