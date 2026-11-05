@@ -20,6 +20,7 @@ import { templateLibraryComposeTool } from './tools/templateLibraryCompose.js';
 // Import utilities
 import { PerformanceMonitor } from './util/performance.js';
 import { TemplateExporter } from './util/export.js';
+import { failureResult } from './util/toolResult.js';
 
 // Server information
 const SERVER_INFO = {
@@ -142,15 +143,17 @@ class MCPTemplatesServer {
         
         console.error(`[MCP Templates] Tool error for ${name}: ${errorMessage} (${duration.toFixed(2)}ms)`);
         
-        // Return structured error response
+        // Unknown tools stay protocol errors. The tools catch their own failures, so
+        // this only reports something unexpected, still as a tool error.
         if (error instanceof McpError) {
           throw error;
         }
         
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Tool execution failed: ${errorMessage}`
-        );
+        return failureResult({
+          success: false,
+          error: `Tool execution failed: ${errorMessage}`,
+          tool: name
+        });
       }
     });
   }

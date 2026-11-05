@@ -10,6 +10,8 @@ import {
 } from '../types/template.js';
 import { TemplateValidator, PerformanceValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
+import { failureResult } from '../util/toolResult.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<CallToolResult>;
@@ -21,47 +23,7 @@ interface ExecutableTool extends Tool {
 export const templateValidateTool: ExecutableTool = {
   name: 'template.validate',
   description: 'Validate template structure, components, and variable definitions',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      template: {
-        type: 'object',
-        description: 'Template to validate'
-      },
-      variables: {
-        type: 'object',
-        description: 'Optional variables to validate against template',
-        additionalProperties: true
-      },
-      options: {
-        type: 'object',
-        properties: {
-          strict: {
-            type: 'boolean',
-            default: false,
-            description: 'Enable strict validation mode'
-          },
-          checkPerformance: {
-            type: 'boolean',
-            default: true,
-            description: 'Check performance constraints'
-          },
-          validateReferences: {
-            type: 'boolean',
-            default: true,
-            description: 'Validate variable references in components'
-          },
-          includeWarnings: {
-            type: 'boolean',
-            default: true,
-            description: 'Include warnings in validation report'
-          }
-        },
-        description: 'Validation options'
-      }
-    },
-    required: ['template']
-  },
+  inputSchema: toolInputSchema(TemplateValidateInputSchema),
 
   async invoke(args: unknown) {
     const monitor = PerformanceMonitor.getInstance();
@@ -73,7 +35,7 @@ export const templateValidateTool: ExecutableTool = {
       // Validate input
       const validatedInput = TemplateValidateInputSchema.parse(args);
       const { template, variables } = validatedInput;
-      const options = validatedInput.options || {};
+      const { options } = validatedInput;
 
       // Perform basic template validation
       let validationReport: ValidationReport;
@@ -174,12 +136,7 @@ export const templateValidateTool: ExecutableTool = {
         ]
       };
 
-      return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify(errorResult, null, 2)
-        }]
-      };
+      return failureResult(errorResult);
     }
   }
 };
