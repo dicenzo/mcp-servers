@@ -12,6 +12,7 @@ import {
 } from '../types/svg.js';
 import { SVGValidator, PerformanceValidator, escapeXML } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 /**
  * SVG Creation Tool - Generates SVG documents from structured input
@@ -19,109 +20,7 @@ import { PerformanceMonitor } from '../util/performance.js';
 export const svgCreateTool: ExecutableTool = {
   name: 'svg.create',
   description: 'Generate a new SVG document with specified elements and properties',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      width: {
-        type: 'number',
-        minimum: 1,
-        maximum: 10000,
-        description: 'SVG width in pixels'
-      },
-      height: {
-        type: 'number', 
-        minimum: 1,
-        maximum: 10000,
-        description: 'SVG height in pixels'
-      },
-      viewBox: {
-        type: 'object',
-        properties: {
-          x: { type: 'number', default: 0 },
-          y: { type: 'number', default: 0 },
-          width: { type: 'number', minimum: 1 },
-          height: { type: 'number', minimum: 1 }
-        },
-        required: ['width', 'height'],
-        description: 'SVG viewBox for scalability'
-      },
-      elements: {
-        type: 'array',
-        maxItems: SVG_LIMITS.MAX_ELEMENTS,
-        items: {
-          oneOf: [
-            {
-              type: 'object',
-              properties: {
-                type: { const: 'rect' },
-                x: { type: 'number', default: 0 },
-                y: { type: 'number', default: 0 },
-                width: { type: 'number', minimum: 0 },
-                height: { type: 'number', minimum: 0 },
-                rx: { type: 'number', minimum: 0 },
-                ry: { type: 'number', minimum: 0 },
-                fill: { type: 'string' },
-                stroke: { type: 'string' },
-                strokeWidth: { type: 'number' }
-              },
-              required: ['type', 'width', 'height']
-            },
-            {
-              type: 'object',
-              properties: {
-                type: { const: 'circle' },
-                cx: { type: 'number', default: 0 },
-                cy: { type: 'number', default: 0 },
-                r: { type: 'number', minimum: 0 },
-                fill: { type: 'string' },
-                stroke: { type: 'string' },
-                strokeWidth: { type: 'number' }
-              },
-              required: ['type', 'r']
-            },
-            {
-              type: 'object',
-              properties: {
-                type: { const: 'path' },
-                d: { type: 'string', maxLength: SVG_LIMITS.MAX_PATH_LENGTH },
-                fill: { type: 'string' },
-                stroke: { type: 'string' },
-                strokeWidth: { type: 'number' }
-              },
-              required: ['type', 'd']
-            },
-            {
-              type: 'object',
-              properties: {
-                type: { const: 'text' },
-                x: { type: 'number', default: 0 },
-                y: { type: 'number', default: 0 },
-                content: { type: 'string', maxLength: SVG_LIMITS.MAX_TEXT_LENGTH },
-                fontSize: { type: 'number', minimum: 1 },
-                fontFamily: { type: 'string' },
-                fill: { type: 'string' }
-              },
-              required: ['type', 'content']
-            }
-          ]
-        },
-        description: 'Array of SVG elements to include in the document'
-      },
-      metadata: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          description: { type: 'string' },
-          keywords: { 
-            type: 'array',
-            items: { type: 'string' }
-          }
-        },
-        description: 'Optional metadata for the SVG document'
-      }
-    },
-    required: ['width', 'height', 'elements']
-  },
+  inputSchema: toolInputSchema(SVGCreateInputSchema),
 
   async invoke(args: unknown) {
     try {

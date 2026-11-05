@@ -83,20 +83,20 @@ describe('svgbobToSvg Tool', () => {
       expect(result.content[0].text).toContain('font-size="16"');
     });
 
-    it('should throw error for invalid arguments', async () => {
+    it('should return an error result for invalid arguments', async () => {
       const invalidArgs = {
         ascii_art: 123 // Should be string
       };
 
-      await expect(svgbobToSvgTool.invoke(invalidArgs)).rejects.toThrow();
+      expect((await svgbobToSvgTool.invoke(invalidArgs)).isError).toBe(true);
     });
 
-    it('should throw error for missing required field', async () => {
+    it('should return an error result for missing required field', async () => {
       const invalidArgs = {
         scale: 2 // Missing required ascii_art
       };
 
-      await expect(svgbobToSvgTool.invoke(invalidArgs)).rejects.toThrow();
+      expect((await svgbobToSvgTool.invoke(invalidArgs)).isError).toBe(true);
     });
   });
 
@@ -369,6 +369,10 @@ describe('svgbobToSvg Tool', () => {
 describe('svgbob.to.svg security hardening', () => {
   const render = async (args: Record<string, unknown>) => {
     const result = await svgbobToSvgTool.invoke({ ascii_art: '+-+\n|x|\n+-+', ...args });
+    // A rejected call comes back flagged isError; surface it as a rejection
+    if (result.isError) {
+      throw new Error(result.content[0].text);
+    }
     return result.content[0].text as string;
   };
 

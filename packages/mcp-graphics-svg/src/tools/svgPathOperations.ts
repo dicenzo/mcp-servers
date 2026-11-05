@@ -7,6 +7,7 @@ import {
 } from '../types/svg.js';
 import { SVGValidator } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<any>;
@@ -18,40 +19,7 @@ interface ExecutableTool extends Tool {
 export const svgPathOperationsTool: ExecutableTool = {
   name: 'svg.path.operations',
   description: 'Perform boolean operations (union, intersect, subtract, exclude) on SVG paths',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      path1: {
-        type: 'string',
-        maxLength: SVG_LIMITS.MAX_PATH_LENGTH,
-        description: 'First SVG path data string (d attribute value)'
-      },
-      path2: {
-        type: 'string',
-        maxLength: SVG_LIMITS.MAX_PATH_LENGTH,
-        description: 'Second SVG path data string (d attribute value)'
-      },
-      operation: {
-        enum: ['union', 'intersect', 'subtract', 'exclude'],
-        description: 'Boolean operation to perform on the paths'
-      },
-      precision: {
-        type: 'number',
-        minimum: 1,
-        maximum: 10,
-        default: 3,
-        description: 'Decimal precision for result coordinates'
-      },
-      tolerance: {
-        type: 'number',
-        minimum: 0.001,
-        maximum: 1.0,
-        default: 0.1,
-        description: 'Tolerance for path intersection calculations'
-      }
-    },
-    required: ['path1', 'path2', 'operation']
-  },
+  inputSchema: toolInputSchema(SVGPathOperationsInputSchema),
 
   async invoke(args: unknown) {
     try {

@@ -3,11 +3,11 @@ import { optimize } from 'svgo';
 import { 
   SVGOptimizeInputSchema, 
   SVGOptimizeInput, 
-  SVGErrorCode,
-  SVG_LIMITS
+  SVGErrorCode
 } from '../types/svg.js';
 import { SVGValidator, SVGSanitizer } from '../util/validation.js';
 import { PerformanceMonitor } from '../util/performance.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<any>;
@@ -19,65 +19,7 @@ interface ExecutableTool extends Tool {
 export const svgOptimizeTool: ExecutableTool = {
   name: 'svg.optimize',
   description: 'Optimize SVG for smaller file size and better performance while preserving visual quality',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      svg: {
-        type: 'string',
-        maxLength: SVG_LIMITS.MAX_SVG_LENGTH,
-        description: 'SVG content to optimize (as string). DOCTYPE/ENTITY declarations are rejected; scripts, event handlers, foreignObject and external links are removed from the output.'
-      },
-      options: {
-        type: 'object',
-        properties: {
-          removeComments: {
-            type: 'boolean',
-            default: true,
-            description: 'Remove XML comments from SVG'
-          },
-          removeEmptyElements: {
-            type: 'boolean',
-            default: true,
-            description: 'Remove empty elements and groups'
-          },
-          mergePaths: {
-            type: 'boolean',
-            default: true,
-            description: 'Merge adjacent paths when possible'
-          },
-          precision: {
-            type: 'number',
-            minimum: 1,
-            maximum: 10,
-            default: 3,
-            description: 'Decimal precision for numeric values'
-          },
-          removeUnusedDefs: {
-            type: 'boolean',
-            default: true,
-            description: 'Remove unused definitions'
-          },
-          minifyStyles: {
-            type: 'boolean',
-            default: true,
-            description: 'Minify CSS styles'
-          },
-          removeMetadata: {
-            type: 'boolean',
-            default: false,
-            description: 'Remove metadata and non-essential information'
-          },
-          removeViewBox: {
-            type: 'boolean',
-            default: false,
-            description: 'Remove viewBox attribute (not recommended for responsive SVGs)'
-          }
-        },
-        description: 'Optimization options to control the optimization process'
-      }
-    },
-    required: ['svg']
-  },
+  inputSchema: toolInputSchema(SVGOptimizeInputSchema),
 
   async invoke(args: unknown) {
     try {

@@ -74,29 +74,29 @@ describe('wireframeToSvg Tool', () => {
       expect(result).toBeDefined();
     });
 
-    it('should throw error for invalid arguments', async () => {
+    it('should return an error result for invalid arguments', async () => {
       const invalidArgs = {
         wireframe_text: 123 // Should be string
       };
 
-      await expect(wireframeToSvgTool.invoke(invalidArgs)).rejects.toThrow();
+      expect((await wireframeToSvgTool.invoke(invalidArgs)).isError).toBe(true);
     });
 
-    it('should throw error for missing required field', async () => {
+    it('should return an error result for missing required field', async () => {
       const invalidArgs = {
         width: 800 // Missing required wireframe_text
       };
 
-      await expect(wireframeToSvgTool.invoke(invalidArgs)).rejects.toThrow();
+      expect((await wireframeToSvgTool.invoke(invalidArgs)).isError).toBe(true);
     });
 
-    it('should throw error for invalid style', async () => {
+    it('should return an error result for invalid style', async () => {
       const invalidArgs = {
         wireframe_text: 'test',
         style: 'invalid_style'
       };
 
-      await expect(wireframeToSvgTool.invoke(invalidArgs)).rejects.toThrow();
+      expect((await wireframeToSvgTool.invoke(invalidArgs)).isError).toBe(true);
     });
   });
 
@@ -164,13 +164,13 @@ describe('wireframeToSvg Tool', () => {
 });
 describe('wireframe.to.svg input caps', () => {
   it('rejects wireframe text larger than the text cap', async () => {
-    await expect(wireframeToSvgTool.invoke({ wireframe_text: 'x'.repeat(SVG_LIMITS.MAX_TEXT_LENGTH + 1) })).rejects.toThrow();
+    expect((await wireframeToSvgTool.invoke({ wireframe_text: 'x'.repeat(SVG_LIMITS.MAX_TEXT_LENGTH + 1) })).isError).toBe(true);
   });
 
   it('rejects color strings longer than the short-string cap', async () => {
-    await expect(wireframeToSvgTool.invoke({
+    expect((await wireframeToSvgTool.invoke({
       wireframe_text: 'Hello',
       colors: { border: '#'.repeat(SVG_LIMITS.MAX_SHORT_STRING_LENGTH + 1), background: '#fff', text: '#000', accent: '#00f' }
-    })).rejects.toThrow();
+    })).isError).toBe(true);
   });
 });
