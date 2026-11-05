@@ -75,11 +75,13 @@ export const FontMetadataSchema = z.object({
 
 // Text Shaping Types
 export const ShapingOptionsSchema = z.object({
-  direction: z.enum(['ltr', 'rtl', 'ttb', 'btt']).default('ltr').describe('Text direction'),
-  script: z.string().default('latn').describe('Script code (ISO 15924)'),
-  language: z.string().default('und').describe('Language code (ISO 639)'),
+  direction: z.enum(['ltr', 'rtl', 'ttb', 'btt']).optional()
+    .describe('Paragraph direction. When omitted it comes from the first strong character; mixed-direction text is reordered with the Unicode bidi algorithm either way'),
+  script: z.string().optional()
+    .describe('Script code (ISO 15924) to shape the whole text as. When omitted each run of one script is shaped as that script'),
+  language: z.string().default('und').describe('Language code (ISO 639), for language-specific forms'),
   features: z.record(z.string(), z.union([z.boolean(), z.number()])).optional()
-    .describe('OpenType features to enable/disable'),
+    .describe('OpenType features to enable/disable, such as { "liga": false, "smcp": true, "salt": 2 }. Defaults are the script\'s usual features (ligatures, kerning, contextual forms)'),
   fontSize: z.number().positive().default(16).describe('Font size in pixels'),
   letterSpacing: z.number().default(0).describe('Additional letter spacing'),
   wordSpacing: z.number().default(0).describe('Additional word spacing'),
@@ -112,6 +114,13 @@ export const ShapedTextSchema = z.object({
   direction: z.enum(['ltr', 'rtl', 'ttb', 'btt']),
   script: z.string(),
   language: z.string(),
+  runs: z.array(z.object({
+    start: z.number(),
+    end: z.number(),
+    direction: z.enum(['ltr', 'rtl', 'ttb', 'btt']),
+    script: z.string(),
+    level: z.number()
+  })),
   features: z.record(z.string(), z.union([z.boolean(), z.number()])).optional()
 });
 
@@ -269,9 +278,10 @@ export const MeasureTextInputSchema = z.object({
   options: z.object({
     letterSpacing: z.number().default(0).describe('Additional letter spacing'),
     wordSpacing: z.number().default(0).describe('Additional word spacing'),
-    direction: z.enum(['ltr', 'rtl']).default('ltr').describe('Text direction'),
-    script: z.string().default('latn').describe('Script code'),
-    language: z.string().default('und').describe('Language code'),
+    direction: z.enum(['ltr', 'rtl']).optional()
+      .describe('Paragraph direction. When omitted it comes from the first strong character'),
+    script: z.string().optional().describe('Script code (ISO 15924) to shape the whole text as. When omitted it comes from the text'),
+    language: z.string().default('und').describe('Language code (ISO 639)'),
     includeCharacterMetrics: z.boolean().default(false).describe('Include per-character metrics')
   }).optional()
 });

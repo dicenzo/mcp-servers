@@ -11,8 +11,7 @@ import {
   TypographyErrorCode 
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
-import { layoutGlyphRun } from '../util/glyphRun.js';
-import { parseFont } from '../util/parseFont.js';
+import { shapeLine } from '../util/shaping.js';
 import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
@@ -120,99 +119,43 @@ export const shapeTextTool: ExecutableTool = {
 };
 
 /**
- * Performs text shaping using HarfBuzz
+ * Shapes text with HarfBuzz (see util/shaping.ts)
  */
 async function performTextShaping(
-  text: string, 
-  fontBuffer: Buffer, 
+  text: string,
+  fontBuffer: Buffer,
   options: Partial<ShapingOptions>
 ): Promise<ShapedText> {
   try {
-    // For now, use basic shaping since HarfBuzz WASM is not available
-    // In a production environment, you would implement HarfBuzz integration
-    return performBasicShaping(text, fontBuffer, options);
-    
-  } catch (error) {
-    throw new Error(JSON.stringify({
-      code: TypographyErrorCode.SHAPING_FAILED,
-      message: `HarfBuzz shaping failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      suggestions: [
-        'Check if the font supports the specified script and language',
-        'Verify OpenType features are valid for this font',
-        'Try with basic shaping options'
-      ]
-    }));
-  }
-}
-
-/**
- * Performs basic text shaping as fallback when HarfBuzz is not available
- */
-async function performBasicShaping(
-  text: string, 
-  fontBuffer: Buffer, 
-  options: Partial<ShapingOptions>
-): Promise<ShapedText> {
-  try {
-    // Use opentype.js for basic shaping
-    const font = await parseFont(fontBuffer);
-    
-    const fontSize = options.fontSize || 16;
-    
-    const glyphs: GlyphInfo[] = [];
-    const clusters: number[] = [];
-    let totalAdvanceX = 0;
-    const totalAdvanceY = 0;
-    
-    // Character-to-glyph mapping with pair kerning (off with features: { kern: false })
-    const run = layoutGlyphRun(font, text, {
-      fontSize,
-      kerning: !(options.features && [false, 0].includes(options.features.kern)),
+    const line = await shapeLine(fontBuffer, text, {
+      fontSize: options.fontSize ?? 16,
+      direction: options.direction,
+      script: options.script,
+      language: options.language,
+      features: options.features,
+      variations: options.variations,
       letterSpacing: options.letterSpacing,
       wordSpacing: options.wordSpacing
     });
-    for (const { glyph, codepoint, cluster, advance } of run) {
-      const glyphInfo: GlyphInfo = {
-        glyphId: glyph.index || 0,
-        cluster,
-        codepoint,
-        advance: {
-          x: advance,
-          y: 0
-        },
-        offset: {
-          x: 0,
-          y: 0
-        },
-        flags: 0
-      };
-      
-      glyphs.push(glyphInfo);
-      clusters.push(cluster);
-      totalAdvanceX += advance;
-    }
-    
+    const glyphs: GlyphInfo[] = line.glyphs;
     return {
       glyphs,
-      advance: {
-        x: totalAdvanceX,
-        y: totalAdvanceY
-      },
-      clusters,
-      direction: options.direction || 'ltr',
-      script: options.script || 'latn', 
-      language: options.language || 'und',
+      advance: line.advance,
+      clusters: glyphs.map(glyph => glyph.cluster),
+      direction: line.direction,
+      script: options.script ?? line.runs[0]?.script ?? 'Zyyy',
+      language: options.language ?? 'und',
+      runs: line.runs,
       features: options.features
     };
-    
   } catch (error) {
     throw new Error(JSON.stringify({
       code: TypographyErrorCode.SHAPING_FAILED,
-      message: `Basic shaping failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      message: `Text shaping failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       suggestions: [
         'Check if the font file is valid',
-        'Try with a different font',
-        'Verify the text contains supported characters'
+        'Check if the font supports the specified script and language',
+        'Verify OpenType features are valid for this font'
       ]
     }));
   }
