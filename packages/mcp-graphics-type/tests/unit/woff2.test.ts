@@ -39,9 +39,7 @@ describe('WOFF2 fonts are decompressed before parsing', () => {
   test('type.validateFont and type.generateFallback accept a WOFF2 font', async () => {
     const validated = resultOf(await validateFontTool.invoke({ font: asInput(woff2) }));
     expect(validated.error).toBeUndefined();
-    // isValid is false for every font until the hmtx check is fixed (see backlog), so check parsing only
-    const codes = validated.validation.errors.map((error: { code: string }) => error.code);
-    expect(codes).not.toContain('PARSE_ERROR');
+    expect(validated.validation.isValid).toBe(true);
     const fallback = resultOf(await generateFallbackTool.invoke({ primaryFont: asInput(woff2) }));
     expect(fallback.error).toBeUndefined();
   });

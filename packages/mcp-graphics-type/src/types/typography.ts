@@ -222,7 +222,7 @@ export const SystemFontStackSchema = z.object({
 // Font Validation Types
 export const FontValidationReportSchema = z.object({
   isValid: z.boolean(),
-  format: z.enum(['ttf', 'otf', 'woff', 'woff2', 'unknown']).optional(),
+  format: z.enum(['ttf', 'otf', 'woff', 'woff2', 'ttc', 'unknown']).optional(),
   version: z.string().optional(),
   errors: z.array(z.object({
     code: z.string(),
@@ -310,7 +310,7 @@ export const ValidateFontInputSchema = z.object({
     targetPlatforms: z.array(z.string()).default(['web']).describe('Platforms to test compatibility for'),
     maxFileSize: z.number().optional().describe('Maximum acceptable file size in bytes'),
     requiredFeatures: z.array(z.string()).optional().describe('OpenType features that must be present')
-  }).optional()
+  }).prefault({})
 });
 
 // Type exports
