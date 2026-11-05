@@ -191,6 +191,37 @@ export const FlexLayoutSchema = z.object({
 
 export const LayoutSchema = z.union([GridLayoutSchema, FlexLayoutSchema]);
 
+// Layouts passed back into a tool advertise only the fields it reads, which keeps
+// the tool listing small. Extra fields (such as the rest of a layout.createGrid
+// result) are accepted and stripped.
+
+const ElementPositionsSchema = z.array(z.object({
+  id: identifier(),
+  bounds: RectangleSchema
+})).max(MAX_ELEMENTS);
+
+/** What layout.measure reads: the type, the container and the computed element positions */
+export const MeasuredLayoutSchema = z.union([
+  z.object({
+    type: z.literal('grid'),
+    bounds: RectangleSchema,
+    computedGrid: z.object({ elementPositions: ElementPositionsSchema.optional() }).optional()
+      .describe('Element positions from layout.createGrid, used when no element has bounds')
+  }),
+  z.object({
+    type: z.literal('flex'),
+    bounds: RectangleSchema,
+    computedFlex: z.object({ elementPositions: ElementPositionsSchema }).optional()
+      .describe('Element positions from layout.createFlex, used when no element has bounds')
+  })
+]);
+
+/** What layout.responsive reads: the grid or flex definition; positions are recomputed per breakpoint */
+export const BaseLayoutSchema = z.union([
+  GridLayoutSchema.omit({ computedGrid: true }),
+  FlexLayoutSchema.omit({ computedFlex: true })
+]);
+
 export const ResponsiveLayoutSchema = z.object({
   breakpoints: z.array(BreakpointSchema).max(MAX_BREAKPOINTS),
   layouts: z.record(z.string(), LayoutSchema) // keyed by breakpoint name
@@ -265,7 +296,7 @@ export const AutoLayoutInputSchema = z.object({
 
 export const ResponsiveInputSchema = z.object({
   elements: LayoutElementListSchema.describe('Elements in the layout'),
-  baseLayout: LayoutSchema.describe('Grid or flex layout to adapt at each breakpoint'),
+  baseLayout: BaseLayoutSchema.describe('Grid or flex layout to adapt at each breakpoint, such as the `layout` returned by layout.createGrid or layout.createFlex'),
   breakpoints: BreakpointListSchema.optional()
     .describe('Breakpoints to use; when omitted (and generateOptimal is false) mobile 0-767, tablet 768-1023 and desktop 1024+'),
   generateOptimal: z.boolean().default(false).describe('Generate optimal breakpoints automatically'),
@@ -274,7 +305,7 @@ export const ResponsiveInputSchema = z.object({
 });
 
 export const MeasureInputSchema = z.object({
-  layout: LayoutSchema.describe('Layout to analyze'),
+  layout: MeasuredLayoutSchema.describe('Layout to analyze, such as the `layout` returned by layout.createGrid or layout.createFlex'),
   elements: LayoutElementListSchema.describe('Elements with their computed positions'),
   includeQualityReport: z.boolean().default(true).describe('Include detailed quality analysis and recommendations'),
   includeAccessibilityCheck: z.boolean().default(true).describe('Include accessibility metrics analysis'),
@@ -295,6 +326,7 @@ export type Breakpoint = z.infer<typeof BreakpointSchema>;
 export type GridLayout = z.infer<typeof GridLayoutSchema>;
 export type FlexLayout = z.infer<typeof FlexLayoutSchema>;
 export type Layout = z.infer<typeof LayoutSchema>;
+export type MeasuredLayout = z.infer<typeof MeasuredLayoutSchema>;
 export type ResponsiveLayout = z.infer<typeof ResponsiveLayoutSchema>;
 export type LayoutMetrics = z.infer<typeof LayoutMetricsSchema>;
 export type AutoLayoutConfig = z.infer<typeof AutoLayoutConfigSchema>;

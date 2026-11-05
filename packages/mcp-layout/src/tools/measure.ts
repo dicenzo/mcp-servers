@@ -1,7 +1,7 @@
 import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   MeasureInputSchema,
-  Layout,
+  MeasuredLayout,
   LayoutElement,
   LayoutMetrics
 } from '../types/layout.js';
@@ -155,7 +155,7 @@ export const measureTool: ExecutableTool = {
   /**
    * Estimate memory footprint
    */
-  estimateMemoryFootprint(layout: Layout, elements: LayoutElement[]): {
+  estimateMemoryFootprint(layout: MeasuredLayout, elements: LayoutElement[]): {
     estimatedBytes: number;
     breakdown: Record<string, number>;
     category: 'light' | 'moderate' | 'heavy' | 'extreme';
@@ -212,7 +212,7 @@ export const measureTool: ExecutableTool = {
    * Generate optimization suggestions
    */
   generateOptimizationSuggestions(
-    layout: Layout,
+    layout: MeasuredLayout,
     elements: LayoutElement[],
     metrics: LayoutMetrics
   ): string[] {
