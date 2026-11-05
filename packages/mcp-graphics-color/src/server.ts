@@ -14,6 +14,7 @@ import { colorGeneratePalette, colorGeneratePaletteTool } from './tools/colorGen
 import { colorBrandMatch, colorBrandMatchTool } from './tools/colorBrandMatch.js';
 import { colorLintBrand, colorLintBrandTool } from './tools/colorLintBrand.js';
 import { colorValidateAccessibility, colorValidateAccessibilityTool } from './tools/colorValidateAccessibility.js';
+import { ColorError, ColorErrorCode } from './types/color.js';
 
 // Server information
 const SERVER_INFO = {
@@ -32,6 +33,14 @@ const PERFORMANCE_TARGETS = {
   'color.lintBrand': 200,     // 200ms for brand linting
   'color.validateAccessibility': 50 // 50ms for accessibility validation
 };
+
+/** A tool result reporting a failed call, with the structured error as its text */
+function errorResult(error: ColorError) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(error, null, 2) }],
+    isError: true
+  };
+}
 
 /**
  * Main MCP Server for Color Operations
@@ -122,7 +131,8 @@ export class MCPColorServer {
         // Log successful tool usage
         console.error(`[INFO] Tool ${name} completed in ${processingTime.toFixed(2)}ms`);
 
-        // Return result in MCP format
+        // Return result in MCP format. A failed tool call is still a result, flagged
+        // with isError so the client shows the model the error and its suggestions.
         if (result.success) {
           return {
             content: [
@@ -132,28 +142,23 @@ export class MCPColorServer {
               }
             ]
           };
-        } else {
-          // Handle tool errors
-          throw new McpError(
-            ErrorCode.InternalError,
-            result.error.message,
-            result.error.details
-          );
         }
+        return errorResult(result.error);
         
       } catch (error) {
         const processingTime = performance.now() - startTime;
         console.error(`[ERROR] Tool ${name} failed after ${processingTime.toFixed(2)}ms:`, error);
         
+        // Unknown tools stay protocol errors; anything a tool throws is a tool error
         if (error instanceof McpError) {
           throw error;
         }
         
-        throw new McpError(
-          ErrorCode.InternalError,
-          error instanceof Error ? error.message : 'Unknown error occurred',
-          { tool: name, processingTime }
-        );
+        return errorResult({
+          code: ColorErrorCode.PROCESSING_FAILED,
+          message: error instanceof Error ? error.message : 'Unknown error occurred',
+          details: { tool: name, processingTime }
+        });
       }
     });
   }

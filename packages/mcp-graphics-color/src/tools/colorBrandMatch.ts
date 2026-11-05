@@ -10,8 +10,8 @@ import {
   ColorErrorCode,
   Color,
   DEFAULT_MAX_DELTA_E,
-  colorInputJsonSchema,
 } from '../types/color.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 /**
  * MCP Tool: color.brandMatch
@@ -337,32 +337,5 @@ function determineConfidence(deltaE: number, maxDeltaE: number): ColorMatch['con
 export const colorBrandMatchTool = {
   name: 'color.brandMatch',
   description: 'Find the best matching color from a brand palette using CIEDE2000 Delta E. Palette entries may be plain colors or { name, color } objects; results report each match\'s palette index, name, whether it falls within maxDeltaE, its alpha difference (Delta E ignores transparency), and a lightness/chroma/hue breakdown with a plain-language summary. Unparseable entries are listed in skipped; entries identical to an earlier one are listed in duplicates and left out of matching.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      targetColor: colorInputJsonSchema,
-      brandPalette: {
-        type: 'array',
-        items: {
-          oneOf: [
-            ...colorInputJsonSchema.oneOf,
-            {
-              type: 'object',
-              properties: {
-                name: { type: 'string', minLength: 1, maxLength: 100 },
-                color: colorInputJsonSchema
-              },
-              required: ['name', 'color']
-            }
-          ]
-        },
-        minItems: 1,
-        maxItems: 50
-      },
-      maxDeltaE: { type: 'number', minimum: 0, maximum: 100, default: DEFAULT_MAX_DELTA_E, description: 'CIEDE2000 distance at or below which a match counts as within threshold (about 1 is just noticeable, 2-3 is close)' },
-      includeAlternatives: { type: 'boolean', default: true },
-      maxAlternatives: { type: 'integer', minimum: 0, maximum: 49, default: 3, description: 'How many runner-up matches to return' }
-    },
-    required: ['targetColor', 'brandPalette']
-  }
+  inputSchema: toolInputSchema(ColorBrandMatchInputSchema)
 };

@@ -6,6 +6,7 @@ import {
   Color,
   ColorErrorCode,
 } from '../types/color.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 /**
  * MCP Tool: color.validateAccessibility
@@ -17,8 +18,8 @@ export const ColorValidateAccessibilityInputSchema = z.object({
   colors: z.array(ColorInputSchema).min(2).max(10),
   contexts: z.array(z.object({
     name: z.string(),
-    foreground: z.number().min(0),
-    background: z.number().min(0),
+    foreground: z.number().int().min(0).describe('Index of the text color in colors'),
+    background: z.number().int().min(0).describe('Index of the background color in colors'),
     textSize: z.enum(['normal', 'large']).default('normal'),
     level: z.enum(['AA', 'AAA']).default('AA'),
     description: z.string().optional()
@@ -345,28 +346,5 @@ function generateRecommendations(
 export const colorValidateAccessibilityTool = {
   name: 'color.validateAccessibility',
   description: 'Comprehensive accessibility validation for color combinations including WCAG compliance checking and recommendations',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      colors: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 10 },
-      contexts: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            name: { type: 'string' },
-            foreground: { type: 'number', minimum: 0 },
-            background: { type: 'number', minimum: 0 },
-            textSize: { enum: ['normal', 'large'], default: 'normal' },
-            level: { enum: ['AA', 'AAA'], default: 'AA' }
-          },
-          required: ['name', 'foreground', 'background']
-        },
-        minItems: 1
-      },
-      includeAPCA: { type: 'boolean', default: false },
-      includeRecommendations: { type: 'boolean', default: true }
-    },
-    required: ['colors', 'contexts']
-  }
+  inputSchema: toolInputSchema(ColorValidateAccessibilityInputSchema)
 };

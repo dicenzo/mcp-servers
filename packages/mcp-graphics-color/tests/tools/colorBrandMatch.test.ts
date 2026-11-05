@@ -2,6 +2,9 @@ import { colorBrandMatch, colorBrandMatchTool } from '../../src/tools/colorBrand
 import { ColorErrorCode } from '../../src/types/color.js';
 import { describe, test, expect, jest } from '@jest/globals';
 
+// The advertised schema is plain JSON Schema; index it freely in assertions
+type JsonSchema = { [key: string]: any };
+
 describe('colorBrandMatch', () => {
   describe('successful brand matching', () => {
     test('finds exact match in brand palette', async () => {
@@ -505,8 +508,8 @@ describe('colorBrandMatch', () => {
     });
 
     test('advertises named entries in the MCP input schema', () => {
-      const items = colorBrandMatchTool.inputSchema.properties.brandPalette.items;
-      expect(items.oneOf).toEqual(expect.arrayContaining([
+      const items = (colorBrandMatchTool.inputSchema as JsonSchema).properties.brandPalette.items;
+      expect(items.anyOf).toEqual(expect.arrayContaining([
         expect.objectContaining({ type: 'string' }),
         expect.objectContaining({ type: 'object', required: ['name', 'color'] })
       ]));
@@ -544,15 +547,15 @@ describe('colorBrandMatch', () => {
 
   describe('object color inputs', () => {
     test('advertises object colors for targetColor and palette entries', () => {
-      const { targetColor, brandPalette } = colorBrandMatchTool.inputSchema.properties;
+      const { targetColor, brandPalette } = (colorBrandMatchTool.inputSchema as JsonSchema).properties;
       const objectColor = expect.objectContaining({ type: 'object', required: ['space', 'values'] });
 
-      expect(targetColor.oneOf).toEqual(expect.arrayContaining([objectColor]));
-      expect(brandPalette.items.oneOf).toEqual(expect.arrayContaining([objectColor]));
-      const namedProperties = brandPalette.items.oneOf
-        .map(option => option.properties)
-        .find(properties => properties !== undefined && 'color' in properties);
-      expect(namedProperties && 'color' in namedProperties ? namedProperties.color.oneOf : undefined)
+      expect(targetColor.anyOf).toEqual(expect.arrayContaining([objectColor]));
+      expect(brandPalette.items.anyOf).toEqual(expect.arrayContaining([objectColor]));
+      const namedProperties = brandPalette.items.anyOf
+        .map((option: JsonSchema) => option.properties)
+        .find((properties?: JsonSchema) => properties !== undefined && 'color' in properties);
+      expect(namedProperties && 'color' in namedProperties ? namedProperties.color.anyOf : undefined)
         .toEqual(expect.arrayContaining([objectColor]));
     });
 
@@ -764,7 +767,7 @@ describe('colorBrandMatch', () => {
     });
 
     test('advertises maxAlternatives in the MCP input schema', () => {
-      expect(colorBrandMatchTool.inputSchema.properties.maxAlternatives).toEqual(
+      expect((colorBrandMatchTool.inputSchema as JsonSchema).properties.maxAlternatives).toEqual(
         expect.objectContaining({ type: 'integer', minimum: 0, maximum: 49, default: 3 })
       );
     });
@@ -850,7 +853,7 @@ describe('colorBrandMatch', () => {
     });
 
     test('advertises the default in the MCP input schema', () => {
-      expect(colorBrandMatchTool.inputSchema.properties.maxDeltaE.default).toBe(3);
+      expect((colorBrandMatchTool.inputSchema as JsonSchema).properties.maxDeltaE.default).toBe(3);
     });
   });
 });

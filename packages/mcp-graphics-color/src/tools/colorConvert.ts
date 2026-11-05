@@ -5,6 +5,7 @@ import {
   Color,
   ColorErrorCode
 } from '../types/color.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 /**
  * MCP Tool: color.convert
@@ -129,26 +130,5 @@ export async function colorConvert(input: unknown): Promise<ColorConvertResponse
 export const colorConvertTool = {
   name: 'color.convert',
   description: 'Convert colors between different color spaces (sRGB, HSL, Lab, LCH, OKLCH, etc.) with configurable precision',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      color: {
-        oneOf: [
-          { type: 'string', minLength: 3, maxLength: 50 },
-          {
-            type: 'object',
-            properties: {
-              space: { enum: ['srgb', 'oklch', 'oklab', 'hsl', 'hsla', 'rgb', 'rgba', 'lab', 'lch'] },
-              values: { type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 4 },
-              alpha: { type: 'number', minimum: 0, maximum: 1 }
-            },
-            required: ['space', 'values']
-          }
-        ]
-      },
-      targetSpace: { enum: ['srgb', 'oklch', 'oklab', 'hsl', 'hsla', 'rgb', 'rgba', 'hex', 'lab', 'lch'] },
-      precision: { type: 'number', minimum: 1, maximum: 10 }
-    },
-    required: ['color', 'targetSpace']
-  }
+  inputSchema: toolInputSchema(ColorConvertInputSchema)
 };

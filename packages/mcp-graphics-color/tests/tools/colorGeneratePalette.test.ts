@@ -3,6 +3,9 @@ import { ColorUtils } from '../../src/util/colorUtils.js';
 import { ColorErrorCode } from '../../src/types/color.js';
 import { describe, test, expect } from '@jest/globals';
 
+// The advertised schema is plain JSON Schema; index it freely in assertions
+type JsonSchema = { [key: string]: any };
+
 const hexes = (colors: { hex?: string }[]) => colors.map(color => color.hex);
 
 describe('colorGeneratePalette', () => {
@@ -496,12 +499,12 @@ describe('colorGeneratePalette', () => {
 
   describe('tool definition', () => {
     test('advertises options and object base colors', () => {
-      const { properties } = colorGeneratePaletteTool.inputSchema;
+      const { properties } = colorGeneratePaletteTool.inputSchema as JsonSchema;
 
       expect(properties.options.properties).toHaveProperty('lightnessRange');
       expect(properties.options.properties).toHaveProperty('saturationRange');
       expect(properties.options.properties).toHaveProperty('hueShift');
-      expect(properties.baseColor.oneOf).toHaveLength(2);
+      expect(properties.baseColor.anyOf).toHaveLength(2);
       expect(properties.count.type).toBe('integer');
     });
   });
@@ -812,9 +815,9 @@ describe('colorGeneratePalette', () => {
 
   describe('tool definition for new inputs', () => {
     test('advertises locked colors, spacing, scales and exports', () => {
-      const { properties } = colorGeneratePaletteTool.inputSchema;
+      const { properties } = colorGeneratePaletteTool.inputSchema as JsonSchema;
 
-      expect(properties.lockedColors.items).toBe(properties.baseColor);
+      expect(properties.lockedColors.items).toEqual(properties.baseColor);
       expect(properties).toHaveProperty('minDeltaE');
       expect(properties).toHaveProperty('scale');
       expect(properties.exports.items.enum).toEqual(['css', 'tailwind', 'tokens']);
