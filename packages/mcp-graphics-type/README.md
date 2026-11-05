@@ -1,6 +1,6 @@
 # mcp-graphics-type
 
-An MCP server for fonts and text: load a font and read its metadata, shape and measure text, subset a font, build fallback font stacks, and validate font files. Built on opentype.js; WOFF2 fonts are decompressed with wawoff2 first.
+An MCP server for fonts and text: load a font and read its metadata, shape and measure text, subset a font, build fallback font stacks, and validate font files. Text is shaped with HarfBuzz (harfbuzzjs, WebAssembly) and reordered with the Unicode bidi algorithm (bidi-js); font metadata comes from opentype.js. WOFF fonts are decompressed with zlib and WOFF2 fonts with wawoff2 first.
 
 It runs over stdio and works with any MCP client, including Claude Code and Claude Desktop.
 
@@ -9,8 +9,8 @@ It runs over stdio and works with any MCP client, including Claude Code and Clau
 | Tool | What it does |
 | --- | --- |
 | `type.loadFont` | Load a font (from a path, URL, or system font name) and return metrics, features, and Unicode coverage. |
-| `type.shapeText` | Shape a string with the loaded font, including script analysis and OpenType features. |
-| `type.measureText` | Measure text dimensions, baselines, bounding boxes, and per-character metrics. |
+| `type.shapeText` | Shape a string with HarfBuzz: ligatures, contextual and joining forms, mark positioning, kerning and OpenType features, with mixed-direction text reordered. |
+| `type.measureText` | Measure shaped text: dimensions, baselines, bounding boxes, and per-glyph metrics. |
 | `type.subsetFont` | Produce a font subset that contains only the given characters. |
 | `type.generateFallback` | Suggest a system font fallback stack for a primary font and target platforms. |
 | `type.validateFont` | Check a font file for format problems and compatibility issues. |
@@ -28,6 +28,8 @@ yarn install
 yarn build      # compiles src/ to dist/
 yarn test       # runs the Jest suite
 ```
+
+`yarn test` runs Jest with `node --experimental-vm-modules`, because harfbuzzjs is ESM-only and loads its WebAssembly with a top-level `await`. Plain `npx jest` can't load it.
 
 `yarn dev` runs the server from source with tsx.
 
@@ -77,9 +79,17 @@ Font sources are restricted because tool arguments come from a model and may be 
 
 - Each tool's advertised `inputSchema` is generated from the zod schema it validates with (`src/util/toolSchema.ts`), so clients see the limits, defaults and descriptions that are enforced. `type.loadFont`'s font-source union is advertised as one object with a `type` enum (model APIs reject a top-level `anyOf`), and `buffer` data is advertised as base64 text; zod still checks the exact source shape. A failed call is a tool result with `isError: true`; only an unknown tool name is a JSON-RPC error (`-32601`).
 
+- Shaping (`type.shapeText`, `type.measureText`):
+  - The text is split by bidi level and then by script. Each run goes through HarfBuzz with its direction and script, and the runs are put in visual order (rule L2). Glyphs come back in visual order (left to right, or top to bottom for `ttb`), with `cluster` as the UTF-16 offset of each glyph's first character. `runs` lists the runs in logical order.
+  - When `direction` is omitted, the paragraph direction comes from the first strong character. When `script` is omitted, each run is shaped as its own script; a `script` you pass applies to the whole text.
+  - `letterSpacing` is added to every glyph with an advance (marks keep zero) and `wordSpacing` to space glyphs, after shaping. Unlike CSS, ligatures stay on when letter spacing is set.
+  - Text with newlines is laid out as one line, paragraph after paragraph. There's no line breaking.
+  - The harfbuzzjs build leaves out legacy `kern` table support. When a font has no GPOS kerning, its `kern` pairs (format 0, OpenType or Apple layout) are applied after shaping, as full HarfBuzz would. `features: { kern: false }` turns it off.
+  - `type.measureText` takes per-glyph advances and ink bounds from the shaped glyphs (a ligature is one entry, with `char` set to all its characters). Ascender, cap height and the other font metrics come from opentype.js.
+
 ## Known issues
 
-- Last verified test run: build passes; 181 of 184 tests pass, 0 fail, 3 skipped.
+- Last verified test run: build passes; 195 of 198 tests pass, 0 fail, 3 skipped.
 - Tests use a small font generated at test time with opentype.js (`tests/fixtures/buildTestFont.ts`). `tests/jest.setup.ts` writes it to a temp directory and lists that directory in `MCP_FONT_DIRS`. No font files are checked in.
 - Skipped: loading a font from a public URL (needs the network), loading a system font (depends on which fonts are installed), and creating a subset (needs `python3` with fontTools). The end-to-end test also leaves out its subset step when fontTools is missing.
 - `type.subsetFont` was verified by hand with fontTools installed (subset of a generated font succeeded); the automated subset tests still skip when fontTools is missing.

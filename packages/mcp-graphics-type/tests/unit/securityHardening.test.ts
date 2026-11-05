@@ -2,6 +2,7 @@ import { describe, test, expect } from '@jest/globals';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import * as opentypeModule from 'opentype.js';
 import { FontSubsetOptionsSchema, MAX_UNICODE_RANGES } from '../../src/types/typography.js';
 import {
@@ -122,7 +123,7 @@ describe('type.subsetFont unicodeRanges hardening', () => {
 
 describe('stdout hygiene', () => {
   test('server source never writes to stdout (the MCP channel) with console.log', () => {
-    const srcDir = path.resolve(__dirname, '../../src');
+    const srcDir = fileURLToPath(new URL('../../src', import.meta.url));
     const offenders: string[] = [];
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

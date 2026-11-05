@@ -10,8 +10,8 @@ import {
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
 import { fontLineGap } from '../util/fontMetrics.js';
-import { layoutGlyphRun } from '../util/glyphRun.js';
 import { parseFont } from '../util/parseFont.js';
+import { shapeLine } from '../util/shaping.js';
 import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
@@ -134,14 +134,22 @@ async function measureTextDimensions(
     const font = await parseFont(fontBuffer);
     
     const scale = fontSize / font.unitsPerEm;
-    
-    // Measure overall text dimensions
+    const line = await shapeLine(fontBuffer, text, {
+      fontSize,
+      direction: options.direction as 'ltr' | 'rtl' | undefined,
+      script: options.script,
+      language: options.language,
+      letterSpacing: options.letterSpacing,
+      wordSpacing: options.wordSpacing
+    });
+
+    // Overall ink bounds, with glyphs placed left to right in visual order
     let totalWidth = 0;
     let minX = 0;
     let maxX = 0;
     let minY = 0;
     let maxY = 0;
-    
+
     const advances: number[] = [];
     const characterMetrics: Array<{
       char: string;
@@ -150,42 +158,36 @@ async function measureTextDimensions(
       rightSideBearing: number;
       bbox: { xMin: number; yMin: number; xMax: number; yMax: number; };
     }> = [];
-    
-    // Measure each character
-    const run = layoutGlyphRun(font, text, {
-      fontSize,
-      letterSpacing: options.letterSpacing,
-      wordSpacing: options.wordSpacing
-    });
-    for (const { char, glyph, advance } of run) {
+
+    // Each glyph's characters run from its cluster to the next cluster in the text
+    const clusterStarts = [...new Set(line.glyphs.map(glyph => glyph.cluster))].sort((a, b) => a - b);
+    const clusterText = (cluster: number) =>
+      text.slice(cluster, clusterStarts.find(start => start > cluster) ?? text.length);
+
+    for (const glyph of line.glyphs) {
+      const advance = glyph.advance.x;
+      const bounds = line.glyphBounds(glyph.glyphId) ?? { xMin: 0, yMin: 0, xMax: 0, yMax: 0 };
+      const scaledBBox = {
+        xMin: bounds.xMin + glyph.offset.x,
+        yMin: bounds.yMin + glyph.offset.y,
+        xMax: bounds.xMax + glyph.offset.x,
+        yMax: bounds.yMax + glyph.offset.y
+      };
+      if (scaledBBox.xMax > scaledBBox.xMin) {
+        minX = Math.min(minX, totalWidth + scaledBBox.xMin);
+        maxX = Math.max(maxX, totalWidth + scaledBBox.xMax);
+        minY = Math.min(minY, scaledBBox.yMin);
+        maxY = Math.max(maxY, scaledBBox.yMax);
+      }
       advances.push(advance);
       totalWidth += advance;
-      
-      // Calculate glyph bounding box
-      const glyphBBox = glyph.getBoundingBox();
-      const scaledBBox = {
-        xMin: glyphBBox.x1 * scale,
-        yMin: glyphBBox.y1 * scale,
-        xMax: glyphBBox.x2 * scale,
-        yMax: glyphBBox.y2 * scale
-      };
-      
-      // Update overall bounding box
-      const glyphLeft = totalWidth - advance + scaledBBox.xMin;
-      const glyphRight = totalWidth - advance + scaledBBox.xMax;
-      
-      minX = Math.min(minX, glyphLeft);
-      maxX = Math.max(maxX, glyphRight);
-      minY = Math.min(minY, scaledBBox.yMin);
-      maxY = Math.max(maxY, scaledBBox.yMax);
-      
-      // Collect character metrics if requested
+
       if (options.includeCharacterMetrics) {
         characterMetrics.push({
-          char: char,
-          advance: advance,
-          leftSideBearing: (glyph.leftSideBearing || 0) * scale,
-          rightSideBearing: ((glyph.advanceWidth || 0) - (glyph.rightSideBearing || 0)) * scale,
+          char: clusterText(glyph.cluster),
+          advance,
+          leftSideBearing: bounds.xMin,
+          rightSideBearing: advance - bounds.xMax,
           bbox: scaledBBox
         });
       }
