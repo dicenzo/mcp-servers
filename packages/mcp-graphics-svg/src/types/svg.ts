@@ -148,57 +148,63 @@ export const SVGElementSchema = z.discriminatedUnion('type', [
   SVGPathSchema,
   SVGTextSchema,
   SVGGroupSchema
-]);
+// Named, so the advertised schema refers to the recursive group contents as #/$defs/SVGElement
+]).meta({ id: 'SVGElement' });
 
 // SVG Document Schema
 export const SVGDocumentSchema = z.object({
-  width: z.number().min(1),
-  height: z.number().min(1),
-  viewBox: SVGViewBoxSchema.optional(),
-  elements: z.array(SVGElementSchema).max(SVG_LIMITS.MAX_ELEMENTS),
+  // The same limit SVGValidator.validateDimensions enforces
+  width: z.number().min(1).max(10000).describe('SVG width in pixels'),
+  height: z.number().min(1).max(10000).describe('SVG height in pixels'),
+  viewBox: SVGViewBoxSchema.optional().describe('SVG viewBox for scalability'),
+  elements: z.array(SVGElementSchema).max(SVG_LIMITS.MAX_ELEMENTS)
+    .describe('Array of SVG elements to include in the document'),
   metadata: z.object({
     title: z.string().max(SVG_LIMITS.MAX_TEXT_LENGTH).optional(),
     description: z.string().max(SVG_LIMITS.MAX_TEXT_LENGTH).optional(),
     keywords: z.array(shortString()).max(100).optional()
-  }).optional()
+  }).optional().describe('Optional metadata for the SVG document')
 });
 
 // Tool Input/Output Schemas
 export const SVGCreateInputSchema = SVGDocumentSchema;
 
 export const SVGOptimizeInputSchema = z.object({
-  svg: z.string().max(SVG_LIMITS.MAX_SVG_LENGTH),
+  svg: z.string().max(SVG_LIMITS.MAX_SVG_LENGTH)
+    .describe('SVG content to optimize (as string). DOCTYPE/ENTITY declarations are rejected; scripts, event handlers, foreignObject and external links are removed from the output.'),
   options: z.object({
-    removeComments: z.boolean().default(true),
-    removeEmptyElements: z.boolean().default(true),
-    mergePaths: z.boolean().default(true),
-    precision: z.number().min(1).max(10).default(3),
-    removeUnusedDefs: z.boolean().default(true),
-    minifyStyles: z.boolean().default(true)
-  }).optional()
+    removeComments: z.boolean().default(true).describe('Remove XML comments from SVG'),
+    removeEmptyElements: z.boolean().default(true).describe('Remove empty elements and groups'),
+    mergePaths: z.boolean().default(true).describe('Merge adjacent paths when possible'),
+    precision: z.number().min(1).max(10).default(3).describe('Decimal precision for numeric values'),
+    removeUnusedDefs: z.boolean().default(true).describe('Remove unused definitions'),
+    minifyStyles: z.boolean().default(true).describe('Minify CSS styles')
+  }).optional().describe('Optimization options to control the optimization process')
 });
 
 /** XML Name subset accepted for `#id` selectors (no regex or markup metacharacters) */
 export const SVG_ID_PATTERN = /^[A-Za-z_][A-Za-z0-9_.:-]*$/;
 
 export const SVGTransformInputSchema = z.object({
-  svg: z.string().max(SVG_LIMITS.MAX_SVG_LENGTH),
+  svg: z.string().max(SVG_LIMITS.MAX_SVG_LENGTH).describe('SVG content to transform'),
   transforms: z.array(z.object({
-    type: z.enum(['translate', 'rotate', 'scale', 'skewX', 'skewY']),
-    values: z.array(z.number()).max(6),
+    type: z.enum(['translate', 'rotate', 'scale', 'skewX', 'skewY', 'matrix']).describe('Type of transformation to apply'),
+    values: z.array(z.number()).max(6)
+      .describe('Transformation parameters: translate x, y?; rotate angle, cx?, cy?; scale sx, sy?; skewX/skewY angle; matrix a, b, c, d, e, f'),
     element: shortString()
       .refine(
         selector => !selector.startsWith('#') || SVG_ID_PATTERN.test(selector.slice(1)),
         { message: 'Invalid id selector: ids must match [A-Za-z_][A-Za-z0-9_.:-]*' }
       )
-      .optional() // CSS selector for target element
-  })).max(SVG_LIMITS.MAX_TRANSFORMS)
+      .optional()
+      .describe('CSS selector or element ID to target (optional, applies to all if not specified). ID selectors must match #[A-Za-z_][A-Za-z0-9_.:-]*')
+  })).max(SVG_LIMITS.MAX_TRANSFORMS).describe('Array of transformations to apply')
 });
 
 export const SVGPathOperationsInputSchema = z.object({
-  path1: z.string().max(SVG_LIMITS.MAX_PATH_LENGTH), // SVG path data
-  path2: z.string().max(SVG_LIMITS.MAX_PATH_LENGTH), // SVG path data
-  operation: z.enum(['union', 'intersect', 'subtract', 'exclude'])
+  path1: z.string().max(SVG_LIMITS.MAX_PATH_LENGTH).describe('First SVG path data string (d attribute value)'),
+  path2: z.string().max(SVG_LIMITS.MAX_PATH_LENGTH).describe('Second SVG path data string (d attribute value)'),
+  operation: z.enum(['union', 'intersect', 'subtract', 'exclude']).describe('Boolean operation to perform on the paths')
 });
 
 // Type exports
