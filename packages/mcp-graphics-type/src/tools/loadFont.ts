@@ -24,6 +24,7 @@ import {
   TypographyErrorCode,
 } from '../types/typography.js';
 import { parseFont } from '../util/parseFont.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<TextToolResult>;
@@ -35,39 +36,7 @@ interface ExecutableTool extends Tool {
 export const loadFontTool: ExecutableTool = {
   name: 'type.loadFont',
   description: 'Load a font and extract comprehensive metadata including metrics, features, and Unicode support',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      type: {
-        type: 'string',
-        enum: ['file', 'buffer', 'url', 'system'],
-        description: 'Font input type'
-      },
-      path: {
-        type: 'string',
-        description: 'Path to a .ttf/.otf/.ttc/.otc/.woff/.woff2 file in a system font directory or a directory listed in MCP_FONT_DIRS (for file type; a collection loads its first font)'
-      },
-      data: {
-        type: 'string',
-        description: 'Base64 encoded font data (for buffer type)'
-      },
-      url: {
-        type: 'string',
-        description: 'Public https:// URL to a font file, no redirects (for url type)'
-      },
-      name: {
-        type: 'string',
-        description: 'Installed font\'s family, full or PostScript name, e.g. "Georgia", "Georgia Bold" or "Georgia-Bold" (for system type). A family name loads its regular style'
-      },
-      format: {
-        type: 'string',
-        enum: ['ttf', 'otf', 'woff', 'woff2'],
-        description: 'Font format hint (optional)'
-      }
-    },
-    required: [],
-    additionalProperties: false
-  },
+  inputSchema: toolInputSchema(LoadFontInputSchema),
 
   async invoke(args: unknown) {
     try {

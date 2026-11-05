@@ -12,6 +12,7 @@ import {
 } from '../types/typography.js';
 import { loadFontBuffer } from './loadFont.js';
 import { parseFont } from '../util/parseFont.js';
+import { toolInputSchema } from '../util/toolSchema.js';
 
 interface ExecutableTool extends Tool {
   invoke: (args: unknown) => Promise<TextToolResult>;
@@ -23,89 +24,7 @@ interface ExecutableTool extends Tool {
 export const validateFontTool: ExecutableTool = {
   name: 'type.validateFont',
   description: 'Perform comprehensive font validation including format checking, performance analysis, and compatibility testing',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      font: {
-        oneOf: [
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'file' },
-              path: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'path']
-          },
-          {
-            type: 'object', 
-            properties: {
-              type: { const: 'buffer' },
-              data: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'data']
-          },
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'url' },
-              url: { type: 'string' },
-              format: { type: 'string', enum: ['ttf', 'otf', 'woff', 'woff2'] }
-            },
-            required: ['type', 'url']
-          },
-          {
-            type: 'object',
-            properties: {
-              type: { const: 'system' },
-              name: { type: 'string' }
-            },
-            required: ['type', 'name']
-          }
-        ],
-        description: 'Font to validate'
-      },
-      options: {
-        type: 'object',
-        properties: {
-          checkLicense: {
-            type: 'boolean',
-            default: true,
-            description: 'Check font license and embedding permissions'
-          },
-          checkPerformance: {
-            type: 'boolean',
-            default: true,
-            description: 'Analyze font performance characteristics'
-          },
-          checkCompatibility: {
-            type: 'boolean',
-            default: true,
-            description: 'Test compatibility across platforms and browsers'
-          },
-          targetPlatforms: {
-            type: 'array',
-            items: { type: 'string' },
-            default: ['web'],
-            description: 'Platforms to test compatibility for'
-          },
-          maxFileSize: {
-            type: 'number',
-            description: 'Maximum acceptable file size in bytes'
-          },
-          requiredFeatures: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'OpenType features that must be present'
-          }
-        },
-        additionalProperties: false
-      }
-    },
-    required: ['font'],
-    additionalProperties: false
-  },
+  inputSchema: toolInputSchema(ValidateFontInputSchema),
 
   async invoke(args: unknown) {
     try {

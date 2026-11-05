@@ -75,9 +75,11 @@ Font sources are restricted because tool arguments come from a model and may be 
 
 - System font lookup reads the standard font folders for macOS (`~/Library/Fonts`), Linux (`~/.fonts`, `~/.local/share/fonts`), and Windows (`%USERPROFILE%\AppData\Local\Microsoft\Windows\Fonts`).
 
+- Each tool's advertised `inputSchema` is generated from the zod schema it validates with (`src/util/toolSchema.ts`), so clients see the limits, defaults and descriptions that are enforced. `type.loadFont`'s font-source union is advertised as one object with a `type` enum (model APIs reject a top-level `anyOf`), and `buffer` data is advertised as base64 text; zod still checks the exact source shape. A failed call is a tool result with `isError: true`; only an unknown tool name is a JSON-RPC error (`-32601`).
+
 ## Known issues
 
-- Last verified test run: build passes; 170 of 173 tests pass, 0 fail, 3 skipped.
+- Last verified test run: build passes; 181 of 184 tests pass, 0 fail, 3 skipped.
 - Tests use a small font generated at test time with opentype.js (`tests/fixtures/buildTestFont.ts`). `tests/jest.setup.ts` writes it to a temp directory and lists that directory in `MCP_FONT_DIRS`. No font files are checked in.
 - Skipped: loading a font from a public URL (needs the network), loading a system font (depends on which fonts are installed), and creating a subset (needs `python3` with fontTools). The end-to-end test also leaves out its subset step when fontTools is missing.
 - `type.subsetFont` was verified by hand with fontTools installed (subset of a generated font succeeded); the automated subset tests still skip when fontTools is missing.
