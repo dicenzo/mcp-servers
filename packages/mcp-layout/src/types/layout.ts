@@ -19,11 +19,22 @@ const gridTemplate = () => z.string().max(MAX_TEMPLATE_LENGTH);
 
 // Base geometry types
 export const RectangleSchema = z.object({
-  x: z.number(),
-  y: z.number(),
-  width: z.number().min(0),
-  height: z.number().min(0)
+  x: z.number().describe('X position in px'),
+  y: z.number().describe('Y position in px'),
+  width: z.number().min(0).describe('Width in px'),
+  height: z.number().min(0).describe('Height in px')
 });
+
+/** Optional size limits shared by grid and flex elements; negative sizes are rejected */
+const sizeLimits = {
+  minWidth: z.number().min(0).optional().describe('Minimum width constraint in pixels'),
+  minHeight: z.number().min(0).optional().describe('Minimum height constraint in pixels'),
+  maxWidth: z.number().min(0).optional().describe('Maximum width constraint in pixels'),
+  maxHeight: z.number().min(0).optional().describe('Maximum height constraint in pixels')
+};
+
+const elementContent = () => z.record(z.string(), z.any()).optional()
+  .describe('Element content for size calculation and rendering');
 
 export const PointSchema = z.object({
   x: z.number(),
@@ -37,81 +48,91 @@ export const SizeSchema = z.object({
 
 // Constraint types
 export const LayoutConstraintSchema = z.object({
-  type: z.enum(['position', 'size', 'spacing', 'alignment']),
-  element: identifier(),
-  property: identifier(),
-  value: z.union([z.number(), identifier()]),
-  relation: z.enum(['equal', 'greater', 'less']).optional(),
-  target: identifier().optional(),
+  type: z.enum(['position', 'size', 'spacing', 'alignment']).describe('Type of constraint to apply'),
+  element: identifier().describe('Target element ID for this constraint'),
+  property: identifier().describe('Property to constrain (e.g., "x", "width", "center-x")'),
+  value: z.union([z.number(), identifier()]).describe('Constraint value'),
+  relation: z.enum(['equal', 'greater', 'less']).optional().describe('Relationship type for the constraint'),
+  target: identifier().optional().describe('Reference element ID for relative constraints'),
   priority: z.number().min(0).max(1000).default(500)
+    .describe('Constraint priority (higher = more important); constraints are applied lowest first, so the highest wins a conflict')
 });
 
 // CSS Grid configuration
 export const GridConfigSchema = z.object({
-  columns: gridTemplate(), // CSS grid-template-columns
-  rows: gridTemplate(), // CSS grid-template-rows
-  gap: cssValue().default('0'),
-  rowGap: cssValue().optional(),
-  columnGap: cssValue().optional(),
-  areas: z.array(z.array(identifier()).max(MAX_GRID_AREA_DIMENSION)).max(MAX_GRID_AREA_DIMENSION).optional(),
-  autoColumns: gridTemplate().optional(),
-  autoRows: gridTemplate().optional(),
+  columns: gridTemplate().meta({
+    description: 'CSS grid-template-columns value (e.g., "1fr 2fr 1fr", "repeat(3, 1fr)")',
+    examples: ['1fr 2fr 1fr', 'repeat(3, 1fr)', '200px auto 100px', 'minmax(100px, 1fr) 2fr']
+  }),
+  rows: gridTemplate().meta({
+    description: 'CSS grid-template-rows value (e.g., "auto 1fr auto")',
+    examples: ['auto 1fr auto', 'repeat(4, 100px)', '50px auto 50px']
+  }),
+  gap: cssValue().default('0').describe('Grid gap: one value, or "row column" (e.g., "16px", "1rem", "8px 16px")'),
+  rowGap: cssValue().optional().describe('Row-specific gap (overrides gap for rows)'),
+  columnGap: cssValue().optional().describe('Column-specific gap (overrides gap for columns)'),
+  areas: z.array(z.array(identifier()).max(MAX_GRID_AREA_DIMENSION)).max(MAX_GRID_AREA_DIMENSION).optional()
+    .describe('Grid template areas as 2D array (e.g., [["header", "header"], ["sidebar", "main"]])'),
+  autoColumns: gridTemplate().optional().describe('grid-auto-columns value for implicit columns'),
+  autoRows: gridTemplate().optional().describe('grid-auto-rows value for implicit rows'),
   autoFlow: z.enum(['row', 'column', 'row dense', 'column dense']).default('row')
+    .describe('grid-auto-flow value (dense is placed as sparse)')
 });
 
 export const GridElementSchema = z.object({
-  id: identifier(),
-  gridArea: identifier().optional(),
-  gridColumn: identifier().optional(),
-  gridRow: identifier().optional(),
-  gridColumnStart: z.union([z.number(), identifier()]).optional(),
-  gridColumnEnd: z.union([z.number(), identifier()]).optional(),
-  gridRowStart: z.union([z.number(), identifier()]).optional(),
-  gridRowEnd: z.union([z.number(), identifier()]).optional(),
-  justifySelf: z.enum(['start', 'end', 'center', 'stretch']).optional(),
-  alignSelf: z.enum(['start', 'end', 'center', 'stretch']).optional(),
-  content: z.record(z.string(), z.any()).optional(),
-  minWidth: z.number().optional(),
-  minHeight: z.number().optional(),
-  maxWidth: z.number().optional(),
-  maxHeight: z.number().optional()
+  id: identifier().describe('Unique identifier for the element'),
+  gridArea: identifier().optional().describe('Named grid area (must match area in config.areas)'),
+  gridColumn: identifier().optional().describe('grid-column value (e.g., "1 / 3", "span 2")'),
+  gridRow: identifier().optional().describe('grid-row value (e.g., "1 / 3", "span 2")'),
+  gridColumnStart: z.union([z.number(), identifier()]).optional().describe('grid-column-start value (line number or name)'),
+  gridColumnEnd: z.union([z.number(), identifier()]).optional().describe('grid-column-end value (line number or name)'),
+  gridRowStart: z.union([z.number(), identifier()]).optional().describe('grid-row-start value (line number or name)'),
+  gridRowEnd: z.union([z.number(), identifier()]).optional().describe('grid-row-end value (line number or name)'),
+  justifySelf: z.enum(['start', 'end', 'center', 'stretch']).optional().describe('justify-self alignment within grid area'),
+  alignSelf: z.enum(['start', 'end', 'center', 'stretch']).optional().describe('align-self alignment within grid area'),
+  content: elementContent(),
+  ...sizeLimits
 });
 
 // Flexbox configuration
 export const FlexConfigSchema = z.object({
-  direction: z.enum(['row', 'row-reverse', 'column', 'column-reverse']).default('row'),
-  wrap: z.enum(['nowrap', 'wrap', 'wrap-reverse']).default('nowrap'),
-  justifyContent: z.enum(['flex-start', 'flex-end', 'center', 'space-between', 'space-around', 'space-evenly']).default('flex-start'),
-  alignItems: z.enum(['flex-start', 'flex-end', 'center', 'stretch', 'baseline']).default('stretch'),
-  alignContent: z.enum(['flex-start', 'flex-end', 'center', 'stretch', 'space-between', 'space-around']).default('stretch'),
-  gap: cssValue().default('0'),
-  rowGap: cssValue().optional(),
-  columnGap: cssValue().optional()
+  direction: z.enum(['row', 'row-reverse', 'column', 'column-reverse']).default('row').describe('flex-direction value'),
+  wrap: z.enum(['nowrap', 'wrap', 'wrap-reverse']).default('nowrap').describe('flex-wrap value'),
+  justifyContent: z.enum(['flex-start', 'flex-end', 'center', 'space-between', 'space-around', 'space-evenly']).default('flex-start')
+    .describe('justify-content value for main axis alignment'),
+  alignItems: z.enum(['flex-start', 'flex-end', 'center', 'stretch', 'baseline']).default('stretch')
+    .describe('align-items value for cross axis alignment'),
+  alignContent: z.enum(['flex-start', 'flex-end', 'center', 'stretch', 'space-between', 'space-around']).default('stretch')
+    .describe('align-content value for multi-line alignment'),
+  gap: cssValue().default('0').describe('Gap value (e.g., "16px", "1rem")'),
+  rowGap: cssValue().optional().describe('Row-specific gap (overrides gap for rows)'),
+  columnGap: cssValue().optional().describe('Column-specific gap (overrides gap for columns)')
 });
 
 export const FlexElementSchema = z.object({
-  id: identifier(),
-  flexGrow: z.number().min(0).default(0),
-  flexShrink: z.number().min(0).default(1),
-  flexBasis: z.union([z.number(), cssValue()]).default('auto'),
-  alignSelf: z.enum(['auto', 'flex-start', 'flex-end', 'center', 'stretch', 'baseline']).optional(),
-  order: z.number().optional(),
-  content: z.record(z.string(), z.any()).optional(),
-  minWidth: z.number().optional(),
-  minHeight: z.number().optional(),
-  maxWidth: z.number().optional(),
-  maxHeight: z.number().optional()
+  id: identifier().describe('Unique identifier for the element'),
+  flexGrow: z.number().min(0).default(0).describe('flex-grow value - how much element should grow'),
+  flexShrink: z.number().min(0).default(1).describe('flex-shrink value - how much element can shrink'),
+  flexBasis: z.union([z.number(), cssValue()]).default('auto')
+    .describe('flex-basis value - initial main size (e.g., "200px", "50%", "auto")'),
+  alignSelf: z.enum(['auto', 'flex-start', 'flex-end', 'center', 'stretch', 'baseline']).optional()
+    .describe('align-self override for individual element'),
+  order: z.number().optional().describe('Visual order of the element (lower numbers first)'),
+  content: elementContent(),
+  ...sizeLimits
 });
 
 // Layout element (generic)
 export const LayoutElementSchema = z.object({
-  id: identifier(),
-  type: z.enum(['div', 'span', 'text', 'image', 'svg']).default('div'),
-  bounds: RectangleSchema.optional(),
-  content: z.record(z.string(), z.any()).optional(),
-  styles: z.record(identifier(), z.string().max(MAX_STYLE_VALUE_LENGTH)).optional(),
-  children: z.array(identifier()).max(MAX_ELEMENTS).optional(),
+  id: identifier().describe('Unique identifier for the element'),
+  type: z.enum(['div', 'span', 'text', 'image', 'svg']).default('div').describe('Element type for rendering context'),
+  bounds: RectangleSchema.optional().describe('Initial element bounds (optional, will be calculated if not provided)'),
+  content: elementContent(),
+  styles: z.record(identifier(), z.string().max(MAX_STYLE_VALUE_LENGTH)).optional()
+    .describe('CSS styles to apply to the element'),
+  children: z.array(identifier()).max(MAX_ELEMENTS).optional().describe('Child element IDs for hierarchical layouts'),
   constraints: z.array(LayoutConstraintSchema).max(MAX_ELEMENT_CONSTRAINTS).optional()
+    .describe('Constraints to apply to this element')
 });
 
 // Breakpoint configuration
@@ -200,8 +221,8 @@ export const AutoLayoutConfigSchema = z.object({
   }).default({ top: 0, right: 0, bottom: 0, left: 0 }),
   alignment: z.enum(['start', 'center', 'end', 'stretch']).default('start'),
   distribution: z.enum(['start', 'center', 'end', 'space-between', 'space-around', 'space-evenly']).default('start'),
-  maxWidth: z.number().optional(),
-  maxHeight: z.number().optional(),
+  maxWidth: z.number().min(0).optional(),
+  maxHeight: z.number().min(0).optional(),
   responsive: z.boolean().default(false)
 });
 
@@ -211,6 +232,54 @@ export const FlexElementListSchema = z.array(FlexElementSchema).max(MAX_ELEMENTS
 export const LayoutElementListSchema = z.array(LayoutElementSchema).max(MAX_ELEMENTS);
 export const LayoutConstraintListSchema = z.array(LayoutConstraintSchema).max(MAX_CONSTRAINTS);
 export const BreakpointListSchema = z.array(BreakpointSchema).max(MAX_BREAKPOINTS);
+
+// Tool inputs: what each tool's handler validates, and (via toolInputSchema) what
+// it advertises to MCP clients as its inputSchema.
+const optimizeOption = () => z.boolean().default(true).describe('Whether to optimize the layout for performance');
+
+export const CreateGridInputSchema = z.object({
+  config: GridConfigSchema,
+  elements: GridElementListSchema.describe('Array of elements to place in the grid'),
+  bounds: RectangleSchema.describe('Container bounds for the grid layout'),
+  optimize: optimizeOption()
+});
+
+export const CreateFlexInputSchema = z.object({
+  config: FlexConfigSchema,
+  elements: FlexElementListSchema.describe('Array of elements to place in the flex container'),
+  bounds: RectangleSchema.describe('Container bounds for the flex layout'),
+  optimize: optimizeOption()
+});
+
+export const AddConstraintsInputSchema = z.object({
+  elements: LayoutElementListSchema.describe('Array of elements to position with constraints'),
+  constraints: LayoutConstraintListSchema.default([]).describe('Global constraints to apply across elements'),
+  bounds: RectangleSchema.describe('Container bounds for constraint solving')
+});
+
+export const AutoLayoutInputSchema = z.object({
+  elements: LayoutElementListSchema.describe('Elements to arrange'),
+  bounds: RectangleSchema.describe('Container bounds'),
+  config: AutoLayoutConfigSchema.optional().describe('Direction, spacing, padding and alignment; defaults to a vertical stack 8px apart')
+});
+
+export const ResponsiveInputSchema = z.object({
+  elements: LayoutElementListSchema.describe('Elements in the layout'),
+  baseLayout: LayoutSchema.describe('Grid or flex layout to adapt at each breakpoint'),
+  breakpoints: BreakpointListSchema.optional()
+    .describe('Breakpoints to use; when omitted (and generateOptimal is false) mobile 0-767, tablet 768-1023 and desktop 1024+'),
+  generateOptimal: z.boolean().default(false).describe('Generate optimal breakpoints automatically'),
+  minViewport: z.number().min(200).default(320).describe('Smallest viewport width for generated breakpoints'),
+  maxViewport: z.number().min(800).default(1920).describe('Largest viewport width for generated breakpoints')
+});
+
+export const MeasureInputSchema = z.object({
+  layout: LayoutSchema.describe('Layout to analyze'),
+  elements: LayoutElementListSchema.describe('Elements with their computed positions'),
+  includeQualityReport: z.boolean().default(true).describe('Include detailed quality analysis and recommendations'),
+  includeAccessibilityCheck: z.boolean().default(true).describe('Include accessibility metrics analysis'),
+  includePerformanceAnalysis: z.boolean().default(true).describe('Include performance optimization suggestions')
+});
 
 // TypeScript type exports
 export type Rectangle = z.infer<typeof RectangleSchema>;
