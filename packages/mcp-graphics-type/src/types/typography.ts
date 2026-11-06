@@ -243,6 +243,19 @@ export const FontValidationReportSchema = z.object({
     isWebOptimized: z.boolean().describe('WOFF or WOFF2, without the legacy hinting tables browsers ignore (hdmx, VDMX, LTSH)'),
     hasLicense: z.boolean(),
     hasEmbeddingPermissions: z.boolean().describe('The font may be embedded for installable or editable use (OS/2 fsType)'),
+    licenseInfo: z.object({
+      text: z.string().optional().describe('License description (name ID 13)'),
+      url: z.string().optional().describe('License URL (name ID 14)'),
+      vendorId: z.string().optional().describe('OS/2 achVendID'),
+      type: z.enum(['OFL', 'Apache-2.0', 'Ubuntu', 'other', 'unknown'])
+        .describe('Guessed from the license text and URL; "other" means a license is stated but not recognised')
+    }),
+    variationAxes: z.array(z.object({ tag: z.string(), min: z.number(), default: z.number(), max: z.number() }))
+      .describe('fvar axes; empty for a static font'),
+    namedInstances: z.array(z.object({ name: z.string().optional(), coordinates: z.record(z.string(), z.number()) })),
+    colorTables: z.array(z.string()).describe('Colour-font tables present: COLRv0/COLRv1, CPAL, SVG, sbix, CBDT'),
+    collection: z.object({ fontCount: z.number(), index: z.number() }).optional()
+      .describe('Set when the file is a collection: how many fonts it holds and which one was validated'),
     embedding: z.object({
       fsType: z.number(),
       usage: z.enum(['installable', 'restricted', 'previewPrint', 'editable'])
@@ -252,7 +265,8 @@ export const FontValidationReportSchema = z.object({
     }).optional()
   }),
   performance: z.object({
-    loadTime: z.number(),
+    loadTime: z.number().describe('Milliseconds to read or fetch the file'),
+    parseTime: z.number().describe('Milliseconds to decompress and parse it'),
     fileSize: z.number(),
     glyphCount: z.number(),
     complexityScore: z.number().min(0).max(1)
@@ -272,7 +286,19 @@ export const FontValidationReportSchema = z.object({
       })).describe('Every block the font maps at least one character in')
     })
   }),
-  recommendations: z.array(z.string())
+  verticalMetrics: z.object({
+    unitsPerEm: z.number(),
+    hhea: z.object({ ascender: z.number(), descender: z.number(), lineGap: z.number() }),
+    typo: z.object({ ascender: z.number(), descender: z.number(), lineGap: z.number() }),
+    win: z.object({ ascent: z.number(), descent: z.number() }),
+    bounds: z.object({ yMin: z.number(), yMax: z.number() }).describe('head yMin/yMax'),
+    useTypoMetrics: z.boolean().describe('OS/2 fsSelection bit 7'),
+    lineHeight: z.object({ macOS: z.number(), windows: z.number(), linux: z.number() })
+      .describe('Default line height in em on each platform: hhea on macOS and Linux; win metrics on Windows, or typo metrics with USE_TYPO_METRICS')
+  }).optional(),
+  recommendations: z.array(z.string()),
+  summary: z.string().describe('One line: valid or not, format, size, glyphs, name and the warnings'),
+  fontFace: z.string().optional().describe('A @font-face rule for the font, with the matching format() hint')
 });
 
 // Tool Input Schemas
@@ -322,8 +348,11 @@ export const ValidateFontInputSchema = z.object({
     checkCompatibility: z.boolean().default(true).describe('Test compatibility across platforms and browsers'),
     targetPlatforms: z.array(z.enum(['windows', 'macos', 'linux', 'ios', 'android', 'web'])).default(['web'])
       .describe('Platforms to report: "web" for browsers, the rest for whether the font can be installed'),
-    maxFileSize: z.number().optional().describe('Maximum acceptable file size in bytes'),
-    requiredFeatures: z.array(z.string()).optional().describe('OpenType features that must be present')
+    maxFileSize: z.number().int().positive().optional().describe('Maximum file size in bytes; a larger font is invalid'),
+    requiredFeatures: z.array(z.string()).optional().describe('OpenType features that must be present'),
+    requiredCharacters: z.string().max(10000).optional() // PERFORMANCE_LIMITS.MAX_TEXT_LENGTH, declared below
+      .describe('Text the font must be able to render, e.g. sample copy; characters it has no glyph for make it invalid'),
+    fontIndex: z.number().int().min(0).optional().describe('Which font of a collection (.ttc/.otc) to validate; defaults to the first')
   }).prefault({})
 });
 

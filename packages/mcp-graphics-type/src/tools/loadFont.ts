@@ -144,8 +144,8 @@ export const loadFontTool: ExecutableTool = {
  * its ArrayBuffer exactly: small Buffers (readFileSync, base64 decoding) are often
  * slices of Node's shared pool, and parsing the whole pool reads unrelated bytes.
  */
-export async function loadFontBuffer(input: FontInput): Promise<Buffer> {
-  const data = await readFontSource(input);
+export async function loadFontBuffer(input: FontInput, options: LoadFontOptions = {}): Promise<Buffer> {
+  const data = await readFontSource(input, options);
   if (data.byteOffset === 0 && data.byteLength === data.buffer.byteLength) {
     return data;
   }
@@ -154,7 +154,12 @@ export async function loadFontBuffer(input: FontInput): Promise<Buffer> {
   return owned;
 }
 
-async function readFontSource(input: FontInput): Promise<Buffer> {
+export interface LoadFontOptions {
+  /** Return a .ttc/.otc file whole, instead of its first font (file sources; buffers and URLs are always returned as given) */
+  keepCollection?: boolean;
+}
+
+async function readFontSource(input: FontInput, options: LoadFontOptions): Promise<Buffer> {
   switch (input.type) {
     case 'file': {
       const fontPath = resolveAllowedFontPath(input.path, allowedFontRoots(getSystemFontPaths()));
@@ -171,7 +176,8 @@ async function readFontSource(input: FontInput): Promise<Buffer> {
         }));
       }
       // A collection loads its first font
-      return extractFromCollection(fs.readFileSync(fontPath), 0);
+      const data = fs.readFileSync(fontPath);
+      return options.keepCollection ? data : extractFromCollection(data, 0);
     }
 
     case 'buffer': {

@@ -26,6 +26,8 @@ declare module 'opentype.js' {
       license?: { en: string };
       licenseURL?: { en: string };
       trademark?: { en: string };
+      preferredFamily?: { en: string };
+      preferredSubfamily?: { en: string };
     };
     unitsPerEm: number;
     ascender: number;
@@ -40,10 +42,17 @@ declare module 'opentype.js' {
         macStyle: number;
       };
       hhea?: {
+        ascender: number;
+        descender: number;
         lineGap: number;
       };
       os2?: {
+        sTypoAscender: number;
+        sTypoDescender: number;
         sTypoLineGap?: number;
+        usWinAscent: number;
+        usWinDescent: number;
+        achVendID?: string;
         sCapHeight?: number;
         sxHeight?: number;
         usWeightClass: number;
@@ -68,6 +77,7 @@ declare module 'opentype.js' {
     };
     glyphs: {
       glyphs: Glyph[];
+      get(index: number): Glyph | undefined;
     };
     charToGlyph(char: string): Glyph;
     /** Pair kerning in font units, from GPOS (default script) or the legacy kern table */
