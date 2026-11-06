@@ -12,7 +12,7 @@ const opentype = ((opentypeModule as any).default ?? opentypeModule) as any;
  * Family "Test Font", style "Regular" unless other names are given, glyphs for ".notdef", space, A-Z, a-z, 0-9.
  * opentype.js writes CFF outlines, so the output is an OpenType ("OTTO") font.
  */
-export function buildTestFont(names: { familyName?: string; styleName?: string } = {}): ArrayBuffer {
+export function buildTestFont(names: { familyName?: string; styleName?: string; postScriptName?: string } = {}): ArrayBuffer {
   const unitsPerEm = 1000;
   const advanceWidth = 600;
 
@@ -48,6 +48,7 @@ export function buildTestFont(names: { familyName?: string; styleName?: string }
   const font = new opentype.Font({
     familyName: names.familyName ?? 'Test Font',
     styleName: names.styleName ?? 'Regular',
+    ...(names.postScriptName && { postScriptName: names.postScriptName }),
     unitsPerEm,
     ascender: 800,
     descender: -200,
